@@ -1,12 +1,11 @@
 using System.Text;
+using GestionHogar.Model;
+using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using GestionHogar.Controllers;
-using GestionHogar.Model;
 using Scalar.AspNetCore;
-using GestionHogar.Utils;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
