@@ -22,7 +22,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
         _currentUserId = currentUserId != null ? Guid.Parse(currentUserId) : null;
     }
 
-    public DbSet<Audit> Audits { get; set; }
+    public required DbSet<Audit> Audits { get; set; }
+    public required DbSet<Client> Clients { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -85,6 +86,24 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
                         EntityId = entry.Entity.Id.ToString(),
                         EntityType = entry.Entity.GetType().Name,
                         Action = AuditAction.Create,
+                        UserId = _currentUserId,
+                    };
+                    break;
+                case EntityState.Modified:
+                    auditEntry = new Audit
+                    {
+                        EntityId = entry.Entity.Id.ToString(),
+                        EntityType = entry.Entity.GetType().Name,
+                        Action = AuditAction.Update,
+                        UserId = _currentUserId,
+                    };
+                    break;
+                case EntityState.Deleted:
+                    auditEntry = new Audit
+                    {
+                        EntityId = entry.Entity.Id.ToString(),
+                        EntityType = entry.Entity.GetType().Name,
+                        Action = AuditAction.Delete,
                         UserId = _currentUserId,
                     };
                     break;
