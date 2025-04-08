@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -7,22 +8,50 @@ namespace GestionHogar.Model;
 public class DatabaseContext(DbContextOptions<DatabaseContext> options)
     : IdentityDbContext<User, IdentityRole<Guid>, Guid>(options)
 {
+    private readonly Guid? _currentUserId = null;
+
+    public DatabaseContext(
+        DbContextOptions<DatabaseContext> options,
+        IHttpContextAccessor httpContextAccessor
+    )
+        : this(options)
+    {
+        var currentUserId = httpContextAccessor
+            .HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)
+            ?.Value;
+        _currentUserId = currentUserId != null ? Guid.Parse(currentUserId) : null;
+    }
+
+    public required DbSet<Audit> Audits { get; set; }
     public DbSet<Client> Clients { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        Audit.SetUp(builder);
     }
 
     public override int SaveChanges()
     {
         UpdateTimestamps();
+        // Create audits
+        var audits = AuditActions();
+        if (audits.Count != 0)
+        {
+            Audits.AddRange(audits);
+        }
         return base.SaveChanges();
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         UpdateTimestamps();
+        // Create audits
+        var audits = AuditActions();
+        if (audits.Count != 0)
+        {
+            Audits.AddRange(audits);
+        }
         return await base.SaveChangesAsync(cancellationToken);
     }
 
@@ -35,9 +64,57 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
         foreach (var entry in entries)
         {
             var entity = (IEntity)entry.Entity;
-            var now = DateTime.UtcNow; // Use UTC time for consistency
+            var now = DateTime.UtcNow;
 
             entity.ModifiedAt = now;
         }
+    }
+
+    private List<Audit> AuditActions()
+    {
+        var audits = new List<Audit>();
+        var entries = ChangeTracker.Entries<BaseModel>().Where(e => e.Entity is IEntity);
+
+        foreach (var entry in entries)
+        {
+            Audit? auditEntry = null;
+            switch (entry.State)
+            {
+                case EntityState.Added:
+                    auditEntry = new Audit
+                    {
+                        EntityId = entry.Entity.Id.ToString(),
+                        EntityType = entry.Entity.GetType().Name,
+                        Action = AuditAction.Create,
+                        UserId = _currentUserId,
+                    };
+                    break;
+                case EntityState.Modified:
+                    auditEntry = new Audit
+                    {
+                        EntityId = entry.Entity.Id.ToString(),
+                        EntityType = entry.Entity.GetType().Name,
+                        Action = AuditAction.Update,
+                        UserId = _currentUserId,
+                    };
+                    break;
+                case EntityState.Deleted:
+                    auditEntry = new Audit
+                    {
+                        EntityId = entry.Entity.Id.ToString(),
+                        EntityType = entry.Entity.GetType().Name,
+                        Action = AuditAction.Delete,
+                        UserId = _currentUserId,
+                    };
+                    break;
+            }
+
+            if (auditEntry != null)
+            {
+                audits.Add(auditEntry);
+            }
+        }
+
+        return audits;
     }
 }

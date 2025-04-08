@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 
 namespace GestionHogar.Model;
 
@@ -37,7 +36,7 @@ public static class DatabaseSeeder
             };
 
             // Create the admin user with a password
-            var result = await userManager.CreateAsync(adminUser, "Acide2025/1");
+            var result = await userManager.CreateAsync(adminUser, "Hogar2025/1");
 
             if (result.Succeeded)
             {
