@@ -1,12 +1,12 @@
 using System.Text;
+using GestionHogar.Controllers;
+using GestionHogar.Model;
+using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using GestionHogar.Controllers;
-using GestionHogar.Model;
 using Scalar.AspNetCore;
-using GestionHogar.Utils;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -96,6 +96,13 @@ builder.Services.AddOpenApi(options =>
     options.AddDocumentTransformer<GestionHogar.Utils.BearerSecuritySchemeTransformer>();
 });
 
+// Register modules
+var modules = new IModule[] { new AuthModule() };
+foreach (var module in modules)
+{
+    module.SetupModule(builder.Services, builder.Configuration);
+}
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -103,18 +110,11 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.MapScalarApiReference(options =>
     {
-        options.Theme = ScalarTheme.DeepSpace;
+        options.Theme = ScalarTheme.Solarized;
         options.WithCustomCss(
             """
-            @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap');
-            @font-face {
-              font-family: 'Iosevka';
-              font-style: normal;
-              font-display: swap;
-              font-weight: 400;
-              src: url(https://cdn.jsdelivr.net/fontsource/fonts/iosevka@latest/latin-400-normal.woff2) format('woff2'), url(https://cdn.jsdelivr.net/fontsource/fonts/iosevka@latest/latin-400-normal.woff) format('woff');
-            }
-            :root { --scalar-font: "Atkinson Hyperlegible"; --scalar-font-code: Iosevka, "JetBrains Mono", monospace; }
+            @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap');
+            :root { --scalar-font: "Montserrat", sans-serif; --scalar-font-code: "Fira Code", monospace; }
             #v-0 {max-width: 100% !important}
             """
         );
