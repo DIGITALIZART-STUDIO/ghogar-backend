@@ -43,18 +43,52 @@ public class Client : IEntity
     public string DisplayName => Type == ClientType.Natural ? Name : CompanyName ?? Name;
 
     // Validación para asegurar datos correctos por tipo de cliente
-    public bool ValidateClientData()
+    public (bool isValid, string errorMessage) ValidateClientDetails()
     {
+        // Validaciones comunes
+        if (string.IsNullOrEmpty(Name))
+            return (false, "El nombre es obligatorio");
+        if (string.IsNullOrEmpty(PhoneNumber))
+            return (false, "El número de teléfono es obligatorio");
+        if (string.IsNullOrEmpty(Email))
+            return (false, "El email es obligatorio");
+        if (string.IsNullOrEmpty(Address))
+            return (false, "La dirección es obligatoria");
+
+        // Validaciones específicas por tipo
         if (Type == ClientType.Natural)
         {
-            // Persona natural debe tener DNI
-            return !string.IsNullOrEmpty(Dni) && Dni.Length == 8;
+            if (string.IsNullOrEmpty(Dni))
+                return (false, "El DNI es obligatorio para clientes tipo Natural");
+            if (Dni.Length != 8)
+                return (false, "El DNI debe tener 8 caracteres");
+            // Limpiar campos que no aplican
+            Ruc = null;
+            CompanyName = null;
         }
         else // ClientType.Juridico
         {
-            // Persona jurídica debe tener RUC
-            return !string.IsNullOrEmpty(Ruc) && Ruc.Length == 11;
+            if (string.IsNullOrEmpty(Ruc))
+                return (false, "El RUC es obligatorio para clientes tipo Jurídico");
+            if (Ruc.Length != 11)
+                return (false, "El RUC debe tener 11 caracteres");
+
+            // Si no hay CompanyName, usar el Name como CompanyName
+            if (string.IsNullOrEmpty(CompanyName))
+                CompanyName = Name;
+
+            // Limpiar campos que no aplican
+            Dni = null;
         }
+
+        return (true, string.Empty);
+    }
+
+    // Mantener el método original por compatibilidad
+    public bool ValidateClientData()
+    {
+        var (isValid, _) = ValidateClientDetails();
+        return isValid;
     }
 }
 
