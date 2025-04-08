@@ -7,6 +7,7 @@ namespace GestionHogar.Model;
 public class DatabaseContext(DbContextOptions<DatabaseContext> options)
     : IdentityDbContext<User, IdentityRole<Guid>, Guid>(options)
 {
+    public DbSet<Client> Clients { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
