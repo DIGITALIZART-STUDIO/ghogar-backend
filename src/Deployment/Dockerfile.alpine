@@ -1,0 +1,27 @@
+# Dockerfile para produccion
+FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine
+WORKDIR /app
+
+RUN dotnet tool install --global dotnet-ef
+ENV PATH="${PATH}:/root/.dotnet/tools"
+
+# Copy deps file and install
+COPY GestionHogar.csproj .
+RUN HUSKY=0 dotnet restore --locked-mode
+
+COPY Controllers ./Controllers
+COPY Migrations ./Migrations
+COPY Model ./Model
+COPY Properties ./Properties
+COPY Utils ./Utils
+COPY Program.cs .
+COPY appsettings.json .
+
+# Build binary
+RUN HUSKY=0 dotnet publish GestionHogar.csproj -c Release -r linux-musl-x64 -o out
+# Create a EF bundle for migrating the db
+RUN HUSKY=0 dotnet-ef migrations bundle -r linux-musl-x64
+
+COPY Deployment/docker-entrypoint.sh ./docker-entrypoint.sh
+
+CMD ["./docker-entrypoint.sh"]
