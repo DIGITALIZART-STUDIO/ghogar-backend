@@ -1,6 +1,6 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace GestionHogar.Model;
 
@@ -92,7 +92,7 @@ public class Client : IEntity
     }
 }
 
-// Agrega este enum al final del archivo, después de cerrar la clase Client
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ClientType
 {
     Natural, // Persona natural (usará DNI)
