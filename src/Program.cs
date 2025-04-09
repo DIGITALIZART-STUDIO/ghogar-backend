@@ -1,6 +1,7 @@
 using System.Text;
 using GestionHogar.Controllers;
 using GestionHogar.Model;
+using GestionHogar.Services; // Añade esta línea para importar el namespace de tus servicios
 using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -22,6 +23,11 @@ builder.Services.AddDbContext<DatabaseContext>(options =>
         ?? throw new Exception("DB connection string not found");
     options.UseNpgsql(connectionString);
 });
+
+// Register application services
+builder.Services.AddScoped<IClientService, ClientService>();
+
+// Puedes añadir más servicios aquí si es necesario
 
 // Configure Identity
 builder

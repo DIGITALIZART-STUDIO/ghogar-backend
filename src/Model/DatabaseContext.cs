@@ -23,6 +23,7 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
     }
 
     public required DbSet<Audit> Audits { get; set; }
+    public DbSet<Client> Clients { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
