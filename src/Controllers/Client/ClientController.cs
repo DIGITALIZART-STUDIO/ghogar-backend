@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using GestionHogar.Services;
@@ -10,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace GestionHogar.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class ClientsController : ControllerBase
 {

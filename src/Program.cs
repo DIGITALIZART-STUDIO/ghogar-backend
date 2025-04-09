@@ -23,15 +23,6 @@ builder.Services.AddDbContext<DatabaseContext>(options =>
     options.UseNpgsql(connectionString);
 });
 
-// Registrar módulos
-var modules = new IModule[] { new AuthModule(), new ClientModule() };
-foreach (var module in modules)
-{
-    module.SetupModule(builder.Services, builder.Configuration);
-}
-
-// Puedes añadir más servicios aquí si es necesario
-
 // Configure Identity
 builder
     .Services.AddIdentityCore<User>(options =>
@@ -106,7 +97,7 @@ builder.Services.AddOpenApi(options =>
 });
 
 // Register modules
-var modules = new IModule[] { new AuthModule() };
+var modules = new IModule[] { new AuthModule(), new ClientModule() };
 foreach (var module in modules)
 {
     module.SetupModule(builder.Services, builder.Configuration);
