@@ -1,6 +1,6 @@
+using GestionHogar.Model;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using GestionHogar.Model;
 
 namespace GestionHogar.Controllers;
 
