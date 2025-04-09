@@ -7,8 +7,6 @@ using Microsoft.AspNetCore.Mvc;
 namespace GestionHogar.Controllers;
 
 [ApiController]
-[ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
-[ProducesResponseType<string>(StatusCodes.Status401Unauthorized)]
 [Route("/api/[controller]")]
 public class AuthController(JwtService jwt, UserManager<User> userManager) : ControllerBase
 {

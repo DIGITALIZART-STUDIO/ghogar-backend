@@ -13,8 +13,7 @@ public static class DatabaseSeeder
         >();
 
         // Create admin role if it doesn't exist
-        // FIXME: get credentials for appsettings, set secure ones in prod
-        var adminRoleName = "Admin";
+        var adminRoleName = "SuperAdmin";
         if (!await roleManager.RoleExistsAsync(adminRoleName))
         {
             await roleManager.CreateAsync(new IdentityRole<Guid>(adminRoleName));
@@ -22,6 +21,7 @@ public static class DatabaseSeeder
         }
 
         // Create admin user if it doesn't exist
+        // FIXME: get credentials from appsettings, set secure ones in prod
         var adminEmail = "admin@admin.com";
         var adminUser = await userManager.FindByEmailAsync(adminEmail);
 
@@ -32,7 +32,7 @@ public static class DatabaseSeeder
                 UserName = "Admin",
                 Email = adminEmail,
                 EmailConfirmed = true,
-                // Add any additional required fields here
+                MustChangePassword = false,
             };
 
             // Create the admin user with a password
