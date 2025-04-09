@@ -1,8 +1,8 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using GestionHogar.Model;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using GestionHogar.Model;
 
 namespace GestionHogar.Controllers;
 
@@ -12,6 +12,8 @@ namespace GestionHogar.Controllers;
 [Route("/api/[controller]")]
 public class AuthController(JwtService jwt, UserManager<User> userManager) : ControllerBase
 {
+    [EndpointSummary("Login")]
+    [EndpointDescription("Log in to the system. Returns 2 JWT tokens, access_token and refresh_token. access_token is to be used in Authorization Bearer.")]
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> login([FromBody] LoginRequest request)
     {
@@ -41,6 +43,8 @@ public class AuthController(JwtService jwt, UserManager<User> userManager) : Con
         );
     }
 
+    [EndpointSummary("Refresh session")]
+    [EndpointDescription("Refreshes the session, returning 2 new JWT tokens.")]
     [HttpPost("refresh")]
     public async Task<ActionResult<LoginResponse>> refresh([FromBody] RefreshRequest req)
     {

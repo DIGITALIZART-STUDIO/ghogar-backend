@@ -18,28 +18,42 @@ namespace GestionHogar.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     CoOwner = table.Column<string>(type: "text", nullable: true),
-                    Dni = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: true),
-                    Ruc = table.Column<string>(type: "character varying(11)", maxLength: 11, nullable: true),
+                    Dni = table.Column<string>(
+                        type: "character varying(8)",
+                        maxLength: 8,
+                        nullable: true
+                    ),
+                    Ruc = table.Column<string>(
+                        type: "character varying(11)",
+                        maxLength: 11,
+                        nullable: true
+                    ),
                     CompanyName = table.Column<string>(type: "text", nullable: true),
                     PhoneNumber = table.Column<string>(type: "text", nullable: false),
                     Email = table.Column<string>(type: "text", nullable: false),
                     Address = table.Column<string>(type: "text", nullable: false),
                     Type = table.Column<int>(type: "integer", nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ModifiedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    CreatedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
+                    ModifiedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Clients", x => x.Id);
-                });
+                }
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Clients");
+            migrationBuilder.DropTable(name: "Clients");
         }
     }
 }
