@@ -73,18 +73,20 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
     private List<Audit> AuditActions()
     {
         var audits = new List<Audit>();
-        var entries = ChangeTracker.Entries<BaseModel>().Where(e => e.Entity is IEntity);
+        var entries = ChangeTracker.Entries().Where(e => e.Entity is IEntity);
 
         foreach (var entry in entries)
         {
             Audit? auditEntry = null;
+            var entity = (IEntity)entry.Entity;
+
             switch (entry.State)
             {
                 case EntityState.Added:
                     auditEntry = new Audit
                     {
-                        EntityId = entry.Entity.Id.ToString(),
-                        EntityType = entry.Entity.GetType().Name,
+                        EntityId = entity.Id.ToString(),
+                        EntityType = entity.GetType().Name,
                         Action = AuditAction.Create,
                         UserId = _currentUserId,
                     };
@@ -92,8 +94,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
                 case EntityState.Modified:
                     auditEntry = new Audit
                     {
-                        EntityId = entry.Entity.Id.ToString(),
-                        EntityType = entry.Entity.GetType().Name,
+                        EntityId = entity.Id.ToString(),
+                        EntityType = entity.GetType().Name,
                         Action = AuditAction.Update,
                         UserId = _currentUserId,
                     };
@@ -101,8 +103,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
                 case EntityState.Deleted:
                     auditEntry = new Audit
                     {
-                        EntityId = entry.Entity.Id.ToString(),
-                        EntityType = entry.Entity.GetType().Name,
+                        EntityId = entity.Id.ToString(),
+                        EntityType = entity.GetType().Name,
                         Action = AuditAction.Delete,
                         UserId = _currentUserId,
                     };
