@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace GestionHogar.Controllers;
 
 [ApiController]
-[Authorize(Roles = "SuperAdmin")]
+[Authorize]
 [Route("api/[controller]")]
 public class LeadsController : ControllerBase
 {
