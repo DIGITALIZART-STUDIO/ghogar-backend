@@ -3,6 +3,7 @@ using System;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestionHogar.Migrations
 {
     [DbContext(typeof(DatabaseContext))]
-    partial class DatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20250418221613_AddLeadsTable")]
+    partial class AddLeadsTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -140,52 +143,6 @@ namespace GestionHogar.Migrations
                     b.HasIndex("ClientId");
 
                     b.ToTable("Leads");
-                });
-
-            modelBuilder.Entity("GestionHogar.Model.LeadTask", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AssignedToId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsCompleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid>("LeadId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ScheduledDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssignedToId");
-
-                    b.HasIndex("LeadId");
-
-                    b.ToTable("LeadTasks");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.User", b =>
@@ -411,25 +368,6 @@ namespace GestionHogar.Migrations
                     b.Navigation("AssignedTo");
 
                     b.Navigation("Client");
-                });
-
-            modelBuilder.Entity("GestionHogar.Model.LeadTask", b =>
-                {
-                    b.HasOne("GestionHogar.Model.User", "AssignedTo")
-                        .WithMany()
-                        .HasForeignKey("AssignedToId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("GestionHogar.Model.Lead", "Lead")
-                        .WithMany()
-                        .HasForeignKey("LeadId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("AssignedTo");
-
-                    b.Navigation("Lead");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
