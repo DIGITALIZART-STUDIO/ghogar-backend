@@ -1,13 +1,42 @@
+using System.Security.Claims;
+using GestionHogar.Model;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace GestionHogar.Controllers;
 
 [ApiController]
 [Authorize(Roles = "SuperAdmin")]
 [Route("api/[controller]")]
-public class UsersController : ControllerBase
+public class UsersController(DatabaseContext db) : ControllerBase
 {
+    [EndpointSummary("Get current user")]
+    [EndpointDescription("Gets information about the currently logged-in user")]
+    [HttpGet]
+    public async Task<ActionResult<User>> CurrentUser()
+    {
+        var idClaim = ClaimTypes.NameIdentifier;
+        var userId = User.FindFirstValue(idClaim);
+        if (userId == null)
+            return Unauthorized();
+        Guid userGuid;
+        try
+        {
+            userGuid = Guid.Parse(userId);
+        }
+        catch
+        {
+            return Unauthorized();
+        }
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userGuid);
+        if (user == null)
+            return Unauthorized();
+
+        return Ok(user);
+    }
+
     [EndpointSummary("Create User")]
     [EndpointDescription("Creates a new User with the given data & role")]
     [HttpPost]
