@@ -15,6 +15,7 @@ public class SecurityStampValidator
 
     public async Task InvokeAsync(HttpContext context, UserManager<User> userManager)
     {
+        Console.WriteLine($"Middleware!");
         if (context.User.Identity?.IsAuthenticated ?? false)
         {
             var userId = context.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
@@ -22,6 +23,8 @@ public class SecurityStampValidator
 
             if (!string.IsNullOrEmpty(userId) && !string.IsNullOrEmpty(stampInToken))
             {
+                Console.WriteLine($"Action for UserId: {userId}");
+
                 var user = await userManager.FindByIdAsync(userId);
                 if (user == null || user.SecurityStamp != stampInToken)
                 {

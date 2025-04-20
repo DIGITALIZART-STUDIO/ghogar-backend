@@ -22,7 +22,7 @@ public class JwtService
     public (string, int) GenerateToken(
         string userId,
         string username,
-        IEnumerable<string> roles,
+        IList<string> roles,
         string securityStamp
     )
     {

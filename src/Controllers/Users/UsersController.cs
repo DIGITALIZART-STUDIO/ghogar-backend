@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace GestionHogar.Controllers;
 
 [ApiController]
-[Authorize(Roles = "Superadmin")]
+[Authorize(Roles = "SuperAdmin")]
 [Route("api/[controller]")]
 public class UsersController : ControllerBase
 {
