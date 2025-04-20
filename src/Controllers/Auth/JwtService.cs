@@ -22,7 +22,8 @@ public class JwtService
     public (string, int) GenerateToken(
         string userId,
         string username,
-        IEnumerable<string>? roles = null
+        IEnumerable<string> roles,
+        string securityStamp
     )
     {
         var claims = new List<Claim>
@@ -30,6 +31,7 @@ public class JwtService
             new(JwtRegisteredClaimNames.Sub, userId),
             new(JwtRegisteredClaimNames.Name, username),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("securityStamp", securityStamp),
             new(
                 JwtRegisteredClaimNames.Iat,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),

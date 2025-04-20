@@ -28,7 +28,8 @@ public class AuthController(JwtService jwt, UserManager<User> userManager) : Con
         var (token, accessExpiration) = jwt.GenerateToken(
             userId: user.Id.ToString(),
             username: request.Email,
-            roles: new[] { "User" }
+            roles: new[] { "User" },
+            user.SecurityStamp ?? ""
         );
         var (refreshToken, refreshExpiration) = jwt.GenerateRefreshToken(
             user.Id.ToString(),
@@ -65,7 +66,8 @@ public class AuthController(JwtService jwt, UserManager<User> userManager) : Con
         var (token, accessExpiration) = jwt.GenerateToken(
             userId: user.Id.ToString(),
             username: user.Email!,
-            roles: new[] { "User" }
+            roles: new[] { "User" },
+            user.SecurityStamp ?? ""
         );
         var (refreshToken, refreshExpiration) = jwt.GenerateRefreshToken(
             user.Id.ToString(),

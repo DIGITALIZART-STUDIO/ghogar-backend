@@ -137,6 +137,7 @@ using (var scope = app.Services.CreateScope())
 app.UseGlobalExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseSecurityStampValidator();
 app.MapControllers();
 
 app.Run();
