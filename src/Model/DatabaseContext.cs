@@ -25,6 +25,10 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
     public required DbSet<Audit> Audits { get; set; }
     public DbSet<Client> Clients { get; set; } = null!;
 
+    public DbSet<Lead> Leads { get; set; }
+
+    public DbSet<LeadTask> LeadTasks { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
