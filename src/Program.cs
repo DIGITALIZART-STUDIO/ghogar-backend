@@ -131,6 +131,7 @@ if (app.Environment.IsDevelopment())
 using (var scope = app.Services.CreateScope())
 {
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await DatabaseSeeder.SeedRoles(app.Services, logger);
     await DatabaseSeeder.SeedDefaultUserAsync(app.Services, logger);
 
     // Apply more seeds when not in prod or staging
@@ -143,6 +144,7 @@ using (var scope = app.Services.CreateScope())
 app.UseGlobalExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseSecurityStampValidator();
 app.MapControllers();
 
 app.Run();
