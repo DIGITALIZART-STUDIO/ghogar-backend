@@ -57,7 +57,7 @@ pipeline {
                     }
 
                     withCredentials(credentialsList) {
-                        sshagent(['trazo-ssh-prod']) {
+                        sshagent(['hetzner-helsink-01']) {
                             // Create a temporary script that will create the .env file
                             // This enables us to use shell variables to properly handle 
                             // the credentials without using binding.getVariable()
