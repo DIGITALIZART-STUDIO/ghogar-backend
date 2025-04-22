@@ -32,11 +32,13 @@ pipeline {
     stages {
         stage("Build & push image") {
             steps {
-                script {
-                    withDockerRegistry(credentialsId: "${REGISTRY_CREDENTIALS}") {
-                        def image = docker.build("${FULL_REGISTRY_URL}:${BUILD_NUMBER}", "-f src/Deployment/Dockerfile.alpine .")
-                        image.push()
-                        image.push("latest")
+                dir("src") {
+                    script {
+                        withDockerRegistry(credentialsId: "${REGISTRY_CREDENTIALS}") {
+                            def image = docker.build("${FULL_REGISTRY_URL}:${BUILD_NUMBER}", "-f src/Deployment/Dockerfile.alpine .")
+                            image.push()
+                            image.push("latest")
+                        }
                     }
                 }
             }
