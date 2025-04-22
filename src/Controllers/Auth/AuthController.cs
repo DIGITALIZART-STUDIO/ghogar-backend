@@ -25,10 +25,13 @@ public class AuthController(JwtService jwt, UserManager<User> userManager) : Con
         if (!isValid)
             return Unauthorized("Credenciales incorrectos");
 
+        var userRoles = await userManager.GetRolesAsync(user);
+
         var (token, accessExpiration) = jwt.GenerateToken(
             userId: user.Id.ToString(),
             username: request.Email,
-            roles: new[] { "User" }
+            roles: userRoles,
+            user.SecurityStamp ?? ""
         );
         var (refreshToken, refreshExpiration) = jwt.GenerateRefreshToken(
             user.Id.ToString(),
@@ -65,7 +68,8 @@ public class AuthController(JwtService jwt, UserManager<User> userManager) : Con
         var (token, accessExpiration) = jwt.GenerateToken(
             userId: user.Id.ToString(),
             username: user.Email!,
-            roles: new[] { "User" }
+            roles: new[] { "User" },
+            user.SecurityStamp ?? ""
         );
         var (refreshToken, refreshExpiration) = jwt.GenerateRefreshToken(
             user.Id.ToString(),

@@ -4,6 +4,31 @@ namespace GestionHogar.Model;
 
 public static class DatabaseSeeder
 {
+    public static async Task SeedRoles(IServiceProvider serviceProvider, ILogger logger)
+    {
+        using var scope = serviceProvider.CreateScope();
+        var roleManager = scope.ServiceProvider.GetRequiredService<
+            RoleManager<IdentityRole<Guid>>
+        >();
+
+        var roles = new List<string>
+        {
+            "SuperAdmin",
+            "Admin",
+            "Supervisor",
+            "SalesAdvisor",
+            "Manager",
+        };
+        foreach (var role in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new IdentityRole<Guid>(role));
+                logger.LogInformation("Created {role} role", role);
+            }
+        }
+    }
+
     public static async Task SeedDefaultUserAsync(IServiceProvider serviceProvider, ILogger logger)
     {
         using var scope = serviceProvider.CreateScope();
@@ -12,24 +37,18 @@ public static class DatabaseSeeder
             RoleManager<IdentityRole<Guid>>
         >();
 
-        // Create admin role if it doesn't exist
-        var adminRoleName = "SuperAdmin";
-        if (!await roleManager.RoleExistsAsync(adminRoleName))
-        {
-            await roleManager.CreateAsync(new IdentityRole<Guid>(adminRoleName));
-            logger.LogInformation("Created {role} role", adminRoleName);
-        }
-
         // Create admin user if it doesn't exist
         // FIXME: get credentials from appsettings, set secure ones in prod
         var adminEmail = "admin@admin.com";
         var adminUser = await userManager.FindByEmailAsync(adminEmail);
+        var adminRoleName = "SuperAdmin";
 
         if (adminUser == null)
         {
             adminUser = new User
             {
-                UserName = "Admin",
+                UserName = "admin",
+                Name = "Administrador",
                 Email = adminEmail,
                 EmailConfirmed = true,
                 MustChangePassword = false,
