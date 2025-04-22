@@ -35,6 +35,8 @@ public class LeadTaskService : ILeadTaskService
         return await _context
             .LeadTasks.Where(t => t.LeadId == leadId && t.IsActive)
             .Include(t => t.AssignedTo)
+            .Include(t => t.Lead)
+            .ThenInclude(l => l.Client)
             .OrderBy(t => t.ScheduledDate)
             .ToListAsync();
     }

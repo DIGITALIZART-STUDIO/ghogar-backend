@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace GestionHogar.Controllers;
 
 [ApiController]
-[Authorize]
+/* [Authorize] */
 [Route("api/[controller]")]
 public class LeadTasksController : ControllerBase
 {

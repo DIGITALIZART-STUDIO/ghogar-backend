@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Mvc;
 namespace GestionHogar.Controllers;
 
 [ApiController]
-[Authorize]
 [Route("api/[controller]")]
 public class LeadsController : ControllerBase
 {
@@ -197,5 +196,12 @@ public class LeadsController : ControllerBase
         }
 
         return Ok(result);
+    }
+
+    [HttpGet("users/summary")]
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetUsersSummary()
+    {
+        var usersSummary = await _leadService.GetUsersSummaryAsync();
+        return Ok(usersSummary);
     }
 }
