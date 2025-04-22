@@ -1,9 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
 
 namespace GestionHogar.Model;
 
+[Index(nameof(Dni), IsUnique = true, Name = "IX_Client_Dni")]
+[Index(nameof(Ruc), IsUnique = true, Name = "IX_Client_Ruc")]
 public class Client : IEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();

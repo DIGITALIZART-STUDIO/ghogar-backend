@@ -7,8 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace GestionHogar.Controllers;
 
 [ApiController]
-[Authorize(Roles = "SuperAdmin")]
-[Route("api/[controller]")]
+ [Authorize] 
+ [Route("api/[controller]")]
 public class ClientsController : ControllerBase
 {
     private readonly IClientService _clientService;
@@ -237,5 +237,13 @@ public class ClientsController : ControllerBase
     {
         var clients = await _clientService.GetInactiveClientsAsync();
         return Ok(clients);
+    }
+
+    // GET: api/clients/summary
+    [HttpGet("summary")]
+    public async Task<ActionResult<IEnumerable<ClientSummaryDto>>> GetClientsSummary()
+    {
+        var clientsSummary = await _clientService.GetClientsSummaryAsync();
+        return Ok(clientsSummary);
     }
 }

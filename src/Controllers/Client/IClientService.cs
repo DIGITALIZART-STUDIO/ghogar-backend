@@ -1,3 +1,4 @@
+using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 
 namespace GestionHogar.Services;
@@ -12,4 +13,6 @@ public interface IClientService
     Task<bool> ActivateClientAsync(Guid id);
     Task<IEnumerable<Client>> GetInactiveClientsAsync();
     Task<IEnumerable<Client>> GetClientsByIdsAsync(IEnumerable<Guid> ids, bool activeOnly);
+
+    Task<IEnumerable<ClientSummaryDto>> GetClientsSummaryAsync();
 }
