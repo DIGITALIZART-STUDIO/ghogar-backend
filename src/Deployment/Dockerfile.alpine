@@ -22,6 +22,6 @@ RUN HUSKY=0 dotnet publish GestionHogar.csproj -c Release -r linux-musl-x64 -o o
 # Create a EF bundle for migrating the db
 RUN HUSKY=0 dotnet-ef migrations bundle -r linux-musl-x64
 
-COPY Deployment/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY src/Deployment/docker-entrypoint.sh ./docker-entrypoint.sh
 
 CMD ["./docker-entrypoint.sh"]
