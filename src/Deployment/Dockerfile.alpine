@@ -24,4 +24,4 @@ RUN HUSKY=0 dotnet-ef migrations bundle -r linux-musl-x64
 
 COPY Deployment/docker-entrypoint.sh ./docker-entrypoint.sh
 
-CMD ["ls", "-la"]
+CMD ["./docker-entrypoint.sh"]
