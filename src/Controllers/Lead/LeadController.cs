@@ -198,4 +198,11 @@ public class LeadsController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpGet("users/summary")]
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetUsersSummary()
+    {
+        var usersSummary = await _leadService.GetUsersSummaryAsync();
+        return Ok(usersSummary);
+    }
 }

@@ -1,3 +1,4 @@
+using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,11 +15,7 @@ public class LeadService : ILeadService
 
     public async Task<IEnumerable<Lead>> GetAllLeadsAsync()
     {
-        return await _context
-            .Leads.Where(l => l.IsActive)
-            .Include(l => l.Client)
-            .Include(l => l.AssignedTo)
-            .ToListAsync();
+        return await _context.Leads.Include(l => l.Client).Include(l => l.AssignedTo).ToListAsync();
     }
 
     public async Task<Lead?> GetLeadByIdAsync(Guid id)
@@ -107,6 +104,13 @@ public class LeadService : ILeadService
             .Leads.Where(l => l.IsActive && l.Status == status)
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
+            .ToListAsync();
+    }
+
+    public async Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync()
+    {
+        return await _context
+            .Users.Select(u => new UserSummaryDto { Id = u.Id, UserName = u.UserName })
             .ToListAsync();
     }
 }

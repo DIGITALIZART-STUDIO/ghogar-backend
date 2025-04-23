@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
 using GestionHogar.Controllers.Dtos;
+using GestionHogar.Dtos;
 using GestionHogar.Model;
 using GestionHogar.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -16,10 +17,62 @@ namespace GestionHogar.Controllers;
 public class LeadTasksController : ControllerBase
 {
     private readonly ILeadTaskService _taskService;
+    private static readonly TimeZoneInfo peruTimeZone = TimeZoneInfo.FindSystemTimeZoneById(
+        "SA Pacific Standard Time"
+    ); // Lima, Perú (UTC-5)
 
     public LeadTasksController(ILeadTaskService taskService)
     {
         _taskService = taskService;
+    }
+
+    // Función helper para parsear fechas en diferentes formatos
+    private bool TryParseDate(string dateString, out DateTime result)
+    {
+        // Intentar parsear como ISO 8601 completo (2025-04-17T12:00:00)
+        if (
+            DateTime.TryParse(
+                dateString,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out result
+            )
+        )
+        {
+            // Convertir a UTC si la fecha viene con otra zona horaria
+            if (result.Kind != DateTimeKind.Utc)
+            {
+                result = DateTime.SpecifyKind(result, DateTimeKind.Unspecified);
+                result = TimeZoneInfo.ConvertTimeToUtc(result, peruTimeZone);
+            }
+            return true;
+        }
+
+        // Intentar parsear como formato simple (yyyy-MM-dd)
+        if (
+            DateTime.TryParseExact(
+                dateString,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out result
+            )
+        )
+        {
+            // Para fechas sin hora, usar mediodía en hora peruana (17:00 UTC)
+            result = new DateTime(
+                result.Year,
+                result.Month,
+                result.Day,
+                17,
+                0,
+                0,
+                DateTimeKind.Utc
+            );
+            return true;
+        }
+
+        return false;
     }
 
     // GET: api/leadtasks
@@ -43,10 +96,14 @@ public class LeadTasksController : ControllerBase
 
     // GET: api/leadtasks/lead/{leadId}
     [HttpGet("lead/{leadId}")]
-    public async Task<ActionResult<IEnumerable<LeadTask>>> GetTasksByLead(Guid leadId)
+    public async Task<ActionResult<LeadTasksResponseDto>> GetTasksByLead(Guid leadId)
     {
-        var tasks = await _taskService.GetTasksByLeadIdAsync(leadId);
-        return Ok(tasks);
+        var tasksResponse = await _taskService.GetTasksByLeadIdAsync(leadId);
+
+        if (tasksResponse == null)
+            return NotFound();
+
+        return Ok(tasksResponse);
     }
 
     // GET: api/leadtasks/user/{userId}
@@ -81,28 +138,13 @@ public class LeadTasksController : ControllerBase
     )
     {
         if (
-            !DateTime.TryParseExact(
-                startDate,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out DateTime start
-            )
-            || !DateTime.TryParseExact(
-                endDate,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out DateTime end
-            )
+            !TryParseDate(startDate, out DateTime start) || !TryParseDate(endDate, out DateTime end)
         )
         {
-            return BadRequest("Formato de fecha inválido. Use yyyy-MM-dd.");
+            return BadRequest(
+                "Formato de fecha inválido. Use yyyy-MM-dd o formato ISO (ej: 2025-04-17T12:00:00)."
+            );
         }
-
-        // Ajustar a mediodía UTC para evitar problemas con zonas horarias
-        start = new DateTime(start.Year, start.Month, start.Day, 12, 0, 0, DateTimeKind.Utc);
-        end = new DateTime(end.Year, end.Month, end.Day, 12, 0, 0, DateTimeKind.Utc);
 
         // Asegurar que incluya todo el día final
         end = end.AddDays(1).AddSeconds(-1);
@@ -117,29 +159,12 @@ public class LeadTasksController : ControllerBase
     {
         try
         {
-            if (
-                !DateTime.TryParseExact(
-                    taskDto.ScheduledDate,
-                    "yyyy-MM-dd",
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out DateTime scheduledDate
-                )
-            )
+            if (!TryParseDate(taskDto.ScheduledDate, out DateTime scheduledDate))
             {
-                return BadRequest("Formato de fecha inválido. Use yyyy-MM-dd.");
+                return BadRequest(
+                    "Formato de fecha inválido. Use yyyy-MM-dd o formato ISO (ej: 2025-04-17T12:00:00)."
+                );
             }
-
-            // Ajustar a mediodía UTC para evitar problemas con zonas horarias
-            scheduledDate = new DateTime(
-                scheduledDate.Year,
-                scheduledDate.Month,
-                scheduledDate.Day,
-                12,
-                0,
-                0,
-                DateTimeKind.Utc
-            );
 
             var task = new LeadTask
             {
@@ -181,29 +206,13 @@ public class LeadTasksController : ControllerBase
 
             if (taskDto.ScheduledDate != null)
             {
-                if (
-                    !DateTime.TryParseExact(
-                        taskDto.ScheduledDate,
-                        "yyyy-MM-dd",
-                        CultureInfo.InvariantCulture,
-                        DateTimeStyles.None,
-                        out DateTime scheduledDate
-                    )
-                )
+                if (!TryParseDate(taskDto.ScheduledDate, out DateTime scheduledDate))
                 {
-                    return BadRequest("Formato de fecha inválido. Use yyyy-MM-dd.");
+                    return BadRequest(
+                        "Formato de fecha inválido. Use yyyy-MM-dd o formato ISO (ej: 2025-04-17T12:00:00)."
+                    );
                 }
 
-                // Ajustar a mediodía UTC para evitar problemas con zonas horarias
-                scheduledDate = new DateTime(
-                    scheduledDate.Year,
-                    scheduledDate.Month,
-                    scheduledDate.Day,
-                    12,
-                    0,
-                    0,
-                    DateTimeKind.Utc
-                );
                 existingTask.ScheduledDate = scheduledDate;
             }
 

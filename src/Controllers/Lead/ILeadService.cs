@@ -1,3 +1,4 @@
+using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 
 namespace GestionHogar.Services;
@@ -14,4 +15,6 @@ public interface ILeadService
     Task<IEnumerable<Lead>> GetLeadsByClientIdAsync(Guid clientId);
     Task<IEnumerable<Lead>> GetLeadsByAssignedToIdAsync(Guid userId);
     Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status);
+
+    Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();
 }

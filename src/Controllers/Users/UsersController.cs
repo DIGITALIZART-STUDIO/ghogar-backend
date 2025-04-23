@@ -49,7 +49,7 @@ public class UsersController(
 
     [EndpointSummary("Get all users")]
     [EndpointDescription("Gets information about all users")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize]
     [HttpGet("all")]
     public async Task<ActionResult<PaginatedResponse<UserGetDTO>>> GetUsers(
         [FromQuery] int page = 1,
@@ -103,7 +103,7 @@ public class UsersController(
 
     [EndpointSummary("Create User")]
     [EndpointDescription("Creates a new User with the given data & role")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize]
     [HttpPost]
     public async Task<ActionResult> CreateUser([FromBody] UserCreateDTO dto)
     {
@@ -151,7 +151,7 @@ public class UsersController(
 
     [EndpointSummary("Deactivate User")]
     [EndpointDescription("Deactivates a single User by its ID")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize]
     [HttpDelete("{userId}")]
     public IActionResult DeactivateUser(Guid userId)
     {
@@ -160,7 +160,7 @@ public class UsersController(
 
     [EndpointSummary("Batch Deactivate User")]
     [EndpointDescription("Deactivates many users by their IDs")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize]
     [HttpDelete]
     public IActionResult BatchDeactivateUser([FromBody] List<Guid> userIds)
     {
@@ -169,7 +169,7 @@ public class UsersController(
 
     [EndpointSummary("Reactivate User")]
     [EndpointDescription("Reactivates a single User by its ID")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize]
     [HttpPatch("{userId}/reactivate")]
     public IActionResult ReactivateUser(Guid userId)
     {
@@ -178,7 +178,7 @@ public class UsersController(
 
     [EndpointSummary("Batch Reactivate User")]
     [EndpointDescription("Reactivates many users by their IDs")]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize]
     [HttpPatch("batch/reactivate")]
     public IActionResult BatchReactivateUser([FromBody] List<Guid> userIds)
     {
