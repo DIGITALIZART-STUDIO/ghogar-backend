@@ -1,34 +1,26 @@
 services:
   gestionhogar-backend-develop:
-    image: docker.io/digitalesacide/gestionhogar-backend-develop:latest
+    image: docker.io/araozu/gestionhogar-backend-develop:${GESTIONHOGAR_BACKEND_VERSION:-latest}
     container_name: gestionhogar-backend-develop
     restart: unless-stopped
     depends_on:
       gestionhogar-db-develop:
         condition: service_started
-    environment:
-      ConnectionStrings__DefaultConnection: "${ConnectionStrings__DefaultConnection}"
-      Jwt__SecretKey: "${Jwt__SecretKey}"
-      Jwt__Issuer: "${Jwt__Issuer}"
-      Jwt__Audience: "${Jwt__Audience}"
-      Jwt__ExpirationMinutes: "${Jwt__ExpirationMinutes}"
-      Logging__LogLevel__Default: "${Logging__LogLevel__Default}"
-      # Logging__LogLevel__Microsoft.AspNetCore: "${Logging__LogLevel__Microsoft.AspNetCore}"
-      AllowedHosts: "${AllowedHosts}"
+    env_file:
+      - .env.backend
     networks:
       - proxy
       - gestionhogar-network-develop
 
   gestionhogar-frontend-develop:
-    image: docker.io/digitalesacide/gestionhogar-frontend-develop:latest
+    image: docker.io/araozu/gestionhogar-frontend-develop:latest
     container_name: gestionhogar-frontend-develop
     restart: unless-stopped
     depends_on:
       gestionhogar-backend-develop:
         condition: service_started
-    environment:
-      NODE_ENV: "${NODE_ENV}"
-      INTERNAL_BACKEND_URL: "${INTERNAL_BACKEND_URL}"
+    env_file:
+      - .env.frontend
     networks:
       - proxy
       - gestionhogar-network-develop
@@ -62,3 +54,4 @@ networks:
     external: true
   gestionhogar-network-develop:
     driver: bridge
+
