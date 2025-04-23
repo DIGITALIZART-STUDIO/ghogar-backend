@@ -219,4 +219,20 @@ public class ClientService : IClientService
             })
             .ToListAsync();
     }
+
+    public async Task<Client> GetClientByDniAsync(string dni)
+    {
+        if (string.IsNullOrWhiteSpace(dni))
+            return null;
+
+        return await _context.Clients.FirstOrDefaultAsync(c => c.Dni == dni && c.IsActive);
+    }
+
+    public async Task<Client> GetClientByRucAsync(string ruc)
+    {
+        if (string.IsNullOrWhiteSpace(ruc))
+            return null;
+
+        return await _context.Clients.FirstOrDefaultAsync(c => c.Ruc == ruc && c.IsActive);
+    }
 }

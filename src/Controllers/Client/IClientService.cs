@@ -15,4 +15,7 @@ public interface IClientService
     Task<IEnumerable<Client>> GetClientsByIdsAsync(IEnumerable<Guid> ids, bool activeOnly);
 
     Task<IEnumerable<ClientSummaryDto>> GetClientsSummaryAsync();
+
+    Task<Client> GetClientByDniAsync(string dni);
+    Task<Client> GetClientByRucAsync(string ruc);
 }

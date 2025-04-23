@@ -1,3 +1,4 @@
+using GestionHogar.Dtos;
 using GestionHogar.Model;
 
 namespace GestionHogar.Services;
@@ -6,7 +7,7 @@ public interface ILeadTaskService
 {
     Task<IEnumerable<LeadTask>> GetAllTasksAsync();
     Task<LeadTask?> GetTaskByIdAsync(Guid id);
-    Task<IEnumerable<LeadTask>> GetTasksByLeadIdAsync(Guid leadId);
+    Task<LeadTasksResponseDto?> GetTasksByLeadIdAsync(Guid leadId);
     Task<IEnumerable<LeadTask>> GetTasksByAssignedToIdAsync(Guid userId);
     Task<IEnumerable<LeadTask>> GetTasksByDateRangeAsync(DateTime startDate, DateTime endDate);
     Task<IEnumerable<LeadTask>> GetPendingTasksAsync();

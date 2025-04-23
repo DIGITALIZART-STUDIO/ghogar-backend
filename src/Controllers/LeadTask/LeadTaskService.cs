@@ -1,3 +1,4 @@
+using GestionHogar.Dtos;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,15 +31,113 @@ public class LeadTaskService : ILeadTaskService
             .FirstOrDefaultAsync(t => t.Id == id && t.IsActive);
     }
 
-    public async Task<IEnumerable<LeadTask>> GetTasksByLeadIdAsync(Guid leadId)
+    public async Task<LeadTasksResponseDto?> GetTasksByLeadIdAsync(Guid leadId)
     {
-        return await _context
+        // Primero obtener el lead con su cliente y usuario asignado
+        var lead = await _context
+            .Leads.Where(l => l.Id == leadId && l.IsActive)
+            .Include(l => l.Client)
+            .Include(l => l.AssignedTo)
+            .FirstOrDefaultAsync();
+
+        if (lead == null)
+            return null;
+
+        // Verificar que Lead tiene Client y AssignedTo
+        if (lead.Client == null || lead.AssignedTo == null)
+            return null;
+
+        // Luego obtener las tareas asociadas a ese lead
+        var tasks = await _context
             .LeadTasks.Where(t => t.LeadId == leadId && t.IsActive)
             .Include(t => t.AssignedTo)
-            .Include(t => t.Lead)
-            .ThenInclude(l => l.Client)
+            .Include(t => t.Lead) // Incluir el lead para poder acceder a su cliente
+            .ThenInclude(l => l.Client) // Incluir el cliente del lead
             .OrderBy(t => t.ScheduledDate)
             .ToListAsync();
+
+        // Mapear a DTOs
+        var response = new LeadTasksResponseDto
+        {
+            Lead = new LeadDTO
+            {
+                Id = lead.Id,
+                ClientId = lead.ClientId.Value,
+                Client = new ClientDTO
+                {
+                    Id = lead.Client.Id,
+                    Name = lead.Client.Name,
+                    Dni = lead.Client.Dni,
+                    Ruc = lead.Client.Ruc,
+                    CompanyName = lead.Client.CompanyName,
+                    PhoneNumber = lead.Client.PhoneNumber,
+                    Email = lead.Client.Email,
+                    Address = lead.Client.Address,
+                    Type = lead.Client.Type.ToString(),
+                    IsActive = lead.Client.IsActive,
+                },
+                AssignedToId = lead.AssignedToId ?? Guid.Empty,
+                AssignedTo = new UserBasicDTO
+                {
+                    Id = lead.AssignedTo.Id,
+                    UserName = lead.AssignedTo.UserName ?? string.Empty,
+                    Name = lead.AssignedTo.Name,
+                    IsActive = lead.AssignedTo.IsActive,
+                },
+                Status = lead.Status.ToString(),
+                Procedency = lead.Procedency,
+                IsActive = lead.IsActive,
+            },
+            Tasks = tasks
+                .Where(t => t.AssignedTo != null)
+                .Select(t => new LeadTaskDTO
+                {
+                    Id = t.Id,
+                    LeadId = t.LeadId,
+                    Lead =
+                        t.Lead != null && t.Lead.Client != null
+                            ? new LeadDTO
+                            {
+                                Id = t.Lead.Id,
+                                ClientId = t.Lead.ClientId.Value,
+                                Client = new ClientDTO
+                                {
+                                    Id = t.Lead.Client.Id,
+                                    Name = t.Lead.Client.Name,
+                                    Dni = t.Lead.Client.Dni,
+                                    Ruc = t.Lead.Client.Ruc,
+                                    CompanyName = t.Lead.Client.CompanyName,
+                                    PhoneNumber = t.Lead.Client.PhoneNumber,
+                                    Email = t.Lead.Client.Email,
+                                    Address = t.Lead.Client.Address,
+                                    Type = t.Lead.Client.Type.ToString(),
+                                    IsActive = t.Lead.Client.IsActive,
+                                },
+                                AssignedToId = t.Lead.AssignedToId.Value,
+                                Status = t.Lead.Status.ToString(),
+                                Procedency = t.Lead.Procedency,
+                                IsActive = t.Lead.IsActive,
+                            }
+                            : null,
+                    AssignedToId = t.AssignedToId,
+                    AssignedTo = new UserBasicDTO
+                    {
+                        Id = t.AssignedTo!.Id,
+                        UserName = t.AssignedTo.UserName,
+                        Name = t.AssignedTo.Name,
+                        IsActive = t.AssignedTo.IsActive,
+                    },
+                    Description = t.Description,
+                    ScheduledDate = t.ScheduledDate,
+                    CompletedDate = t.CompletedDate,
+                    IsCompleted = t.IsCompleted,
+                    Type = t.Type.ToString(),
+                    IsActive = t.IsActive,
+                })
+                .ToList(),
+        };
+
+        return response;
     }
 
     public async Task<IEnumerable<LeadTask>> GetTasksByAssignedToIdAsync(Guid userId)
@@ -117,8 +216,19 @@ public class LeadTaskService : ILeadTaskService
         if (task == null)
             return false;
 
-        task.IsCompleted = true;
-        task.CompletedDate = DateTime.UtcNow;
+        // Toggle el estado de completado
+        task.IsCompleted = !task.IsCompleted;
+
+        // Actualizar la fecha de completado según corresponda
+        if (task.IsCompleted)
+        {
+            task.CompletedDate = DateTime.UtcNow;
+        }
+        else
+        {
+            task.CompletedDate = null;
+        }
+
         task.ModifiedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
