@@ -1,6 +1,6 @@
 services:
   gestionhogar-backend-develop:
-    image: docker.io/digitalesacide/gestionhogar-backend-develop:latest
+    image: docker.io/fernando/gestionhogar-backend-develop:latest
     container_name: gestionhogar-backend-develop
     restart: unless-stopped
     depends_on:
@@ -20,7 +20,7 @@ services:
       - gestionhogar-network-develop
 
   gestionhogar-frontend-develop:
-    image: docker.io/digitalesacide/gestionhogar-frontend-develop:latest
+    image: docker.io/fernando/gestionhogar-frontend-develop:latest
     container_name: gestionhogar-frontend-develop
     restart: unless-stopped
     depends_on:

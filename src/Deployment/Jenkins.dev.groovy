@@ -66,7 +66,7 @@ pipeline {
 #!/bin/bash
 cat << EOF
 # Non-sensitive variables
-TRAZO_BACKEND_VERSION=${BUILD_NUMBER}
+GESTIONHOGAR_BACKEND_VERSION=${BUILD_NUMBER}
 ${nonSensitiveVars.join('\n')}
 # Sensitive variables
 ${sensitiveVars.collect { varName -> "${varName}=\${${varName}}" }.join('\n')}
