@@ -109,8 +109,19 @@ public class LeadService : ILeadService
 
     public async Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync()
     {
+        var salesAdvisorRoleId = await _context
+            .Roles.Where(r => r.Name == "SalesAdvisor")
+            .Select(r => r.Id)
+            .FirstOrDefaultAsync();
+
         return await _context
-            .Users.Select(u => new UserSummaryDto { Id = u.Id, UserName = u.UserName })
+            .Users.Where(u =>
+                u.IsActive
+                && _context.UserRoles.Any(ur =>
+                    ur.UserId == u.Id && ur.RoleId == salesAdvisorRoleId
+                )
+            )
+            .Select(u => new UserSummaryDto { Id = u.Id, UserName = u.UserName })
             .ToListAsync();
     }
 }
