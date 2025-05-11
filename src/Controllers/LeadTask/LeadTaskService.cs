@@ -140,6 +140,99 @@ public class LeadTaskService : ILeadTaskService
         return response;
     }
 
+    public async Task<IEnumerable<LeadTaskDTO>> GetTasksWithFiltersAsync(
+        DateTime from,
+        DateTime to,
+        Guid? assignedToId = null,
+        Guid? leadId = null,
+        TaskType? taskType = null,
+        bool? isCompleted = null
+    )
+    {
+        // Construir la consulta base con los filtros obligatorios de fecha
+        var query = _context
+            .LeadTasks.Where(t => t.IsActive)
+            .Where(t => t.ScheduledDate >= from && t.ScheduledDate <= to)
+            .Include(t => t.AssignedTo)
+            .Include(t => t.Lead)
+            .ThenInclude(l => l.Client)
+            .OrderBy(t => t.ScheduledDate)
+            .AsQueryable();
+
+        // Aplicar filtros opcionales si fueron proporcionados
+        if (assignedToId.HasValue && assignedToId != Guid.Empty)
+        {
+            query = query.Where(t => t.AssignedToId == assignedToId);
+        }
+
+        if (leadId.HasValue && leadId != Guid.Empty)
+        {
+            // Filtrar por el ClientId del Lead en lugar de por LeadId
+            query = query.Where(t => t.Lead.ClientId == leadId);
+        }
+
+        if (taskType.HasValue)
+        {
+            query = query.Where(t => t.Type == taskType);
+        }
+
+        if (isCompleted.HasValue)
+        {
+            query = query.Where(t => t.IsCompleted == isCompleted);
+        }
+
+        // Ejecutar la consulta y convertir a DTOs
+        var tasks = await query.ToListAsync();
+
+        // Mapear a DTOs
+        var taskDTOs = tasks
+            .Where(t => t.AssignedTo != null && t.Lead != null && t.Lead.Client != null)
+            .Select(t => new LeadTaskDTO
+            {
+                Id = t.Id,
+                LeadId = t.LeadId,
+                Lead = new LeadDTO
+                {
+                    Id = t.Lead!.Id,
+                    ClientId = t.Lead.ClientId.Value,
+                    Client = new ClientDTO
+                    {
+                        Id = t.Lead.Client!.Id,
+                        Name = t.Lead.Client.Name,
+                        Dni = t.Lead.Client.Dni,
+                        Ruc = t.Lead.Client.Ruc,
+                        CompanyName = t.Lead.Client.CompanyName,
+                        PhoneNumber = t.Lead.Client.PhoneNumber,
+                        Email = t.Lead.Client.Email,
+                        Address = t.Lead.Client.Address,
+                        Type = t.Lead.Client.Type.ToString(),
+                        IsActive = t.Lead.Client.IsActive,
+                    },
+                    AssignedToId = t.Lead.AssignedToId ?? Guid.Empty,
+                    Status = t.Lead.Status.ToString(),
+                    Procedency = t.Lead.Procedency,
+                    IsActive = t.Lead.IsActive,
+                },
+                AssignedToId = t.AssignedToId,
+                AssignedTo = new UserBasicDTO
+                {
+                    Id = t.AssignedTo!.Id,
+                    UserName = t.AssignedTo.UserName ?? string.Empty,
+                    Name = t.AssignedTo.Name,
+                    IsActive = t.AssignedTo.IsActive,
+                },
+                Description = t.Description,
+                ScheduledDate = t.ScheduledDate,
+                CompletedDate = t.CompletedDate,
+                IsCompleted = t.IsCompleted,
+                Type = t.Type.ToString(),
+                IsActive = t.IsActive,
+            })
+            .ToList();
+
+        return taskDTOs;
+    }
+
     public async Task<IEnumerable<LeadTask>> GetTasksByAssignedToIdAsync(Guid userId)
     {
         return await _context

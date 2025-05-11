@@ -106,6 +106,44 @@ public class LeadTasksController : ControllerBase
         return Ok(tasksResponse);
     }
 
+    // POST: api/leadtasks/filter
+    [HttpPost("filter")]
+    [ProducesResponseType(typeof(IEnumerable<LeadTaskDTO>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IEnumerable<LeadTaskDTO>>> PostTasksWithFilters(
+        [FromBody] TaskFilterRequest filter
+    )
+    {
+        // Validar que las fechas fueron proporcionadas
+        if (filter.From == default || filter.To == default)
+            return BadRequest("Las fechas 'From' y 'To' son obligatorias.");
+
+        // Validar que from es menor que to
+        if (filter.From > filter.To)
+            return BadRequest("La fecha inicial debe ser menor o igual que la fecha final.");
+
+        // Convertir el tipo de string a TaskType si fue proporcionado
+        TaskType? taskType = null;
+        if (!string.IsNullOrEmpty(filter.Type))
+        {
+            if (Enum.TryParse<TaskType>(filter.Type, true, out var parsedType))
+                taskType = parsedType;
+            else
+                return BadRequest($"Tipo de tarea no válido: {filter.Type}");
+        }
+
+        var tasks = await _taskService.GetTasksWithFiltersAsync(
+            filter.From,
+            filter.To,
+            filter.AssignedToId,
+            filter.LeadId,
+            taskType,
+            filter.IsCompleted
+        );
+
+        return Ok(tasks);
+    }
+
     // GET: api/leadtasks/user/{userId}
     [HttpGet("user/{userId}")]
     public async Task<ActionResult<IEnumerable<LeadTask>>> GetTasksByUser(Guid userId)
@@ -216,13 +254,31 @@ public class LeadTasksController : ControllerBase
                 existingTask.ScheduledDate = scheduledDate;
             }
 
+            // Procesar CompletedDate cuando viene en el DTO
+            if (taskDto.CompletedDate != null)
+            {
+                if (!TryParseDate(taskDto.CompletedDate, out DateTime completedDate))
+                {
+                    return BadRequest(
+                        "Formato de fecha de completado inválido. Use yyyy-MM-dd o formato ISO (ej: 2025-04-22T06:34:00Z)."
+                    );
+                }
+
+                existingTask.CompletedDate = completedDate;
+                existingTask.IsCompleted = true; // Si se proporciona una fecha de completado, la tarea se considera completada
+            }
+
             if (taskDto.Type.HasValue)
                 existingTask.Type = taskDto.Type.Value;
 
             if (taskDto.IsCompleted.HasValue)
             {
                 existingTask.IsCompleted = taskDto.IsCompleted.Value;
-                if (taskDto.IsCompleted.Value && !existingTask.CompletedDate.HasValue)
+                if (
+                    taskDto.IsCompleted.Value
+                    && !existingTask.CompletedDate.HasValue
+                    && taskDto.CompletedDate == null
+                )
                     existingTask.CompletedDate = DateTime.UtcNow;
                 else if (!taskDto.IsCompleted.Value)
                     existingTask.CompletedDate = null;
