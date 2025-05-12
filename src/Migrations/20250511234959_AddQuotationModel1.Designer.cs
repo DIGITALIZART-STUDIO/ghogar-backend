@@ -3,6 +3,7 @@ using System;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestionHogar.Migrations
 {
     [DbContext(typeof(DatabaseContext))]
-    partial class DatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20250511234959_AddQuotationModel1")]
+    partial class AddQuotationModel1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -200,57 +203,27 @@ namespace GestionHogar.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("AdvisorId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AmountFinanced")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("Area")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("Block")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<decimal>("Discount")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("numeric");
 
-                    b.Property<decimal>("DownPayment")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("ExchangeRate")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("FinalPrice")
-                        .HasColumnType("decimal(18,2)");
+                    b.Property<DateTime>("ExpirationDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("LeadId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("LotNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("MonthsFinanced")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("PricePerM2")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("ProjectName")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<string>("QuotationDate")
                         .IsRequired()
@@ -259,15 +232,19 @@ namespace GestionHogar.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
-                    b.Property<decimal>("TotalPrice")
-                        .HasColumnType("decimal(18,2)");
+                    b.Property<decimal>("Tax")
+                        .HasColumnType("numeric");
 
-                    b.Property<DateTime>("ValidUntil")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("numeric");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AdvisorId");
+                    b.HasIndex("CreatedById");
 
                     b.HasIndex("LeadId");
 
@@ -524,9 +501,9 @@ namespace GestionHogar.Migrations
 
             modelBuilder.Entity("GestionHogar.Model.Quotation", b =>
                 {
-                    b.HasOne("GestionHogar.Model.User", "Advisor")
+                    b.HasOne("GestionHogar.Model.User", "CreatedBy")
                         .WithMany()
-                        .HasForeignKey("AdvisorId")
+                        .HasForeignKey("CreatedById")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -536,7 +513,7 @@ namespace GestionHogar.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Advisor");
+                    b.Navigation("CreatedBy");
 
                     b.Navigation("Lead");
                 });
