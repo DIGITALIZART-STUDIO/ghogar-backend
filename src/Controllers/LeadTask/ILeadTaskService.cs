@@ -8,6 +8,14 @@ public interface ILeadTaskService
     Task<IEnumerable<LeadTask>> GetAllTasksAsync();
     Task<LeadTask?> GetTaskByIdAsync(Guid id);
     Task<LeadTasksResponseDto?> GetTasksByLeadIdAsync(Guid leadId);
+    Task<IEnumerable<LeadTaskDTO>> GetTasksWithFiltersAsync(
+        DateTime from,
+        DateTime to,
+        Guid? assignedToId = null,
+        Guid? leadId = null,
+        TaskType? taskType = null,
+        bool? isCompleted = null
+    );
     Task<IEnumerable<LeadTask>> GetTasksByAssignedToIdAsync(Guid userId);
     Task<IEnumerable<LeadTask>> GetTasksByDateRangeAsync(DateTime startDate, DateTime endDate);
     Task<IEnumerable<LeadTask>> GetPendingTasksAsync();
