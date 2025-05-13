@@ -29,6 +29,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<LeadTask> LeadTasks { get; set; }
 
+    public DbSet<Quotation> Quotations { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

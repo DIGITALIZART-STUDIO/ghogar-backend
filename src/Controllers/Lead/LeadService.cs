@@ -124,4 +124,14 @@ public class LeadService : ILeadService
             .Select(u => new UserSummaryDto { Id = u.Id, UserName = u.UserName })
             .ToListAsync();
     }
+
+    public async Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId)
+    {
+        var leads = await _context
+            .Leads.Where(l => l.IsActive && l.AssignedToId == assignedToId)
+            .Include(l => l.Client)
+            .ToListAsync();
+
+        return leads.Select(LeadSummaryDto.FromEntity);
+    }
 }

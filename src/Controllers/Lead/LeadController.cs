@@ -205,4 +205,13 @@ public class LeadsController : ControllerBase
         var usersSummary = await _leadService.GetUsersSummaryAsync();
         return Ok(usersSummary);
     }
+
+    [HttpGet("assigned/{assignedToId:guid}/summary")]
+    public async Task<ActionResult<IEnumerable<LeadSummaryDto>>> GetAssignedLeadsSummary(
+        Guid assignedToId
+    )
+    {
+        var leads = await _leadService.GetAssignedLeadsSummaryAsync(assignedToId);
+        return Ok(leads);
+    }
 }

@@ -103,6 +103,7 @@ var modules = new IModule[]
     new ClientModule(),
     new LeadModule(),
     new LeadTaskModule(),
+    new QuotationModule(),
 };
 foreach (var module in modules)
 {
