@@ -48,6 +48,20 @@ public class LeadService : ILeadService
         await _context.SaveChangesAsync();
         return lead;
     }
+    
+    public async Task<Lead?> ToggleLeadStatusAsync(Guid id)
+    {
+        var lead = await _context.Leads.FirstOrDefaultAsync(l => l.Id == id && l.IsActive);
+        if (lead == null)
+            return null;
+    
+        // Cambiar el estado: si es Registered, cambia a Attended y viceversa
+        lead.Status = lead.Status == LeadStatus.Registered ? LeadStatus.Attended : LeadStatus.Registered;
+        lead.ModifiedAt = DateTime.UtcNow;
+    
+        await _context.SaveChangesAsync();
+        return lead;
+    }
 
     public async Task<bool> DeleteLeadAsync(Guid id)
     {
@@ -123,5 +137,15 @@ public class LeadService : ILeadService
             )
             .Select(u => new UserSummaryDto { Id = u.Id, UserName = u.UserName })
             .ToListAsync();
+    }
+
+    public async Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId)
+    {
+        var leads = await _context
+            .Leads.Where(l => l.IsActive && l.AssignedToId == assignedToId)
+            .Include(l => l.Client)
+            .ToListAsync();
+
+        return leads.Select(LeadSummaryDto.FromEntity);
     }
 }

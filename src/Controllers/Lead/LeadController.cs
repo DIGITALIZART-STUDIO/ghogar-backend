@@ -91,6 +91,25 @@ public class LeadsController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
+    
+    // PUT: api/leads/{id}/toggle-status
+    [HttpPut("{id}/toggle-status")]
+    public async Task<ActionResult<Lead>> ToggleLeadStatus(Guid id)
+    {
+        try
+        {
+            var updatedLead = await _leadService.ToggleLeadStatusAsync(id);
+            
+            if (updatedLead == null)
+                return NotFound($"No se encontró un lead activo con el ID: {id}");
+    
+            return Ok(updatedLead);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
 
     // DELETE: api/leads/{id}
     [HttpDelete("{id}")]
@@ -204,5 +223,14 @@ public class LeadsController : ControllerBase
     {
         var usersSummary = await _leadService.GetUsersSummaryAsync();
         return Ok(usersSummary);
+    }
+
+    [HttpGet("assigned/{assignedToId:guid}/summary")]
+    public async Task<ActionResult<IEnumerable<LeadSummaryDto>>> GetAssignedLeadsSummary(
+        Guid assignedToId
+    )
+    {
+        var leads = await _leadService.GetAssignedLeadsSummaryAsync(assignedToId);
+        return Ok(leads);
     }
 }
