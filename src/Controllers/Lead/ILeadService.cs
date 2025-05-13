@@ -19,4 +19,6 @@ public interface ILeadService
     Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId);
 
     Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();
+
+    Task<Lead?> ToggleLeadStatusAsync(Guid id);
 }
