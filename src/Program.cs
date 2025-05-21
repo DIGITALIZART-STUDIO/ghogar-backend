@@ -1,18 +1,25 @@
-using System.Text;
 using GestionHogar.Controllers;
 using GestionHogar.Model;
 using GestionHogar.Utils;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using GestionHogar.Configuration;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
 builder.Services.AddControllers();
+
+//
+// Configuration setup
+//
+builder.Services.Configure<CorsConfiguration>(
+    builder.Configuration.GetSection("Cors")
+);
 
 // Database setup
 builder.Services.AddDbContext<DatabaseContext>(options =>
@@ -21,6 +28,32 @@ builder.Services.AddDbContext<DatabaseContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection")
         ?? throw new Exception("DB connection string not found");
     options.UseNpgsql(connectionString);
+});
+
+// Configure CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(
+        "AllowOrigins",
+        policy =>
+        {
+            var corsSettings = builder.Services.BuildServiceProvider()
+                .GetRequiredService<IOptions<CorsConfiguration>>().Value;
+            var allowedOrigins = corsSettings.AllowedOrigins;
+
+            if (allowedOrigins == null || allowedOrigins.Length == 0)
+            {
+                throw new Exception("Allowed origins not found in configuration");
+            }
+
+            policy
+                .WithOrigins(allowedOrigins)
+                .AllowCredentials()
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .SetIsOriginAllowedToAllowWildcardSubdomains();
+        }
+    );
 });
 
 // Configure Identity
@@ -45,49 +78,40 @@ builder
     .AddEntityFrameworkStores<DatabaseContext>()
     .AddDefaultTokenProviders();
 
-// Add JWT authentication
+// Add authentication
 builder
-    .Services.AddAuthentication(options =>
+    .Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
     {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            // Clock skew compensates for server time drift
-            ClockSkew = TimeSpan.Zero,
-            ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(
-                    builder.Configuration["Jwt:SecretKey"]
-                        ?? throw new Exception("Jwt:SecretKey not set")
-                )
-            ),
-            RequireSignedTokens = true,
-            RequireExpirationTime = true,
-        };
+        var corsSettings = builder.Services.BuildServiceProvider()
+            .GetRequiredService<IOptions<CorsConfiguration>>().Value;
 
+        options.Cookie.Name = corsSettings.CookieName;
+        options.ExpireTimeSpan = TimeSpan.FromSeconds(corsSettings.ExpirationSeconds);
+        options.SlidingExpiration = true;
+        options.Cookie.HttpOnly = true;
 #if DEBUG
-        // During development, use the cookie set by the frontend
-        // as JWT token, for not having to manually login and set
-        // Bearer on every change.
-        options.Events = new JwtBearerEvents
+        options.Cookie.SameSite = SameSiteMode.Lax; // Not None!
+        options.Cookie.SecurePolicy = CookieSecurePolicy.None;
+#else
+        options.Cookie.SameSite = SameSiteMode.None;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+#endif
+
+        // THIS IS THE KEY PART - RETURN 401/403 INSTEAD OF REDIRECTING
+        options.Events = new CookieAuthenticationEvents
         {
-            OnMessageReceived = context =>
+            OnRedirectToLogin = context =>
             {
-                context.Token = context.Request.Cookies["pc_access_token"];
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 return Task.CompletedTask;
             },
+            OnRedirectToAccessDenied = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            }
         };
-#endif
     });
 
 builder.Services.AddAuthorization();
@@ -112,6 +136,7 @@ foreach (var module in modules)
 
 var app = builder.Build();
 
+app.UseCors("AllowOrigins");
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

@@ -48,17 +48,18 @@ public class LeadService : ILeadService
         await _context.SaveChangesAsync();
         return lead;
     }
-    
+
     public async Task<Lead?> ToggleLeadStatusAsync(Guid id)
     {
         var lead = await _context.Leads.FirstOrDefaultAsync(l => l.Id == id && l.IsActive);
         if (lead == null)
             return null;
-    
+
         // Cambiar el estado: si es Registered, cambia a Attended y viceversa
-        lead.Status = lead.Status == LeadStatus.Registered ? LeadStatus.Attended : LeadStatus.Registered;
+        lead.Status =
+            lead.Status == LeadStatus.Registered ? LeadStatus.Attended : LeadStatus.Registered;
         lead.ModifiedAt = DateTime.UtcNow;
-    
+
         await _context.SaveChangesAsync();
         return lead;
     }
