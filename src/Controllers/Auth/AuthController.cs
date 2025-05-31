@@ -1,15 +1,49 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using GestionHogar.Configuration;
 using GestionHogar.Model;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace GestionHogar.Controllers;
 
 [ApiController]
 [Route("/api/[controller]")]
-public class AuthController(JwtService jwt, UserManager<User> userManager) : ControllerBase
+public class AuthController(
+    JwtService jwt,
+    UserManager<User> userManager,
+    IOptions<CorsConfiguration> corsConfig
+) : ControllerBase
 {
+    private readonly CorsConfiguration _corsConfig = corsConfig.Value;
+
+    private void SetAuthCookies(string accessToken, string refreshToken)
+    {
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = false, // Set to true in production with HTTPS
+        };
+
+#if DEBUG
+        cookieOptions.SameSite = SameSiteMode.Lax;
+        cookieOptions.Secure = false;
+#else
+        cookieOptions.SameSite = SameSiteMode.None;
+        cookieOptions.Secure = true;
+#endif
+
+        // Set access token cookie
+        cookieOptions.Expires = DateTime.UtcNow.AddSeconds(_corsConfig.ExpirationSeconds);
+        Response.Cookies.Append(_corsConfig.CookieName, accessToken, cookieOptions);
+
+        // Set refresh token cookie
+        cookieOptions.Expires = DateTime.UtcNow.AddSeconds(_corsConfig.RefreshExpirationSeconds);
+        Response.Cookies.Append($"{_corsConfig.CookieName}_refresh", refreshToken, cookieOptions);
+    }
+
     [EndpointSummary("Login")]
     [EndpointDescription(
         "Log in to the system. Returns 2 JWT tokens, access_token and refresh_token. access_token is to be used in Authorization Bearer."
@@ -37,6 +71,9 @@ public class AuthController(JwtService jwt, UserManager<User> userManager) : Con
             user.Id.ToString(),
             request.Email
         );
+
+        // Set authentication cookies
+        SetAuthCookies(token, refreshToken);
 
         return new LoginResponse(
             AccessToken: token,
@@ -76,12 +113,27 @@ public class AuthController(JwtService jwt, UserManager<User> userManager) : Con
             user.Email!
         );
 
+        // Set authentication cookies
+        SetAuthCookies(token, refreshToken);
+
         return new LoginResponse(
             AccessToken: token,
             RefreshToken: refreshToken,
             AccessExpiresIn: accessExpiration,
             RefreshExpiresIn: refreshExpiration
         );
+    }
+
+    [EndpointSummary("Logout")]
+    [EndpointDescription("Logs out the user by clearing authentication cookies.")]
+    [HttpPost("logout")]
+    public ActionResult logout()
+    {
+        // Clear authentication cookies
+        Response.Cookies.Delete(_corsConfig.CookieName);
+        Response.Cookies.Delete($"{_corsConfig.CookieName}_refresh");
+
+        return Ok(new { message = "Logged out successfully" });
     }
 }
 

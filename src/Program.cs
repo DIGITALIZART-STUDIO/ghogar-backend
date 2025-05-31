@@ -1,12 +1,15 @@
+using System.Text;
+using GestionHogar.Configuration;
 using GestionHogar.Controllers;
 using GestionHogar.Model;
 using GestionHogar.Utils;
-using GestionHogar.Configuration;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Scalar.AspNetCore;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -17,9 +20,7 @@ builder.Services.AddControllers();
 //
 // Configuration setup
 //
-builder.Services.Configure<CorsConfiguration>(
-    builder.Configuration.GetSection("Cors")
-);
+builder.Services.Configure<CorsConfiguration>(builder.Configuration.GetSection("Cors"));
 
 // Database setup
 builder.Services.AddDbContext<DatabaseContext>(options =>
@@ -37,8 +38,10 @@ builder.Services.AddCors(options =>
         "AllowOrigins",
         policy =>
         {
-            var corsSettings = builder.Services.BuildServiceProvider()
-                .GetRequiredService<IOptions<CorsConfiguration>>().Value;
+            var corsSettings = builder
+                .Services.BuildServiceProvider()
+                .GetRequiredService<IOptions<CorsConfiguration>>()
+                .Value;
             var allowedOrigins = corsSettings.AllowedOrigins;
 
             if (allowedOrigins == null || allowedOrigins.Length == 0)
@@ -80,37 +83,68 @@ builder
 
 // Add authentication
 builder
-    .Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
+    .Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        var corsSettings = builder.Services.BuildServiceProvider()
-            .GetRequiredService<IOptions<CorsConfiguration>>().Value;
+        var jwtSettings =
+            builder.Configuration.GetSection("Jwt").Get<JwtSettings>()
+            ?? throw new Exception("JWT settings not found");
+        var corsSettings = builder
+            .Services.BuildServiceProvider()
+            .GetRequiredService<IOptions<CorsConfiguration>>()
+            .Value;
 
-        options.Cookie.Name = corsSettings.CookieName;
-        options.ExpireTimeSpan = TimeSpan.FromSeconds(corsSettings.ExpirationSeconds);
-        options.SlidingExpiration = true;
-        options.Cookie.HttpOnly = true;
-#if DEBUG
-        options.Cookie.SameSite = SameSiteMode.Lax; // Not None!
-        options.Cookie.SecurePolicy = CookieSecurePolicy.None;
-#else
-        options.Cookie.SameSite = SameSiteMode.None;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-#endif
-
-        // THIS IS THE KEY PART - RETURN 401/403 INSTEAD OF REDIRECTING
-        options.Events = new CookieAuthenticationEvents
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            OnRedirectToLogin = context =>
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtSettings.SecretKey)
+            ),
+            ClockSkew = TimeSpan.Zero,
+        };
+
+        // Custom logic to read token from both Authorization header AND cookies
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
             {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                // First check Authorization header (standard way)
+                var token = context
+                    .Request.Headers.Authorization.FirstOrDefault()
+                    ?.Split(" ")
+                    .Last();
+
+                // If no Authorization header, check cookies
+                if (string.IsNullOrEmpty(token))
+                {
+                    token = context.Request.Cookies[corsSettings.CookieName];
+                }
+
+                if (!string.IsNullOrEmpty(token))
+                {
+                    context.Token = token;
+                }
+
                 return Task.CompletedTask;
             },
-            OnRedirectToAccessDenied = context =>
+            OnChallenge = context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync("{\"error\":\"Unauthorized\"}");
+            },
+            OnForbidden = context =>
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return Task.CompletedTask;
-            }
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync("{\"error\":\"Forbidden\"}");
+            },
         };
     });
 
