@@ -91,7 +91,7 @@ public class LeadsController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
-    
+
     // PUT: api/leads/{id}/toggle-status
     [HttpPut("{id}/toggle-status")]
     public async Task<ActionResult<Lead>> ToggleLeadStatus(Guid id)
@@ -99,10 +99,10 @@ public class LeadsController : ControllerBase
         try
         {
             var updatedLead = await _leadService.ToggleLeadStatusAsync(id);
-            
+
             if (updatedLead == null)
                 return NotFound($"No se encontró un lead activo con el ID: {id}");
-    
+
             return Ok(updatedLead);
         }
         catch (Exception ex)

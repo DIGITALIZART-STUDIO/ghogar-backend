@@ -15,15 +15,14 @@ namespace GestionHogar.Migrations
                 table: "Quotations",
                 type: "text",
                 nullable: false,
-                defaultValue: "");
+                defaultValue: ""
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "QuoationDate",
-                table: "Quotations");
+            migrationBuilder.DropColumn(name: "QuoationDate", table: "Quotations");
         }
     }
 }

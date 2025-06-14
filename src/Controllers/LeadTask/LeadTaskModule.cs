@@ -14,4 +14,3 @@ public class LeadTaskModule : IModule
         return services;
     }
 }
-  

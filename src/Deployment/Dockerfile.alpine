@@ -9,6 +9,7 @@ ENV PATH="${PATH}:/root/.dotnet/tools"
 COPY GestionHogar.csproj .
 RUN HUSKY=0 dotnet restore --locked-mode
 
+COPY Configuration ./Configuration
 COPY Controllers ./Controllers
 COPY Migrations ./Migrations
 COPY Model ./Model

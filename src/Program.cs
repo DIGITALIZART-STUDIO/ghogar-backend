@@ -1,10 +1,13 @@
 using System.Text;
+using GestionHogar.Configuration;
 using GestionHogar.Controllers;
 using GestionHogar.Model;
 using GestionHogar.Utils;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 
@@ -14,6 +17,11 @@ builder.Logging.AddConsole();
 
 builder.Services.AddControllers();
 
+//
+// Configuration setup
+//
+builder.Services.Configure<CorsConfiguration>(builder.Configuration.GetSection("Cors"));
+
 // Database setup
 builder.Services.AddDbContext<DatabaseContext>(options =>
 {
@@ -21,6 +29,34 @@ builder.Services.AddDbContext<DatabaseContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection")
         ?? throw new Exception("DB connection string not found");
     options.UseNpgsql(connectionString);
+});
+
+// Configure CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(
+        "AllowOrigins",
+        policy =>
+        {
+            var corsSettings = builder
+                .Services.BuildServiceProvider()
+                .GetRequiredService<IOptions<CorsConfiguration>>()
+                .Value;
+            var allowedOrigins = corsSettings.AllowedOrigins;
+
+            if (allowedOrigins == null || allowedOrigins.Length == 0)
+            {
+                throw new Exception("Allowed origins not found in configuration");
+            }
+
+            policy
+                .WithOrigins(allowedOrigins)
+                .AllowCredentials()
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .SetIsOriginAllowedToAllowWildcardSubdomains();
+        }
+    );
 });
 
 // Configure Identity
@@ -45,49 +81,71 @@ builder
     .AddEntityFrameworkStores<DatabaseContext>()
     .AddDefaultTokenProviders();
 
-// Add JWT authentication
+// Add authentication
 builder
-    .Services.AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
+    .Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        var jwtSettings =
+            builder.Configuration.GetSection("Jwt").Get<JwtSettings>()
+            ?? throw new Exception("JWT settings not found");
+        var corsSettings = builder
+            .Services.BuildServiceProvider()
+            .GetRequiredService<IOptions<CorsConfiguration>>()
+            .Value;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            // Clock skew compensates for server time drift
-            ClockSkew = TimeSpan.Zero,
             ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(
-                    builder.Configuration["Jwt:SecretKey"]
-                        ?? throw new Exception("Jwt:SecretKey not set")
-                )
+                Encoding.UTF8.GetBytes(jwtSettings.SecretKey)
             ),
-            RequireSignedTokens = true,
-            RequireExpirationTime = true,
+            ClockSkew = TimeSpan.Zero,
         };
 
-#if DEBUG
-        // During development, use the cookie set by the frontend
-        // as JWT token, for not having to manually login and set
-        // Bearer on every change.
+        // Custom logic to read token from both Authorization header AND cookies
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
-                context.Token = context.Request.Cookies["pc_access_token"];
+                // First check Authorization header (standard way)
+                var token = context
+                    .Request.Headers.Authorization.FirstOrDefault()
+                    ?.Split(" ")
+                    .Last();
+
+                // If no Authorization header, check cookies
+                if (string.IsNullOrEmpty(token))
+                {
+                    token = context.Request.Cookies[corsSettings.CookieName];
+                }
+
+                if (!string.IsNullOrEmpty(token))
+                {
+                    context.Token = token;
+                }
+
                 return Task.CompletedTask;
             },
+            OnChallenge = context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync("{\"error\":\"Unauthorized\"}");
+            },
+            OnForbidden = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync("{\"error\":\"Forbidden\"}");
+            },
         };
-#endif
     });
 
 builder.Services.AddAuthorization();
@@ -112,6 +170,7 @@ foreach (var module in modules)
 
 var app = builder.Build();
 
+app.UseCors("AllowOrigins");
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -139,6 +198,7 @@ using (var scope = app.Services.CreateScope())
     if (!app.Environment.IsProduction() && !app.Environment.IsStaging())
     {
         logger.LogInformation("Seeding development data");
+        await DatabaseSeeder.SeedDevelopmentUsers(app.Services, logger);
     }
 }
 
