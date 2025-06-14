@@ -198,6 +198,7 @@ using (var scope = app.Services.CreateScope())
     if (!app.Environment.IsProduction() && !app.Environment.IsStaging())
     {
         logger.LogInformation("Seeding development data");
+        await DatabaseSeeder.SeedDevelopmentUsers(app.Services, logger);
     }
 }
 
