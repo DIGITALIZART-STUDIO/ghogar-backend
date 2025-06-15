@@ -177,4 +177,20 @@ public class QuotationsController : ControllerBase
             return StatusCode(500, "Error interno del servidor");
         }
     }
+
+    [HttpGet("{id:guid}/pdf")]
+    public async Task<ActionResult> GenerateQuotationPdf(Guid id)
+    {
+        try
+        {
+            var pdfBytes = await _quotationService.GenerateQuotationPdfAsync(id);
+
+            return File(pdfBytes, "application/pdf", $"cotizacion-{id}.pdf");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al generar PDF de cotización");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
 }

@@ -16,4 +16,5 @@ public interface IQuotationService
     Task<bool> DeleteQuotationAsync(Guid id);
     Task<QuotationDTO?> ChangeStatusAsync(Guid id, string status);
     Task<string> GenerateQuotationCodeAsync();
+    Task<byte[]> GenerateQuotationPdfAsync(Guid quotationId);
 }

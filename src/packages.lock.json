@@ -77,6 +77,12 @@
           "Npgsql": "9.0.2"
         }
       },
+      "QuestPDF": {
+        "type": "Direct",
+        "requested": "[2025.5.1, )",
+        "resolved": "2025.5.1",
+        "contentHash": "oRjdICOO28qkO9zTw3mFzFG1w51YAG6dWgC2g7JjzlsQF4HbY0iTa0uluwyPNZckPTv8v9+krSUyjjtspKhi7g=="
+      },
       "Scalar.AspNetCore": {
         "type": "Direct",
         "requested": "[2.0.*, )",

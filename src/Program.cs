@@ -208,4 +208,7 @@ app.UseAuthorization();
 app.UseSecurityStampValidator();
 app.MapControllers();
 
+// Libraries startup
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 app.Run();
