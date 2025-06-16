@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using GestionHogar.Model;
 
 namespace GestionHogar.Dtos;
@@ -8,6 +9,8 @@ public class LotDTO
     public string LotNumber { get; set; } = null!;
     public decimal Area { get; set; }
     public decimal Price { get; set; }
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public LotStatus Status { get; set; }
     public string StatusText { get; set; } = null!;
     public Guid BlockId { get; set; }
