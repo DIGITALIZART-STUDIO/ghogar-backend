@@ -13,7 +13,8 @@ namespace GestionHogar.Migrations
             migrationBuilder.RenameColumn(
                 name: "QuoationDate",
                 table: "Quotations",
-                newName: "QuotationDate");
+                newName: "QuotationDate"
+            );
         }
 
         /// <inheritdoc />
@@ -22,7 +23,8 @@ namespace GestionHogar.Migrations
             migrationBuilder.RenameColumn(
                 name: "QuotationDate",
                 table: "Quotations",
-                newName: "QuoationDate");
+                newName: "QuoationDate"
+            );
         }
     }
 }

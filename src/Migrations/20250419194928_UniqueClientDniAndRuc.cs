@@ -14,25 +14,23 @@ namespace GestionHogar.Migrations
                 name: "IX_Client_Dni",
                 table: "Clients",
                 column: "Dni",
-                unique: true);
+                unique: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Client_Ruc",
                 table: "Clients",
                 column: "Ruc",
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_Client_Dni",
-                table: "Clients");
+            migrationBuilder.DropIndex(name: "IX_Client_Dni", table: "Clients");
 
-            migrationBuilder.DropIndex(
-                name: "IX_Client_Ruc",
-                table: "Clients");
+            migrationBuilder.DropIndex(name: "IX_Client_Ruc", table: "Clients");
         }
     }
 }

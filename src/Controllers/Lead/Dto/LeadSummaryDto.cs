@@ -2,7 +2,6 @@ using System;
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 
-
 namespace GestionHogar.Controllers.Dtos;
 
 public class LeadSummaryDto
