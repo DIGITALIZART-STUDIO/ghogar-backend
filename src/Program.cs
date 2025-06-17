@@ -162,6 +162,9 @@ var modules = new IModule[]
     new LeadModule(),
     new LeadTaskModule(),
     new QuotationModule(),
+    new ProjectModule(),
+    new BlockModule(),
+    new LotModule(),
 };
 foreach (var module in modules)
 {
