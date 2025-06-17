@@ -209,33 +209,128 @@ public class QuotationService : IQuotationService
                     .PaddingVertical(1, Unit.Centimetre)
                     .Column(x =>
                     {
-                        x.Spacing(20);
+                        x.Spacing(0);
 
-                        x.Item().Text("Información del Cliente").FontSize(16).SemiBold();
-
+                        // Cliente, Copropietario
                         x.Item()
-                            .Row(row =>
+                            .Table(table =>
                             {
-                                row.RelativeItem()
-                                    .Column(col =>
-                                    {
-                                        col.Item().Text("Nombre: Juan Pérez");
-                                        col.Item().Text("Email: juan.perez@email.com");
-                                        col.Item().Text("Teléfono: +1234567890");
-                                    });
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.RelativeColumn(4);
+                                    columns.RelativeColumn(2);
+                                });
 
-                                row.RelativeItem()
-                                    .Column(col =>
-                                    {
-                                        col.Item().Text($"Fecha: {DateTime.Now:dd/MM/yyyy}");
-                                        col.Item().Text("Código: COT-2024-00001");
-                                        col.Item().Text("Estado: Pendiente");
-                                    });
+                                table.Cell();
+                                table
+                                    .Cell()
+                                    .Border(1)
+                                    .BorderColor(Colors.Grey.Darken1)
+                                    .Padding(2)
+                                    .AlignLeft()
+                                    .Text("T.C. REFERENCIAL");
                             });
 
-                        x.Item().Text("Detalles de la Cotización").FontSize(16).SemiBold();
+                        // Cliente, Copropietario
+                        x.Item()
+                            .Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.RelativeColumn(3);
+                                    columns.RelativeColumn(2);
+                                });
+
+                                table
+                                    .Cell()
+                                    .PaddingRight(16)
+                                    .BorderBottom(1)
+                                    .BorderColor(Colors.Grey.Darken1)
+                                    .PaddingTop(2)
+                                    .PaddingBottom(2)
+                                    .AlignLeft()
+                                    .Text("Cliente");
+                                table
+                                    .Cell()
+                                    .PaddingTop(2)
+                                    .PaddingBottom(2)
+                                    .AlignLeft()
+                                    .Text("DETALLES DE FINANCIAMIENTO")
+                                    .Bold();
+                                table
+                                    .Cell()
+                                    .PaddingRight(16)
+                                    .BorderBottom(1)
+                                    .BorderColor(Colors.Grey.Darken1)
+                                    .PaddingTop(2)
+                                    .PaddingBottom(2)
+                                    .AlignLeft()
+                                    .Text("Copropietario");
+                            });
+
+                        // DNI, Celular
+                        x.Item()
+                            .Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.RelativeColumn(4);
+                                    columns.RelativeColumn(5);
+                                    columns.RelativeColumn(6);
+                                });
+
+                                table.Cell().PaddingRight(16).Element(DataCellStyle).Text("DNI");
+                                table
+                                    .Cell()
+                                    .PaddingRight(16)
+                                    .Element(DataCellStyle)
+                                    .Text("Celular");
+                                table.Cell().Element(DataCellStyle).Text("Nro de Meses");
+
+                                static IContainer DataCellStyle(IContainer container)
+                                {
+                                    return container
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Grey.Darken1)
+                                        .PaddingTop(2)
+                                        .PaddingBottom(2)
+                                        .AlignLeft();
+                                }
+                            });
+
+                        // Email, Proyecto
+                        x.Item()
+                            .Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.RelativeColumn(3);
+                                    columns.RelativeColumn(2);
+                                });
+
+                                table.Cell().PaddingRight(16).Element(DataCellStyle).Text("Email");
+                                table.Cell().Element(DataCellStyle).Text("Fecha de pago/cuota");
+
+                                table
+                                    .Cell()
+                                    .PaddingRight(16)
+                                    .Element(DataCellStyle)
+                                    .Text("Proyecto");
+                                table.Cell().Element(DataCellStyle).Text("Fecha de Cotización");
+
+                                static IContainer DataCellStyle(IContainer container)
+                                {
+                                    return container
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Grey.Darken1)
+                                        .PaddingTop(2)
+                                        .PaddingBottom(2)
+                                        .AlignLeft();
+                                }
+                            });
 
                         x.Item()
+                            .PaddingTop(40)
                             .Table(table =>
                             {
                                 table.ColumnsDefinition(columns =>
@@ -288,7 +383,7 @@ public class QuotationService : IQuotationService
                                             .PaddingVertical(0)
                                             .PaddingHorizontal(0)
                                             .Border(1)
-                                            .BorderColor(Colors.Black)
+                                            .BorderColor(Colors.Grey.Darken1)
                                             .Background(Colors.White);
                                     }
                                 });
@@ -353,7 +448,7 @@ public class QuotationService : IQuotationService
                                             .PaddingVertical(0)
                                             .PaddingHorizontal(0)
                                             .Border(1)
-                                            .BorderColor(Colors.Black);
+                                            .BorderColor(Colors.Grey.Darken1);
                                     }
                                 }
                             });
