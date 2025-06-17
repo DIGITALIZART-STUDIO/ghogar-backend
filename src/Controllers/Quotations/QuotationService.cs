@@ -201,10 +201,19 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                 page.DefaultTextStyle(x => x.FontSize(12));
 
                 page.Header()
-                    .Text("COTIZACIÓN DE SERVICIOS")
-                    .SemiBold()
-                    .FontSize(20)
-                    .FontColor(Colors.Blue.Medium);
+                    .Table(table =>
+                    {
+                        table.ColumnsDefinition(cols =>
+                        {
+                            cols.RelativeColumn(2);
+                            cols.RelativeColumn(3);
+                            cols.RelativeColumn(2);
+                        });
+
+                        table.Cell();
+                        table.Cell().AlignCenter().Text("COTIZACIÓN").FontSize(24).ExtraBold();
+                        table.Cell();
+                    });
 
                 page.Content()
                     .PaddingVertical(1, Unit.Centimetre)
@@ -486,14 +495,17 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .Element(DataCellStyle)
                                     .AlignLeft()
                                     .PaddingLeft(10)
-                                    .Text($"S/ {(quotation.FinalPrice * exchangeRate).ToString("N2")}");
+                                    .Text(
+                                        $"S/ {(quotation.FinalPrice * exchangeRate).ToString("N2")}"
+                                    );
 
                                 table.Cell().ColumnSpan(5).Text("");
 
                                 //
                                 // Inicial
                                 //
-                                var downPaymentDollars = (quotation.DownPayment / 100) * quotation.FinalPrice;
+                                var downPaymentDollars =
+                                    (quotation.DownPayment / 100) * quotation.FinalPrice;
                                 var downPaymentSoles = downPaymentDollars * exchangeRate;
                                 table.Cell().Element(DataCellStyleThin).Text("Inicial");
                                 table
@@ -502,8 +514,14 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .AlignRight()
                                     .Text($"{quotation.DownPayment} %");
                                 table.Cell();
-                                table.Cell().Element(DataCellStyleThin).Text($"$ {downPaymentDollars.ToString("N2")}");
-                                table.Cell().Element(DataCellStyleThin).Text($"S/ {downPaymentSoles.ToString("N2")}");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .Text($"$ {downPaymentDollars.ToString("N2")}");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .Text($"S/ {downPaymentSoles.ToString("N2")}");
 
                                 table.Cell().ColumnSpan(5).Text("");
 
@@ -511,7 +529,8 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                 // A Financiar
                                 //
                                 var financingPercentange = 100 - quotation.DownPayment;
-                                var financingAmountDollars = quotation.FinalPrice - downPaymentDollars;
+                                var financingAmountDollars =
+                                    quotation.FinalPrice - downPaymentDollars;
                                 var financingAmountSoles = financingAmountDollars * exchangeRate;
                                 table.Cell().Element(DataCellStyleThin).Text("A financiar");
                                 table
@@ -520,15 +539,22 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .AlignRight()
                                     .Text($"{financingPercentange} %");
                                 table.Cell();
-                                table.Cell().Element(DataCellStyleThin).Text($"$ {financingAmountDollars.ToString("N2")}");
-                                table.Cell().Element(DataCellStyleThin).Text($"S/ {financingAmountSoles.ToString("N2")}");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .Text($"$ {financingAmountDollars.ToString("N2")}");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .Text($"S/ {financingAmountSoles.ToString("N2")}");
 
                                 table.Cell().ColumnSpan(5).Text("");
 
                                 //
                                 // Cuotas
                                 //
-                                var monthlyPaymentDollars = financingAmountDollars / quotation.MonthsFinanced;
+                                var monthlyPaymentDollars =
+                                    financingAmountDollars / quotation.MonthsFinanced;
                                 var monthlyPaymentSoles = monthlyPaymentDollars * exchangeRate;
                                 table.Cell();
                                 table
@@ -541,8 +567,14 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .Element(DataCellStyleThin)
                                     .AlignCenter()
                                     .Text("Cuotas de");
-                                table.Cell().Element(DataCellStyleThin).Text($"$ {monthlyPaymentDollars.ToString("N2")}");
-                                table.Cell().Element(DataCellStyleThin).Text($"S/ {monthlyPaymentSoles.ToString("N2")}");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .Text($"$ {monthlyPaymentDollars.ToString("N2")}");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .Text($"S/ {monthlyPaymentSoles.ToString("N2")}");
 
                                 table.Cell().ColumnSpan(5).Text("");
                                 table.Cell().ColumnSpan(5).Text("");
