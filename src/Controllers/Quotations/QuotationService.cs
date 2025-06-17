@@ -179,7 +179,17 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
         var quotation = await _context
             .Quotations.Include(q => q.Lead)
             .ThenInclude(lead => lead.Client)
+            .Include(q => q.Lead)
+            .ThenInclude(lead => lead.AssignedTo)
             .FirstOrDefaultAsync(q => q.Id == quotationId);
+
+        if (quotation is null)
+        {
+            throw new Exception("Quotation not found");
+        }
+
+        var client = quotation.Lead?.Client;
+        var exchangeRate = quotation.ExchangeRate;
 
         var document = Document.Create(container =>
         {
@@ -208,7 +218,7 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                             {
                                 table.ColumnsDefinition(columns =>
                                 {
-                                    columns.RelativeColumn(4);
+                                    columns.RelativeColumn(3);
                                     columns.RelativeColumn(2);
                                 });
 
@@ -218,8 +228,8 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .Border(1)
                                     .BorderColor(Colors.Grey.Darken1)
                                     .Padding(2)
-                                    .AlignLeft()
-                                    .Text("T.C. REFERENCIAL");
+                                    .AlignCenter()
+                                    .Text($"T.C. REFERENCIAL: {exchangeRate.ToString()}");
                             });
 
                         // Cliente, Copropietario
@@ -240,7 +250,7 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .PaddingTop(2)
                                     .PaddingBottom(2)
                                     .AlignLeft()
-                                    .Text("Cliente");
+                                    .Text($"Cliente: {client?.Name ?? "-"}");
                                 table
                                     .Cell()
                                     .PaddingTop(2)
@@ -256,7 +266,7 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .PaddingTop(2)
                                     .PaddingBottom(2)
                                     .AlignLeft()
-                                    .Text("Copropietario");
+                                    .Text($"Copropietario: {client?.CoOwner ?? "-"}");
                             });
 
                         // DNI, Celular
@@ -270,13 +280,20 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     columns.RelativeColumn(6);
                                 });
 
-                                table.Cell().PaddingRight(16).Element(DataCellStyle).Text("DNI");
                                 table
                                     .Cell()
                                     .PaddingRight(16)
                                     .Element(DataCellStyle)
-                                    .Text("Celular");
-                                table.Cell().Element(DataCellStyle).Text("Nro de Meses");
+                                    .Text($"DNI: {client?.Dni ?? "-"}");
+                                table
+                                    .Cell()
+                                    .PaddingRight(16)
+                                    .Element(DataCellStyle)
+                                    .Text($"Celular: {client?.PhoneNumber ?? "-"}");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyle)
+                                    .Text($"Nro de Meses: {quotation.MonthsFinanced}");
 
                                 static IContainer DataCellStyle(IContainer container)
                                 {
@@ -299,15 +316,22 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     columns.RelativeColumn(2);
                                 });
 
-                                table.Cell().PaddingRight(16).Element(DataCellStyle).Text("Email");
+                                table
+                                    .Cell()
+                                    .PaddingRight(16)
+                                    .Element(DataCellStyle)
+                                    .Text($"Email: {client?.Email ?? "-"}");
                                 table.Cell().Element(DataCellStyle).Text("Fecha de pago/cuota");
 
                                 table
                                     .Cell()
                                     .PaddingRight(16)
                                     .Element(DataCellStyle)
-                                    .Text("Proyecto");
-                                table.Cell().Element(DataCellStyle).Text("Fecha de Cotización");
+                                    .Text($"Proyecto: {quotation.ProjectName}");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyle)
+                                    .Text($"Fecha de Cotización: {quotation.QuotationDate}");
 
                                 static IContainer DataCellStyle(IContainer container)
                                 {
@@ -341,7 +365,7 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                         .Element(HeaderCellStyle)
                                         .AlignCenter()
                                         .Padding(5)
-                                        .Text("Lugar");
+                                        .Text("Mz - Lote");
                                     header
                                         .Cell()
                                         .Element(HeaderCellStyle)
@@ -384,10 +408,10 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                 {
                                     new
                                     {
-                                        Lugar = "Lote A-15, Manzana C",
-                                        Area = "120.50 m²",
-                                        PrecioM2 = "S/ 850.00",
-                                        PrecioLista = "S/ 102,425.00",
+                                        Lugar = $"{quotation.Block} - {quotation.LotNumber}",
+                                        Area = $"{quotation.Area} m2",
+                                        PrecioM2 = $"{quotation.PricePerM2}",
+                                        PrecioLista = $"{quotation.TotalPrice}",
                                         PrecioSoles = "S/ 95,250.00",
                                     },
                                 };
@@ -433,7 +457,9 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                 table
                                     .Cell()
                                     .ColumnSpan(2)
-                                    .Element(DataCellStyle)
+                                    .Border(1)
+                                    .BorderColor(Colors.Grey.Darken1)
+                                    .Padding(5)
                                     .AlignCenter()
                                     .Text("Precio de venta");
 
@@ -448,57 +474,93 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .Element(DataCellStyle)
                                     .AlignLeft()
                                     .PaddingLeft(10)
-                                    .Text("$");
+                                    .Text($"$ {quotation.Discount.ToString()}");
                                 table
                                     .Cell()
                                     .Element(DataCellStyle)
                                     .AlignLeft()
                                     .PaddingLeft(10)
-                                    .Text("$");
+                                    .Text($"$ {quotation.FinalPrice}");
                                 table
                                     .Cell()
                                     .Element(DataCellStyle)
                                     .AlignLeft()
                                     .PaddingLeft(10)
-                                    .Text("S/");
+                                    .Text($"S/ {(quotation.FinalPrice * exchangeRate).ToString("N2")}");
 
                                 table.Cell().ColumnSpan(5).Text("");
 
+                                //
+                                // Inicial
+                                //
+                                var downPaymentDollars = (quotation.DownPayment / 100) * quotation.FinalPrice;
+                                var downPaymentSoles = downPaymentDollars * exchangeRate;
                                 table.Cell().Element(DataCellStyleThin).Text("Inicial");
-                                table.Cell().Element(DataCellStyleThin).AlignRight().Text("%");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .AlignRight()
+                                    .Text($"{quotation.DownPayment} %");
                                 table.Cell();
-                                table.Cell().Element(DataCellStyleThin).Text("$");
-                                table.Cell().Element(DataCellStyleThin).Text("S/");
+                                table.Cell().Element(DataCellStyleThin).Text($"$ {downPaymentDollars.ToString("N2")}");
+                                table.Cell().Element(DataCellStyleThin).Text($"S/ {downPaymentSoles.ToString("N2")}");
 
                                 table.Cell().ColumnSpan(5).Text("");
 
+                                //
+                                // A Financiar
+                                //
+                                var financingPercentange = 100 - quotation.DownPayment;
+                                var financingAmountDollars = quotation.FinalPrice - downPaymentDollars;
+                                var financingAmountSoles = financingAmountDollars * exchangeRate;
                                 table.Cell().Element(DataCellStyleThin).Text("A financiar");
-                                table.Cell().Element(DataCellStyleThin).AlignRight().Text("%");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .AlignRight()
+                                    .Text($"{financingPercentange} %");
                                 table.Cell();
-                                table.Cell().Element(DataCellStyleThin).Text("$");
-                                table.Cell().Element(DataCellStyleThin).Text("S/");
+                                table.Cell().Element(DataCellStyleThin).Text($"$ {financingAmountDollars.ToString("N2")}");
+                                table.Cell().Element(DataCellStyleThin).Text($"S/ {financingAmountSoles.ToString("N2")}");
 
                                 table.Cell().ColumnSpan(5).Text("");
 
+                                //
+                                // Cuotas
+                                //
+                                var monthlyPaymentDollars = financingAmountDollars / quotation.MonthsFinanced;
+                                var monthlyPaymentSoles = monthlyPaymentDollars * exchangeRate;
                                 table.Cell();
-                                table.Cell().Element(DataCellStyleThin).Text("");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .AlignCenter()
+                                    .Text(quotation.MonthsFinanced.ToString());
                                 table
                                     .Cell()
                                     .Element(DataCellStyleThin)
                                     .AlignCenter()
                                     .Text("Cuotas de");
-                                table.Cell().Element(DataCellStyleThin).Text("$");
-                                table.Cell().Element(DataCellStyleThin).Text("S/");
+                                table.Cell().Element(DataCellStyleThin).Text($"$ {monthlyPaymentDollars.ToString("N2")}");
+                                table.Cell().Element(DataCellStyleThin).Text($"S/ {monthlyPaymentSoles.ToString("N2")}");
 
                                 table.Cell().ColumnSpan(5).Text("");
                                 table.Cell().ColumnSpan(5).Text("");
 
                                 table.Cell().Element(DataCellStyleThin).Text("Asesor");
-                                table.Cell().ColumnSpan(2).Element(DataCellStyleThin).Text("");
+                                table
+                                    .Cell()
+                                    .ColumnSpan(2)
+                                    .Element(DataCellStyleThin)
+                                    .Text($"{quotation.Lead?.AssignedTo?.Name ?? "-"}");
                                 table.Cell().ColumnSpan(2);
 
-                                table.Cell().Element(DataCellStyleThin).Text("Asesor");
-                                table.Cell().ColumnSpan(2).Element(DataCellStyleThin).Text("");
+                                table.Cell().Element(DataCellStyleThin).Text("Celular");
+                                table
+                                    .Cell()
+                                    .ColumnSpan(2)
+                                    .Element(DataCellStyleThin)
+                                    .Text($"{quotation.Lead?.AssignedTo?.PhoneNumber ?? "-"}");
                                 table.Cell().ColumnSpan(2);
 
                                 table
@@ -514,7 +576,9 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     return container
                                         .Border(1)
                                         .BorderColor(Colors.Grey.Darken1)
-                                        .Padding(5);
+                                        .Padding(5)
+                                        .PaddingTop(8)
+                                        .PaddingBottom(8);
                                 }
                                 static IContainer DataCellStyleThin(IContainer container)
                                 {

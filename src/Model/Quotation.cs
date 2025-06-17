@@ -44,6 +44,7 @@ public class Quotation : BaseModelWithoutActive
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public QuotationStatus Status { get; set; } = QuotationStatus.ISSUED;
 
+    // NOTE: dolares o soles?
     // Precios y descuentos
     [Required]
     [Column(TypeName = "decimal(18,2)")]
@@ -53,10 +54,12 @@ public class Quotation : BaseModelWithoutActive
     [Column(TypeName = "decimal(18,2)")]
     public decimal Discount { get; set; } = 0; // Descuento aplicado (DSC P.Lista)
 
+    // NOTE: dolares o soles?
     [Required]
     [Column(TypeName = "decimal(18,2)")]
     public decimal FinalPrice { get; set; } // Precio final luego del descuento
 
+    // NOTE: porcentaje?
     [Required]
     [Column(TypeName = "decimal(18,2)")]
     public decimal DownPayment { get; set; } // Porcentaje de inicial
@@ -88,6 +91,7 @@ public class Quotation : BaseModelWithoutActive
     [Column(TypeName = "decimal(18,2)")]
     public decimal ExchangeRate { get; set; } // T.C. referencial
 
+    // FIXME: store DateTime or DateOnly instead of a string
     [Required]
     public string QuotationDate { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd"); // Fecha de cotización
 
