@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using GestionHogar.Configuration;
 using GestionHogar.Controllers;
 using GestionHogar.Model;
@@ -15,7 +16,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
-builder.Services.AddControllers();
+builder
+    .Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter()
+        );
+    });
 
 //
 // Configuration setup
