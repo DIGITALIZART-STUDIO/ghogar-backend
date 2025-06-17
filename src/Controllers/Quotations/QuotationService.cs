@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using GestionHogar.Dtos;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
@@ -11,15 +7,8 @@ using QuestPDF.Infrastructure;
 
 namespace GestionHogar.Services;
 
-public class QuotationService : IQuotationService
+public class QuotationService(DatabaseContext _context) : IQuotationService
 {
-    private readonly DatabaseContext _context;
-
-    public QuotationService(DatabaseContext context)
-    {
-        _context = context;
-    }
-
     public async Task<IEnumerable<QuotationDTO>> GetAllQuotationsAsync()
     {
         var quotations = await _context
@@ -187,8 +176,10 @@ public class QuotationService : IQuotationService
 
     public async Task<byte[]> GenerateQuotationPdfAsync(Guid quotationId)
     {
-        // For now, ignore the quotationId and generate a sample PDF
-        // TODO: Later we'll fetch the actual quotation data and use it
+        var quotation = await _context
+            .Quotations.Include(q => q.Lead)
+            .ThenInclude(lead => lead.Client)
+            .FirstOrDefaultAsync(q => q.Id == quotationId);
 
         var document = Document.Create(container =>
         {
@@ -330,7 +321,7 @@ public class QuotationService : IQuotationService
                             });
 
                         x.Item()
-                            .PaddingTop(40)
+                            .PaddingTop(30)
                             .Table(table =>
                             {
                                 table.ColumnsDefinition(columns =>
@@ -399,48 +390,15 @@ public class QuotationService : IQuotationService
                                         PrecioLista = "S/ 102,425.00",
                                         PrecioSoles = "S/ 95,250.00",
                                     },
-                                    new
-                                    {
-                                        Lugar = "Lote B-08, Manzana D",
-                                        Area = "95.75 m²",
-                                        PrecioM2 = "S/ 920.00",
-                                        PrecioLista = "S/ 88,090.00",
-                                        PrecioSoles = "S/ 82,150.00",
-                                    },
                                 };
 
                                 foreach (var row in tableData)
                                 {
-                                    table
-                                        .Cell()
-                                        .Element(DataCellStyle)
-                                        .AlignCenter()
-                                        .Padding(5)
-                                        .Text(row.Lugar);
-                                    table
-                                        .Cell()
-                                        .Element(DataCellStyle)
-                                        .AlignCenter()
-                                        .Padding(5)
-                                        .Text(row.Area);
-                                    table
-                                        .Cell()
-                                        .Element(DataCellStyle)
-                                        .AlignCenter()
-                                        .Padding(5)
-                                        .Text(row.PrecioM2);
-                                    table
-                                        .Cell()
-                                        .Element(DataCellStyle)
-                                        .AlignCenter()
-                                        .Padding(5)
-                                        .Text(row.PrecioLista);
-                                    table
-                                        .Cell()
-                                        .Element(DataCellStyle)
-                                        .AlignCenter()
-                                        .Padding(5)
-                                        .Text(row.PrecioSoles);
+                                    table.Cell().Element(DataCellStyle).Text(row.Lugar);
+                                    table.Cell().Element(DataCellStyle).Text(row.Area);
+                                    table.Cell().Element(DataCellStyle).Text(row.PrecioM2);
+                                    table.Cell().Element(DataCellStyle).Text(row.PrecioLista);
+                                    table.Cell().Element(DataCellStyle).Text(row.PrecioSoles);
 
                                     static IContainer DataCellStyle(IContainer container)
                                     {
@@ -448,19 +406,130 @@ public class QuotationService : IQuotationService
                                             .PaddingVertical(0)
                                             .PaddingHorizontal(0)
                                             .Border(1)
-                                            .BorderColor(Colors.Grey.Darken1);
+                                            .BorderColor(Colors.Grey.Darken1)
+                                            .AlignCenter()
+                                            .Padding(5);
                                     }
+                                }
+                            });
+
+                        // DSC. P.Lista
+                        x.Item()
+                            .PaddingTop(30)
+                            .Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.RelativeColumn(1);
+                                    columns.RelativeColumn(1);
+                                    columns.RelativeColumn(1);
+                                    columns.RelativeColumn(1);
+                                    columns.RelativeColumn(1);
+                                });
+
+                                table.Cell();
+                                table.Cell();
+                                table.Cell();
+                                table
+                                    .Cell()
+                                    .ColumnSpan(2)
+                                    .Element(DataCellStyle)
+                                    .AlignCenter()
+                                    .Text("Precio de venta");
+
+                                table
+                                    .Cell()
+                                    .ColumnSpan(2)
+                                    .Element(DataCellStyle)
+                                    .AlignCenter()
+                                    .Text("DSC P.LISTA");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyle)
+                                    .AlignLeft()
+                                    .PaddingLeft(10)
+                                    .Text("$");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyle)
+                                    .AlignLeft()
+                                    .PaddingLeft(10)
+                                    .Text("$");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyle)
+                                    .AlignLeft()
+                                    .PaddingLeft(10)
+                                    .Text("S/");
+
+                                table.Cell().ColumnSpan(5).Text("");
+
+                                table.Cell().Element(DataCellStyleThin).Text("Inicial");
+                                table.Cell().Element(DataCellStyleThin).AlignRight().Text("%");
+                                table.Cell();
+                                table.Cell().Element(DataCellStyleThin).Text("$");
+                                table.Cell().Element(DataCellStyleThin).Text("S/");
+
+                                table.Cell().ColumnSpan(5).Text("");
+
+                                table.Cell().Element(DataCellStyleThin).Text("A financiar");
+                                table.Cell().Element(DataCellStyleThin).AlignRight().Text("%");
+                                table.Cell();
+                                table.Cell().Element(DataCellStyleThin).Text("$");
+                                table.Cell().Element(DataCellStyleThin).Text("S/");
+
+                                table.Cell().ColumnSpan(5).Text("");
+
+                                table.Cell();
+                                table.Cell().Element(DataCellStyleThin).Text("");
+                                table
+                                    .Cell()
+                                    .Element(DataCellStyleThin)
+                                    .AlignCenter()
+                                    .Text("Cuotas de");
+                                table.Cell().Element(DataCellStyleThin).Text("$");
+                                table.Cell().Element(DataCellStyleThin).Text("S/");
+
+                                table.Cell().ColumnSpan(5).Text("");
+                                table.Cell().ColumnSpan(5).Text("");
+
+                                table.Cell().Element(DataCellStyleThin).Text("Asesor");
+                                table.Cell().ColumnSpan(2).Element(DataCellStyleThin).Text("");
+                                table.Cell().ColumnSpan(2);
+
+                                table.Cell().Element(DataCellStyleThin).Text("Asesor");
+                                table.Cell().ColumnSpan(2).Element(DataCellStyleThin).Text("");
+                                table.Cell().ColumnSpan(2);
+
+                                table
+                                    .Cell()
+                                    .ColumnSpan(5)
+                                    .PaddingTop(4)
+                                    .PaddingBottom(4)
+                                    .Text("*Cotizacion válida por 5 días")
+                                    .FontColor(Colors.Grey.Darken1);
+
+                                static IContainer DataCellStyle(IContainer container)
+                                {
+                                    return container
+                                        .Border(1)
+                                        .BorderColor(Colors.Grey.Darken1)
+                                        .Padding(5);
+                                }
+                                static IContainer DataCellStyleThin(IContainer container)
+                                {
+                                    return container
+                                        .Border(1)
+                                        .BorderColor(Colors.Grey.Darken1)
+                                        .PaddingTop(2)
+                                        .PaddingBottom(2)
+                                        .PaddingLeft(10)
+                                        .PaddingRight(10);
                                 }
                             });
                     });
 
-                page.Footer()
-                    .AlignCenter()
-                    .Text(x =>
-                    {
-                        x.Span("Página ");
-                        x.CurrentPageNumber();
-                    });
+                page.Footer().AlignCenter().Text("-- Logos --");
             });
         });
 
