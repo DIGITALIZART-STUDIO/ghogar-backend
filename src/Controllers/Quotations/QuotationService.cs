@@ -654,120 +654,196 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                             {
                                 table.ColumnsDefinition(columns =>
                                 {
-                                    columns.RelativeColumn(10);
-                                    columns.RelativeColumn(22);
-                                    columns.RelativeColumn(3);
+                                    columns.ConstantColumn(64);
+                                    columns.ConstantColumn(35);
+                                    columns.RelativeColumn(11);
+                                    columns.ConstantColumn(45);
+                                    columns.RelativeColumn(11);
+                                    columns.ConstantColumn(35);
                                     columns.RelativeColumn(12);
                                 });
 
-                                // Row 1
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .Text("Nombre del cliente");
+                                // Nombre del cliente
+                                {
+                                    table.Cell()
+                                        .ColumnSpan(2)
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .Text("Nombre del cliente:");
 
-                                table.Cell()
-                                    .PaddingVertical(5)
-                                    .BorderBottom(1)
-                                    .BorderColor(Colors.Black)
-                                    .Text("");
+                                    table.Cell()
+                                        .ColumnSpan(3)
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
 
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .PaddingLeft(10)
-                                    .Text("D.N.I.");
+                                    table.Cell()
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .PaddingLeft(10)
+                                        .Text("D.N.I.");
 
-                                table.Cell()
-                                    .PaddingVertical(5)
-                                    .BorderBottom(1)
-                                    .BorderColor(Colors.Black)
-                                    .Text("");
+                                    table.Cell()
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
+                                }
 
-                                // Row 2
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .Text("Nombre del coyuge");
+                                // Nombre del conyugue
+                                {
+                                    table.Cell()
+                                        .ColumnSpan(2)
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .Text("Nombre del cónyuge:");
 
-                                table.Cell()
-                                    .PaddingVertical(5)
-                                    .BorderBottom(1)
-                                    .BorderColor(Colors.Black)
-                                    .Text("");
+                                    table.Cell()
+                                        .ColumnSpan(3)
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
 
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .PaddingLeft(10)
-                                    .Text("D.N.I.");
+                                    table.Cell()
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .PaddingLeft(10)
+                                        .Text("D.N.I.");
 
-                                table.Cell()
-                                    .PaddingVertical(5)
-                                    .BorderBottom(1)
-                                    .BorderColor(Colors.Black)
-                                    .Text("");
+                                    table.Cell()
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
+                                }
 
-                                // Row 3
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .Text("Nombre del Co-propietario");
+                                // Co-propietario
+                                {
+                                    table.Cell()
+                                        .ColumnSpan(2)
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .Text("Nombre del Co-propietario:");
 
-                                table.Cell()
-                                    .PaddingVertical(5)
-                                    .BorderBottom(1)
-                                    .BorderColor(Colors.Black)
-                                    .Text("");
+                                    table.Cell()
+                                        .ColumnSpan(3)
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
 
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .PaddingLeft(10)
-                                    .Text("D.N.I.");
+                                    table.Cell()
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .PaddingLeft(10)
+                                        .Text("D.N.I.");
 
-                                table.Cell()
-                                    .PaddingVertical(5)
-                                    .BorderBottom(1)
-                                    .BorderColor(Colors.Black)
-                                    .Text("");
+                                    table.Cell()
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
+                                }
 
-                                // Row 4
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .Text("Razón social");
+                                // Razon social
+                                {
+                                    table.Cell()
+                                        .ColumnSpan(2)
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .Text("Razón social:");
 
-                                table.Cell()
-                                    .PaddingVertical(5)
-                                    .BorderBottom(1)
-                                    .BorderColor(Colors.Black)
-                                    .Text("");
+                                    table.Cell()
+                                        .ColumnSpan(3)
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
 
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .PaddingLeft(10)
-                                    .Text("RUC");
+                                    table.Cell()
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .PaddingLeft(10)
+                                        .Text("R.U.C.");
 
-                                table.Cell()
-                                    .PaddingVertical(5)
-                                    .BorderBottom(1)
-                                    .BorderColor(Colors.Black)
-                                    .Text("");
+                                    table.Cell()
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
+                                }
 
-                                // Row 5
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .Text("Dirección");
+                                // Direccion
+                                {
+                                    table.Cell()
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .Text("Dirección:");
 
-                                table.Cell()
-                                    .ColumnSpan(3)
-                                    .PaddingVertical(5)
-                                    .BorderBottom(1)
-                                    .BorderColor(Colors.Black)
-                                    .Text("");
+                                    table.Cell()
+                                        .ColumnSpan(6)
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
+                                }
+
+                                // Email
+                                {
+                                    table.Cell()
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .Text("E-mail:");
+
+                                    table.Cell()
+                                        .ColumnSpan(2)
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
+
+                                    table.Cell()
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .PaddingLeft(5)
+                                        .Text("Telef. Fijo");
+
+                                    table.Cell()
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
+
+                                    table.Cell()
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .PaddingLeft(5)
+                                        .Text("Celular");
+
+                                    table.Cell()
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
+                                }
+
+                                // Importe de separacion
+                                {
+                                    table.Cell()
+                                        .ColumnSpan(2)
+                                        .AlignLeft()
+                                        .PaddingVertical(5)
+                                        .Text("Importde de Separación");
+
+                                    table.Cell()
+                                        .ColumnSpan(5)
+                                        .PaddingVertical(5)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Black)
+                                        .Text("");
+                                }
 
                             });
 
@@ -834,16 +910,19 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                             {
                                 table.ColumnsDefinition(columns =>
                                 {
-                                    columns.RelativeColumn(4);
+                                    columns.ConstantColumn(50);
+                                    columns.RelativeColumn(10);
+                                    // |Precio
+                                    columns.ConstantColumn(40);
+                                    // |Etapa
+                                    columns.ConstantColumn(40);
                                     columns.RelativeColumn(5);
-                                    columns.RelativeColumn(5);
-                                    columns.RelativeColumn(3);
-                                    columns.RelativeColumn(3);
-                                    columns.RelativeColumn(5);
-                                    columns.RelativeColumn(2);
-                                    columns.RelativeColumn(5);
-                                    columns.RelativeColumn(3);
-                                    columns.RelativeColumn(5);
+                                    // |Mz
+                                    columns.ConstantColumn(30);
+                                    columns.RelativeColumn(7);
+                                    // |N lote
+                                    columns.ConstantColumn(40);
+                                    columns.RelativeColumn(7);
                                 });
 
                                 // First row with spans: 1, 3, 1, 1, 1, 1, 1, 1
@@ -855,7 +934,7 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .Text("Proyecto").Bold();
 
                                 table.Cell()
-                                    .ColumnSpan(3)
+                                    .ColumnSpan(2)
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
@@ -909,7 +988,6 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .Text("Area").Bold();
 
                                 table.Cell()
-                                    .ColumnSpan(2)
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
