@@ -648,7 +648,50 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                     .PaddingVertical(1, Unit.Centimetre)
                     .Column(x =>
                     {
-                        // Header information table
+                        // Fechas
+                        x.Item()
+                            .PaddingVertical(10)
+                            .Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.ConstantColumn(100);
+                                    columns.RelativeColumn(5);
+                                    columns.ConstantColumn(100);
+                                    columns.RelativeColumn(2);
+                                    columns.ConstantColumn(40);
+                                    columns.ConstantColumn(30);
+                                    columns.RelativeColumn(6);
+                                });
+
+                                table
+                                    .Cell()
+                                    .RowSpan(2)
+                                    .Border(1)
+                                    .Padding(5)
+                                    .Text("Fecha:       /       /       ");
+
+                                table.Cell().RowSpan(2);
+
+                                table
+                                    .Cell()
+                                    .RowSpan(2)
+                                    .Border(1)
+                                    .Padding(5)
+                                    .Text("Fecha:       /       /       ");
+
+                                table.Cell().RowSpan(2);
+
+                                table.Cell().Text("SOLES");
+                                table.Cell().Text("S/.");
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Black).Text("");
+
+                                table.Cell().Text("DOLARES");
+                                table.Cell().Text("US$");
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Black).Text("");
+                            });
+
+                        // Header
                         x.Item()
                             .Table(table =>
                             {
@@ -665,26 +708,30 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
 
                                 // Nombre del cliente
                                 {
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(2)
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .Text("Nombre del cliente:");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(3)
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
                                         .Text("");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .PaddingLeft(10)
                                         .Text("D.N.I.");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
@@ -693,26 +740,30 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
 
                                 // Nombre del conyugue
                                 {
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(2)
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .Text("Nombre del cónyuge:");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(3)
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
                                         .Text("");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .PaddingLeft(10)
                                         .Text("D.N.I.");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
@@ -721,26 +772,30 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
 
                                 // Co-propietario
                                 {
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(2)
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .Text("Nombre del Co-propietario:");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(3)
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
                                         .Text("");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .PaddingLeft(10)
                                         .Text("D.N.I.");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
@@ -749,26 +804,30 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
 
                                 // Razon social
                                 {
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(2)
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .Text("Razón social:");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(3)
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
                                         .Text("");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .PaddingLeft(10)
                                         .Text("R.U.C.");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
@@ -777,12 +836,10 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
 
                                 // Direccion
                                 {
-                                    table.Cell()
-                                        .AlignLeft()
-                                        .PaddingVertical(5)
-                                        .Text("Dirección:");
+                                    table.Cell().AlignLeft().PaddingVertical(5).Text("Dirección:");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(6)
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
@@ -792,37 +849,39 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
 
                                 // Email
                                 {
-                                    table.Cell()
-                                        .AlignLeft()
-                                        .PaddingVertical(5)
-                                        .Text("E-mail:");
+                                    table.Cell().AlignLeft().PaddingVertical(5).Text("E-mail:");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(2)
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
                                         .Text("");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .PaddingLeft(5)
                                         .Text("Telef. Fijo");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
                                         .Text("");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .PaddingLeft(5)
                                         .Text("Celular");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
@@ -831,20 +890,21 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
 
                                 // Importe de separacion
                                 {
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(2)
                                         .AlignLeft()
                                         .PaddingVertical(5)
                                         .Text("Importde de Separación");
 
-                                    table.Cell()
+                                    table
+                                        .Cell()
                                         .ColumnSpan(5)
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
                                         .Text("");
                                 }
-
                             });
 
                         // Payment method table
@@ -862,46 +922,47 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     columns.RelativeColumn(3);
                                 });
 
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingVertical(5)
-                                    .Text("EFECTIVO").Bold();
+                                table.Cell().AlignLeft().PaddingVertical(5).Text("EFECTIVO").Bold();
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .PaddingVertical(5)
                                     .Text("");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .AlignLeft()
                                     .PaddingVertical(5)
                                     .PaddingLeft(10)
-                                    .Text("DEPOSITO").Bold();
+                                    .Text("DEPOSITO")
+                                    .Bold();
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .PaddingVertical(5)
                                     .Text("");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .AlignRight()
                                     .PaddingVertical(5)
                                     .PaddingHorizontal(10)
                                     .PaddingLeft(10)
                                     .Text("Banco");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .PaddingVertical(5)
                                     .BorderBottom(1)
                                     .BorderColor(Colors.Black)
                                     .Text("");
                             });
 
-                        x.Item()
-                            .PaddingTop(20)
-                            .Text("Por el concepto de separación del");
+                        x.Item().PaddingTop(20).Text("Por el concepto de separación del");
 
                         // Custom table with spans
                         x.Item()
@@ -926,81 +987,99 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                 });
 
                                 // First row with spans: 1, 3, 1, 1, 1, 1, 1, 1
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .AlignCenter()
-                                    .Text("Proyecto").Bold();
+                                    .Text("Proyecto")
+                                    .Bold();
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .ColumnSpan(2)
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .Text("");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .AlignCenter()
-                                    .Text("Etapa").Bold();
+                                    .Text("Etapa")
+                                    .Bold();
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .Text("");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .AlignCenter()
-                                    .Text("Mz.").Bold();
+                                    .Text("Mz.")
+                                    .Bold();
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .Text("");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .AlignCenter()
-                                    .Text("N lote").Bold();
+                                    .Text("N lote")
+                                    .Bold();
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .Text("");
 
                                 // Second row with spans: 1, 2, 1, 6 (remaining)
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .AlignCenter()
-                                    .Text("Area").Bold();
+                                    .Text("Area")
+                                    .Bold();
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .Text("");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
                                     .AlignCenter()
-                                    .Text("Precio").Bold();
+                                    .Text("Precio")
+                                    .Bold();
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .ColumnSpan(6)
                                     .Border(1)
                                     .BorderColor(Colors.Black)
@@ -1008,10 +1087,11 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .Text("");
                             });
 
-
                         x.Item()
                             .PaddingTop(20)
-                            .Text("Declaración Jurada: El cliente por el presente declara que ha sido informado verbalmente por la empresa sobre el lote a adquirir, así como los datos de la empresa (RUC, Partida, Representante).");
+                            .Text(
+                                "Declaración Jurada: El cliente por el presente declara que ha sido informado verbalmente por la empresa sobre el lote a adquirir, así como los datos de la empresa (RUC, Partida, Representante)."
+                            );
 
                         // Numbered text blocks
                         x.Item()
@@ -1021,56 +1101,52 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                 table.ColumnsDefinition(columns =>
                                 {
                                     columns.ConstantColumn(30); // Fixed width for numbers
-                                    columns.RelativeColumn(1);  // Flexible width for text
+                                    columns.RelativeColumn(1); // Flexible width for text
                                 });
 
                                 // Item 1
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingRight(10)
-                                    .Text("1.");
+                                table.Cell().AlignLeft().PaddingRight(10).Text("1.");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .AlignLeft()
-                                    .Text("Este documento es único y exclusivamente válido para la separación de un lote y tiene la condición de arras.");
+                                    .Text(
+                                        "Este documento es único y exclusivamente válido para la separación de un lote y tiene la condición de arras."
+                                    );
 
                                 // Item 2
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingRight(10)
-                                    .PaddingTop(5)
-                                    .Text("2.");
+                                table.Cell().AlignLeft().PaddingRight(10).PaddingTop(5).Text("2.");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .AlignLeft()
                                     .PaddingTop(5)
-                                    .Text("Este documento tiene la condición de arras de acuerdo al Art. 1478 del Código Civil, por lo cual el cliente tiene un plazo de 3 días naturales de realizar el depósito de la inicial acordada en el lota de venta, para suscribir al respectivo contrato de compraventa de bien futuro, vencido dicho plazo y sin producirse dicho depósito se entenderá que el cliente se retracta de la compra perdiendo las arras entregadas a favor de la empresa.");
+                                    .Text(
+                                        "Este documento tiene la condición de arras de acuerdo al Art. 1478 del Código Civil, por lo cual el cliente tiene un plazo de 3 días naturales de realizar el depósito de la inicial acordada en el lota de venta, para suscribir al respectivo contrato de compraventa de bien futuro, vencido dicho plazo y sin producirse dicho depósito se entenderá que el cliente se retracta de la compra perdiendo las arras entregadas a favor de la empresa."
+                                    );
 
                                 // Item 3
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingRight(10)
-                                    .PaddingTop(5)
-                                    .Text("3.");
+                                table.Cell().AlignLeft().PaddingRight(10).PaddingTop(5).Text("3.");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .AlignLeft()
                                     .PaddingTop(5)
-                                    .Text("Si fuese la empresa quien se negase injustificadamente a suscribir el contrato de compraventa dentro del plazo establecido previamente, deberá devolver al cliente el arras que le fueron entregadas.");
+                                    .Text(
+                                        "Si fuese la empresa quien se negase injustificadamente a suscribir el contrato de compraventa dentro del plazo establecido previamente, deberá devolver al cliente el arras que le fueron entregadas."
+                                    );
 
                                 // Item 4
-                                table.Cell()
-                                    .AlignLeft()
-                                    .PaddingRight(10)
-                                    .PaddingTop(5)
-                                    .Text("4.");
+                                table.Cell().AlignLeft().PaddingRight(10).PaddingTop(5).Text("4.");
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .AlignLeft()
                                     .PaddingTop(5)
-                                    .Text("Todos los trámites relacionados a este documento y al contrato que pudieran firmarse en base al mismo son personales y deberán efectuarse únicamente en las oficinas de la empresa.");
+                                    .Text(
+                                        "Todos los trámites relacionados a este documento y al contrato que pudieran firmarse en base al mismo son personales y deberán efectuarse únicamente en las oficinas de la empresa."
+                                    );
                             });
-
 
                         // Signature section
                         x.Item()
@@ -1084,7 +1160,8 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                 });
 
                                 // Signature labels with top border
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .PaddingLeft(40)
                                     .PaddingRight(60)
                                     .BorderTop(1)
@@ -1095,7 +1172,8 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .Text("LA EMPRESA")
                                     .Bold();
 
-                                table.Cell()
+                                table
+                                    .Cell()
                                     .PaddingLeft(60)
                                     .PaddingRight(40)
                                     .BorderTop(1)
