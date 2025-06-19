@@ -70,9 +70,9 @@ public class QuotationDTO
             LotId = quotation.LotId,
             ProjectId = projectId, // **NUEVO: ID del proyecto**
             BlockId = blockId, // **NUEVO: ID del bloque**
-            ProjectName = quotation.ProjectName,
-            BlockName = quotation.BlockName,
-            LotNumber = quotation.LotNumber,
+            ProjectName = quotation.Lot?.Block?.Project?.Name ?? "Proyecto no especificado",
+            BlockName = quotation.Lot?.Block?.Name ?? "Bloque no especificado",
+            LotNumber = quotation.Lot?.LotNumber ?? "Lote no especificado",
             AdvisorId = quotation.AdvisorId,
             AdvisorName = quotation.Advisor?.Name ?? "Asesor no especificado",
             Status = quotation.Status,

@@ -15,6 +15,9 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
             .Quotations.Include(q => q.Lead)
             .ThenInclude(l => l!.Client)
             .Include(q => q.Advisor)
+            .Include(q => q.Lot) // Incluir el Lote
+            .ThenInclude(l => l!.Block) // Incluir el Bloque relacionado con el Lote
+            .ThenInclude(b => b.Project) // Incluir el Proyecto relacionado con el Bloque
             .OrderByDescending(q => q.CreatedAt)
             .ToListAsync();
 
