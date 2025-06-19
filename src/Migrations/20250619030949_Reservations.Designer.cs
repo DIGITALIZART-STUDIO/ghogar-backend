@@ -3,6 +3,7 @@ using System;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestionHogar.Migrations
 {
     [DbContext(typeof(DatabaseContext))]
-    partial class DatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20250619030949_Reservations")]
+    partial class Reservations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -91,13 +94,10 @@ namespace GestionHogar.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("CoOwners")
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("CompanyName")
+                    b.Property<string>("CoOwner")
                         .HasColumnType("text");
 
-                    b.Property<string>("Country")
+                    b.Property<string>("CompanyName")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
@@ -129,21 +129,12 @@ namespace GestionHogar.Migrations
                         .HasMaxLength(11)
                         .HasColumnType("character varying(11)");
 
-                    b.Property<bool>("SeparateProperty")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("SeparatePropertyData")
-                        .HasColumnType("jsonb");
-
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.HasIndex(new[] { "Dni" }, "IX_Client_Dni")
-                        .IsUnique();
-
-                    b.HasIndex(new[] { "PhoneNumber" }, "IX_Client_PhoneNumber")
                         .IsUnique();
 
                     b.HasIndex(new[] { "Ruc" }, "IX_Client_Ruc")
@@ -324,8 +315,12 @@ namespace GestionHogar.Migrations
                     b.Property<decimal>("AmountFinanced")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<decimal>("AreaAtQuotation")
+                    b.Property<decimal>("Area")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Block")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Code")
                         .IsRequired()
@@ -334,11 +329,6 @@ namespace GestionHogar.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)");
-
                     b.Property<decimal>("Discount")
                         .HasColumnType("decimal(18,2)");
 
@@ -346,7 +336,7 @@ namespace GestionHogar.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("ExchangeRate")
-                        .HasColumnType("decimal(18,6)");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("FinalPrice")
                         .HasColumnType("decimal(18,2)");
@@ -354,8 +344,9 @@ namespace GestionHogar.Migrations
                     b.Property<Guid>("LeadId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("LotId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("LotNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
@@ -363,8 +354,12 @@ namespace GestionHogar.Migrations
                     b.Property<int>("MonthsFinanced")
                         .HasColumnType("integer");
 
-                    b.Property<decimal>("PricePerM2AtQuotation")
+                    b.Property<decimal>("PricePerM2")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ProjectName")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("QuotationDate")
                         .IsRequired()
@@ -384,8 +379,6 @@ namespace GestionHogar.Migrations
                     b.HasIndex("AdvisorId");
 
                     b.HasIndex("LeadId");
-
-                    b.HasIndex("LotId");
 
                     b.ToTable("Quotations");
                 });
@@ -738,17 +731,9 @@ namespace GestionHogar.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("GestionHogar.Model.Lot", "Lot")
-                        .WithMany()
-                        .HasForeignKey("LotId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.Navigation("Advisor");
 
                     b.Navigation("Lead");
-
-                    b.Navigation("Lot");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.Reservation", b =>
