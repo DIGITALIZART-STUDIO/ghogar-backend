@@ -31,6 +31,11 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<Quotation> Quotations { get; set; }
 
+    public DbSet<Project> Projects { get; set; } = null!;
+    public DbSet<Block> Blocks { get; set; } = null!;
+
+    public DbSet<Lot> Lots { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

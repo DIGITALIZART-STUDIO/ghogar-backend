@@ -1,41 +1,28 @@
 using System;
+using System.Text.Json.Serialization;
 using GestionHogar.Model;
 
 namespace GestionHogar.Dtos;
 
 public class QuotationSummaryDTO
 {
-    // Identificador único
     public Guid Id { get; set; }
-
-    // Código de la cotización (ej: COT-2025-00001)
     public string Code { get; set; } = null!;
-
-    // Información del cliente/lead
     public string ClientName { get; set; } = null!;
-
-    // DNI o RUC según el tipo de cliente
-    public string? ClientIdentification { get; set; } // DNI si es persona natural, RUC si es jurídico
-    public string? ClientIdentificationType { get; set; } // "DNI" o "RUC"
-
-    // Información del proyecto
+    public string? ClientIdentification { get; set; }
+    public string? ClientIdentificationType { get; set; }
     public string ProjectName { get; set; } = null!;
-
-    // Información financiera principal
     public decimal TotalPrice { get; set; }
     public decimal FinalPrice { get; set; }
-
-    // Información del lote
-    public string Block { get; set; } = null!;
+    public string BlockName { get; set; } = null!; // Cambiado de Block a BlockName
     public string LotNumber { get; set; } = null!;
-    public decimal Area { get; set; }
+    public decimal AreaAtQuotation { get; set; } // Cambiado de Area a AreaAtQuotation
 
-    // Estado de la cotización
-    public string Status { get; set; } = null!;
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public QuotationStatus Status { get; set; }
+    public string StatusText { get; set; } = string.Empty;
 
     public string QuotationDate { get; set; } = null!;
-
-    // Fechas importantes
     public DateTime ValidUntil { get; set; }
     public DateTime CreatedAt { get; set; }
 
@@ -52,7 +39,7 @@ public class QuotationSummaryDTO
                 identification = client.Dni;
                 identificationType = "DNI";
             }
-            else // ClientType.Juridico
+            else
             {
                 identification = client.Ruc;
                 identificationType = "RUC";
@@ -66,16 +53,28 @@ public class QuotationSummaryDTO
             ClientName = quotation.Lead?.Client?.Name ?? "Cliente no especificado",
             ClientIdentification = identification,
             ClientIdentificationType = identificationType,
-            ProjectName = quotation.ProjectName,
+            ProjectName = quotation.ProjectName, // Usa la propiedad calculada
             TotalPrice = quotation.TotalPrice,
             FinalPrice = quotation.FinalPrice,
-            Block = quotation.Block,
-            LotNumber = quotation.LotNumber,
-            Area = quotation.Area,
-            Status = quotation.Status.ToString(),
+            BlockName = quotation.BlockName, // Usa la propiedad calculada
+            LotNumber = quotation.LotNumber, // Usa la propiedad calculada
+            AreaAtQuotation = quotation.AreaAtQuotation, // Usa el área histórica
+            Status = quotation.Status,
+            StatusText = GetStatusText(quotation.Status),
             ValidUntil = quotation.ValidUntil,
             QuotationDate = quotation.QuotationDate,
             CreatedAt = quotation.CreatedAt,
+        };
+    }
+
+    private static string GetStatusText(QuotationStatus status)
+    {
+        return status switch
+        {
+            QuotationStatus.ISSUED => "Emitida",
+            QuotationStatus.ACCEPTED => "Aceptada",
+            QuotationStatus.CANCELED => "Cancelada",
+            _ => "Desconocido",
         };
     }
 }
