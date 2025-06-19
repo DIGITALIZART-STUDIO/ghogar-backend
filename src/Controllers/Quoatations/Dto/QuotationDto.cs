@@ -15,6 +15,8 @@ public class QuotationDTO
 
     // Lot information (actual)
     public Guid LotId { get; set; }
+    public Guid ProjectId { get; set; } // **NUEVO: ID del proyecto**
+    public Guid BlockId { get; set; } // **NUEVO: ID del bloque**
     public string ProjectName { get; set; } = string.Empty; // Nombre actual del proyecto
     public string BlockName { get; set; } = string.Empty; // Nombre actual del bloque
     public string LotNumber { get; set; } = string.Empty; // Número actual del lote
@@ -55,6 +57,10 @@ public class QuotationDTO
 
     public static QuotationDTO FromEntity(Quotation quotation)
     {
+        // Obtener ProjectId y BlockId desde la relación Lot
+        var projectId = quotation.Lot?.Block?.ProjectId ?? Guid.Empty;
+        var blockId = quotation.Lot?.BlockId ?? Guid.Empty;
+
         return new QuotationDTO
         {
             Id = quotation.Id,
@@ -62,9 +68,11 @@ public class QuotationDTO
             LeadId = quotation.LeadId,
             LeadClientName = quotation.Lead?.Client?.Name ?? "Cliente no especificado",
             LotId = quotation.LotId,
-            ProjectName = quotation.ProjectName, // Nombre actual desde la propiedad calculada
-            BlockName = quotation.BlockName, // Nombre actual desde la propiedad calculada
-            LotNumber = quotation.LotNumber, // Número actual desde la propiedad calculada
+            ProjectId = projectId, // **NUEVO: ID del proyecto**
+            BlockId = blockId, // **NUEVO: ID del bloque**
+            ProjectName = quotation.ProjectName,
+            BlockName = quotation.BlockName,
+            LotNumber = quotation.LotNumber,
             AdvisorId = quotation.AdvisorId,
             AdvisorName = quotation.Advisor?.Name ?? "Asesor no especificado",
             Status = quotation.Status,
