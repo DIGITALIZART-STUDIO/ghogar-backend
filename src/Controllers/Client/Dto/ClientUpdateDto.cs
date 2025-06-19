@@ -7,7 +7,7 @@ public class ClientUpdateDto
 {
     public string? Name { get; set; }
 
-    public string? CoOwner { get; set; }
+    public string? CoOwners { get; set; } // JSON con los copropietarios
 
     [StringLength(8)]
     public string? Dni { get; set; }
@@ -23,6 +23,12 @@ public class ClientUpdateDto
     public string? Email { get; set; }
 
     public string? Address { get; set; }
+    
+    public string? Country { get; set; }
 
     public ClientType? Type { get; set; } // Tipo nullable
+    
+    public bool? SeparateProperty { get; set; }
+    
+    public string? SeparatePropertyData { get; set; } // JSON con datos de separación de bienes
 }

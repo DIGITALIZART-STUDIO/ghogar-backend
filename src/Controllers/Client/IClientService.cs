@@ -17,5 +17,7 @@ public interface IClientService
     Task<IEnumerable<ClientSummaryDto>> GetClientsSummaryAsync();
 
     Task<Client> GetClientByDniAsync(string dni);
+
+    Task<Client> GetClientByPhoneNumberAsync(string phoneNumber);
     Task<Client> GetClientByRucAsync(string ruc);
 }

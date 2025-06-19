@@ -7,6 +7,7 @@ namespace GestionHogar.Model;
 
 [Index(nameof(Dni), IsUnique = true, Name = "IX_Client_Dni")]
 [Index(nameof(Ruc), IsUnique = true, Name = "IX_Client_Ruc")]
+[Index(nameof(PhoneNumber), IsUnique = true, Name = "IX_Client_PhoneNumber")]
 public class Client : IEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -14,10 +15,8 @@ public class Client : IEntity
     [Required]
     public required string Name { get; set; } // Nombre de persona natural o razón social
 
-    public string? CoOwner { get; set; } // Opcional - Nombre del copropietario
-
     [StringLength(8)]
-    public string? Dni { get; set; } // Para personas naturales
+    public string? Dni { get; set; } // Para personas naturales - ahora opcional
 
     [StringLength(11)]
     public string? Ruc { get; set; } // Para empresas, opcional
@@ -34,8 +33,18 @@ public class Client : IEntity
     [Required]
     public required string Address { get; set; } // Dirección del cliente
 
+    public string? Country { get; set; } // País del cliente
+
     [Required]
     public ClientType Type { get; set; } // Natural o Jurídico
+
+    [Column(TypeName = "jsonb")]
+    public string? CoOwners { get; set; } // JSON con los copropietarios, reemplaza a CoOwner
+
+    public bool SeparateProperty { get; set; } = false; // Indica si tiene separación de bienes
+
+    [Column(TypeName = "jsonb")]
+    public string? SeparatePropertyData { get; set; } // JSON con datos de separación de bienes
 
     // IEntity implementation
     public bool IsActive { get; set; } = true;
@@ -61,9 +70,7 @@ public class Client : IEntity
         // Validaciones específicas por tipo
         if (Type == ClientType.Natural)
         {
-            if (string.IsNullOrEmpty(Dni))
-                return (false, "El DNI es obligatorio para clientes tipo Natural");
-            if (Dni.Length != 8)
+            if (Dni != null && Dni.Length != 8)
                 return (false, "El DNI debe tener 8 caracteres");
             // Limpiar campos que no aplican
             Ruc = null;

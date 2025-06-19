@@ -213,6 +213,10 @@ public class ReservationService : IReservationService
         var reservation = await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(q => q.Block)
+            .ThenInclude(b => b.Project)
+            .Include(r => r.Quotation)
             .ThenInclude(q => q.Lead)
             .ThenInclude(l => l.AssignedTo)
             .FirstOrDefaultAsync(r => r.Id == reservationId);
@@ -391,13 +395,68 @@ public class ReservationService : IReservationService
                                         .PaddingVertical(5)
                                         .Text("Nombre del Co-propietario:");
 
+                                    string coOwnerName = "";
+                                    string coOwnerDni = "";
+
+                                    // Procesar el JSON de co-owners para extraer solo el primero
+                                    if (!string.IsNullOrEmpty(client?.CoOwners))
+                                    {
+                                        try
+                                        {
+                                            // Deserializar el JSON a una lista de objetos anónimos
+                                            var coOwners =
+                                                System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
+                                                    client.CoOwners
+                                                );
+
+                                            // Verificar que sea un array y tenga al menos un elemento
+                                            if (
+                                                coOwners.ValueKind
+                                                    == System.Text.Json.JsonValueKind.Array
+                                                && coOwners.GetArrayLength() > 0
+                                            )
+                                            {
+                                                // Obtener el primer elemento
+                                                var firstCoOwner = coOwners[0];
+
+                                                // Intentar obtener la propiedad "name" del primer co-owner
+                                                if (
+                                                    firstCoOwner.TryGetProperty(
+                                                        "name",
+                                                        out var nameElement
+                                                    )
+                                                )
+                                                {
+                                                    coOwnerName = nameElement.GetString() ?? "";
+                                                }
+
+                                                // Intentar obtener la propiedad "dni" del primer co-owner
+                                                if (
+                                                    firstCoOwner.TryGetProperty(
+                                                        "dni",
+                                                        out var dniElement
+                                                    )
+                                                )
+                                                {
+                                                    coOwnerDni = dniElement.GetString() ?? "";
+                                                }
+                                            }
+                                        }
+                                        catch
+                                        {
+                                            // En caso de error al procesar el JSON, dejar los campos vacíos
+                                            coOwnerName = "";
+                                            coOwnerDni = "";
+                                        }
+                                    }
+
                                     table
                                         .Cell()
                                         .ColumnSpan(3)
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text(client?.CoOwner ?? "");
+                                        .Text(coOwnerName);
 
                                     table
                                         .Cell()
@@ -411,9 +470,8 @@ public class ReservationService : IReservationService
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text("");
+                                        .Text(coOwnerDni);
                                 }
-
                                 // Razon social
                                 {
                                     table

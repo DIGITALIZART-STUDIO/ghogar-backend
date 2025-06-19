@@ -56,6 +56,20 @@ public class ClientService : IClientService
             }
         }
 
+        // Verificar que no exista otro cliente con el mismo número de teléfono
+        if (!string.IsNullOrEmpty(client.PhoneNumber))
+        {
+            var existingWithPhone = await _context.Clients.FirstOrDefaultAsync(c =>
+                c.PhoneNumber == client.PhoneNumber && c.IsActive
+            );
+            if (existingWithPhone != null)
+            {
+                throw new ArgumentException(
+                    "Ya existe un cliente activo con este número de teléfono"
+                );
+            }
+        }
+
         _context.Clients.Add(client);
         await _context.SaveChangesAsync();
         return client;
@@ -113,16 +127,33 @@ public class ClientService : IClientService
             }
         }
 
+        // Verificar que no exista otro cliente con el mismo número de teléfono (excluyendo el actual)
+        if (!string.IsNullOrEmpty(updatedClient.PhoneNumber))
+        {
+            var existingWithPhone = await _context.Clients.FirstOrDefaultAsync(c =>
+                c.PhoneNumber == updatedClient.PhoneNumber && c.Id != id && c.IsActive
+            );
+            if (existingWithPhone != null)
+            {
+                throw new ArgumentException(
+                    "Ya existe otro cliente activo con este número de teléfono"
+                );
+            }
+        }
+
         // Actualizar propiedades
         client.Name = updatedClient.Name;
-        client.CoOwner = updatedClient.CoOwner;
+        client.CoOwners = updatedClient.CoOwners;
         client.Dni = updatedClient.Dni;
         client.Ruc = updatedClient.Ruc;
         client.CompanyName = updatedClient.CompanyName;
         client.PhoneNumber = updatedClient.PhoneNumber;
         client.Email = updatedClient.Email;
         client.Address = updatedClient.Address;
+        client.Country = updatedClient.Country;
         client.Type = updatedClient.Type;
+        client.SeparateProperty = updatedClient.SeparateProperty;
+        client.SeparatePropertyData = updatedClient.SeparatePropertyData;
         client.ModifiedAt = DateTime.UtcNow;
 
         // Validación
@@ -179,6 +210,20 @@ public class ClientService : IClientService
             }
         }
 
+        // Verificar que no exista otro cliente activo con el mismo número de teléfono
+        if (!string.IsNullOrEmpty(client.PhoneNumber))
+        {
+            var existingWithPhone = await _context.Clients.FirstOrDefaultAsync(c =>
+                c.PhoneNumber == client.PhoneNumber && c.Id != id && c.IsActive
+            );
+            if (existingWithPhone != null)
+            {
+                throw new ArgumentException(
+                    "Ya existe otro cliente activo con este número de teléfono"
+                );
+            }
+        }
+
         // Activar cliente
         client.IsActive = true;
         client.ModifiedAt = DateTime.UtcNow;
@@ -226,6 +271,16 @@ public class ClientService : IClientService
             return null;
 
         return await _context.Clients.FirstOrDefaultAsync(c => c.Dni == dni && c.IsActive);
+    }
+
+    public async Task<Client> GetClientByPhoneNumberAsync(string phoneNumber)
+    {
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+            return null;
+
+        return await _context.Clients.FirstOrDefaultAsync(c =>
+            c.PhoneNumber == phoneNumber && c.IsActive
+        );
     }
 
     public async Task<Client> GetClientByRucAsync(string ruc)
