@@ -6,9 +6,6 @@ namespace GestionHogar.Controllers.Dtos;
 public class ReservationCreateDto
 {
     [Required]
-    public Guid ClientId { get; set; }
-
-    [Required]
     public Guid QuotationId { get; set; }
 
     public DateOnly ReservationDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);

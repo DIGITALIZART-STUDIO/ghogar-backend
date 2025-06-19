@@ -39,7 +39,7 @@ public class ReservationsController : ControllerBase
 
     // POST: api/reservations
     [HttpPost]
-    public async Task<ActionResult<Reservation>> CreateReservation(
+    public async Task<ActionResult<ReservationDto>> CreateReservation(
         ReservationCreateDto reservationDto
     )
     {
@@ -48,10 +48,14 @@ public class ReservationsController : ControllerBase
             var createdReservation = await _reservationService.CreateReservationAsync(
                 reservationDto
             );
+            
+            // Get the created reservation as DTO to return
+            var createdReservationDto = await _reservationService.GetReservationByIdAsync(createdReservation.Id);
+            
             return CreatedAtAction(
                 nameof(GetReservation),
                 new { id = createdReservation.Id },
-                createdReservation
+                createdReservationDto
             );
         }
         catch (ArgumentException ex)

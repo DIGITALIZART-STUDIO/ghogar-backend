@@ -73,23 +73,30 @@ public class ReservationService : IReservationService
 
     public async Task<Reservation> CreateReservationAsync(ReservationCreateDto reservationDto)
     {
-        // Verificar que el cliente existe y está activo
-        var client = await _context.Clients.FirstOrDefaultAsync(c =>
-            c.Id == reservationDto.ClientId && c.IsActive
-        );
-        if (client == null)
-        {
-            throw new ArgumentException("El cliente especificado no existe o está inactivo");
-        }
-
-        // Verificar que la cotización existe
-        var quotation = await _context.Quotations.FirstOrDefaultAsync(q =>
-            q.Id == reservationDto.QuotationId
-        );
+        // Verificar que la cotización existe y obtener el lead asociado
+        var quotation = await _context.Quotations
+            .Include(q => q.Lead)
+            .ThenInclude(l => l.Client)
+            .FirstOrDefaultAsync(q => q.Id == reservationDto.QuotationId);
         if (quotation == null)
         {
             throw new ArgumentException("La cotización especificada no existe");
         }
+
+        // Verificar que el lead existe
+        if (quotation.Lead == null)
+        {
+            throw new ArgumentException("La cotización no tiene un lead asociado");
+        }
+
+        // Verificar que el cliente del lead existe y está activo
+        if (quotation.Lead.Client == null || !quotation.Lead.Client.IsActive)
+        {
+            throw new ArgumentException("El cliente asociado al lead no existe o está inactivo");
+        }
+
+        var clientId = quotation.Lead.ClientId!.Value;
+        var client = quotation.Lead.Client;
 
         // Verificar que no exista ya una reserva activa para esta cotización
         var existingReservation = await _context.Reservations.FirstOrDefaultAsync(r =>
@@ -102,7 +109,7 @@ public class ReservationService : IReservationService
 
         var reservation = new Reservation
         {
-            ClientId = reservationDto.ClientId,
+            ClientId = clientId,
             QuotationId = reservationDto.QuotationId,
             ReservationDate = reservationDto.ReservationDate,
             AmountPaid = reservationDto.AmountPaid,
