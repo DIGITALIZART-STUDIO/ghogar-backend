@@ -654,7 +654,7 @@ public class ReservationService : IReservationService
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
-                                    .Text(quotation?.Block ?? "");
+                                    .Text(quotation?.BlockName ?? "");
 
                                 table
                                     .Cell()
@@ -687,7 +687,7 @@ public class ReservationService : IReservationService
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
-                                    .Text($"{quotation?.Area ?? 0} m²");
+                                    .Text($"{quotation?.AreaAtQuotation ?? 0} m²");
 
                                 table
                                     .Cell()

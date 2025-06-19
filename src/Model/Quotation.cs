@@ -29,9 +29,12 @@ public class Quotation : BaseModelWithoutActive
     [ForeignKey("LeadId")]
     public Lead? Lead { get; set; }
 
-    // Nombre del proyecto
+    // **RELACIÓN PRINCIPAL: Conectar directamente con el lote**
     [Required]
-    public required string ProjectName { get; set; }
+    public Guid LotId { get; set; }
+
+    [ForeignKey("LotId")]
+    public Lot? Lot { get; set; }
 
     // Usuario asesor que genera la cotización
     [Required]
@@ -44,60 +47,75 @@ public class Quotation : BaseModelWithoutActive
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public QuotationStatus Status { get; set; } = QuotationStatus.ISSUED;
 
-    // NOTE: dolares o soles?
-    // Precios y descuentos
+    // **SOLO DATOS QUE NO CAMBIAN O SON ESPECÍFICOS DE LA COTIZACIÓN**
     [Required]
     [Column(TypeName = "decimal(18,2)")]
-    public decimal TotalPrice { get; set; } // Precio de lista
+    public decimal TotalPrice { get; set; } // Precio AL MOMENTO de la cotización (histórico)
 
     [Required]
     [Column(TypeName = "decimal(18,2)")]
-    public decimal Discount { get; set; } = 0; // Descuento aplicado (DSC P.Lista)
+    public decimal Discount { get; set; } = 0; // Descuento aplicado en esta cotización
 
     // NOTE: dolares o soles?
     [Required]
     [Column(TypeName = "decimal(18,2)")]
-    public decimal FinalPrice { get; set; } // Precio final luego del descuento
+    public decimal FinalPrice { get; set; } // Precio final de esta cotización
 
     // NOTE: porcentaje?
     [Required]
     [Column(TypeName = "decimal(18,2)")]
-    public decimal DownPayment { get; set; } // Porcentaje de inicial
+    public decimal DownPayment { get; set; } // Porcentaje negociado en esta cotización
 
     [Required]
     [Column(TypeName = "decimal(18,2)")]
-    public decimal AmountFinanced { get; set; } // Monto a financiar
+    public decimal AmountFinanced { get; set; } // Monto específico de esta cotización
 
     [Required]
-    public int MonthsFinanced { get; set; } // Nro de meses de financiamiento
+    public int MonthsFinanced { get; set; } // Meses negociados en esta cotización
 
-    // Datos del lote
+    // **DATOS HISTÓRICOS AL MOMENTO DE LA COTIZACIÓN**
     [Required]
-    public required string Block { get; set; } // Manzana
-
-    [Required]
-    public required string LotNumber { get; set; } // Lote
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal AreaAtQuotation { get; set; } // Área AL MOMENTO de cotizar
 
     [Required]
     [Column(TypeName = "decimal(18,2)")]
-    public decimal Area { get; set; } // Área del lote
+    public decimal PricePerM2AtQuotation { get; set; } // Precio/m² AL MOMENTO de cotizar
+
+    // Información financiera
+    [Required]
+    [StringLength(3)]
+    public required string Currency { get; set; } // Moneda de esta cotización
 
     [Required]
-    [Column(TypeName = "decimal(18,2)")]
-    public decimal PricePerM2 { get; set; } // Precio por m²
-
-    // Tipo de cambio
-    [Required]
-    [Column(TypeName = "decimal(18,2)")]
-    public decimal ExchangeRate { get; set; } // T.C. referencial
+    [Column(TypeName = "decimal(18,6)")]
+    public decimal ExchangeRate { get; set; } = 1.0m; // T.C. de esta cotización
 
     // FIXME: store DateTime or DateOnly instead of a string
     [Required]
-    public string QuotationDate { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd"); // Fecha de cotización
+    public string QuotationDate { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd");
 
-    // Fecha límite de validez
     [Required]
-    public DateTime ValidUntil { get; set; } // Fecha límite de validez de la cotización
+    public DateTime ValidUntil { get; set; }
+
+    // **PROPIEDADES CALCULADAS (NO PERSISTIDAS)**
+    [NotMapped]
+    public string ProjectName => Lot?.Block?.Project?.Name ?? "Proyecto no encontrado";
+
+    [NotMapped]
+    public string BlockName => Lot?.Block?.Name ?? "Bloque no encontrado";
+
+    [NotMapped]
+    public string LotNumber => Lot?.LotNumber ?? "Lote no encontrado";
+
+    [NotMapped]
+    public decimal CurrentLotArea => Lot?.Area ?? AreaAtQuotation;
+
+    [NotMapped]
+    public decimal CurrentLotPrice => Lot?.Price ?? TotalPrice;
+
+    [NotMapped]
+    public bool LotStillExists => Lot != null;
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

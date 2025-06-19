@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using GestionHogar.Model;
 
 namespace GestionHogar.Dtos;
@@ -14,6 +15,7 @@ public class LotUpdateDTO
     [Range(1, double.MaxValue, ErrorMessage = "El precio debe ser mayor a 0")]
     public decimal? Price { get; set; }
 
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public LotStatus? Status { get; set; }
 
     public bool? IsActive { get; set; }

@@ -6,97 +6,76 @@ namespace GestionHogar.Dtos;
 
 public class QuotationCreateDTO
 {
-    // Eliminamos el Code ya que se generará automáticamente
-
     [Required]
     public Guid LeadId { get; set; }
 
     [Required]
-    public required string ProjectName { get; set; }
+    public Guid LotId { get; set; } // **NUEVO: Ahora referenciamos directamente el lote**
 
     [Required]
     public Guid AdvisorId { get; set; }
 
-    // Financial information
-    [Required]
-    public decimal TotalPrice { get; set; }
+    // Datos financieros opcionales (si no se especifican, se usan los del proyecto)
+    public decimal? Discount { get; set; } = 0;
+    public decimal? DownPayment { get; set; } // Si no se especifica, usa DefaultDownPayment del proyecto
+    public int? MonthsFinanced { get; set; } // Si no se especifica, usa DefaultFinancingMonths del proyecto
+    public decimal? ExchangeRate { get; set; } = 1.0m;
 
-    [Required]
-    public decimal Discount { get; set; }
+    // Fecha de cotización (opcional, por defecto hoy)
+    public string? QuotationDate { get; set; }
 
-    [Required]
-    public decimal FinalPrice { get; set; }
+    // Días de validez (opcional, por defecto 30 días)
+    public int ValidityDays { get; set; } = 30;
 
-    [Required]
-    public decimal DownPayment { get; set; }
-
-    [Required]
-    public decimal AmountFinanced { get; set; }
-
-    [Required]
-    public int MonthsFinanced { get; set; }
-
-    // Lot information
-    [Required]
-    public required string Block { get; set; }
-
-    [Required]
-    public required string LotNumber { get; set; }
-
-    [Required]
-    public decimal Area { get; set; }
-
-    [Required]
-    public decimal PricePerM2 { get; set; }
-
-    [Required]
-    public decimal ExchangeRate { get; set; }
-
-    // Quitamos ValidUntil como campo requerido ya que se calculará automáticamente
-
-    // Fecha de cotización
-    [Required]
-    public string QuotationDate { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd");
-
-    public Quotation ToEntity(string code)
+    public Quotation ToEntity(string code, Lot lot)
     {
-        // Convertir QuotationDate (string) a DateTime
-        DateTime quotationDateTime;
-        if (!DateTime.TryParse(QuotationDate, out quotationDateTime))
+        // Usar datos del lote y proyecto para llenar automáticamente
+        var project = lot.Block.Project;
+
+        // Fechas
+        DateTime quotationDateTime = DateTime.UtcNow;
+        if (
+            !string.IsNullOrEmpty(QuotationDate) && DateTime.TryParse(QuotationDate, out var parsed)
+        )
         {
-            // Si hay un error en el formato, usamos la fecha actual
-            quotationDateTime = DateTime.UtcNow;
-        }
-        else
-        {
-            // Convertir explícitamente a UTC
-            quotationDateTime = DateTime.SpecifyKind(quotationDateTime, DateTimeKind.Utc);
+            quotationDateTime = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
         }
 
-        // Calcular ValidUntil como QuotationDate + 5 días (asegurando que sea UTC)
-        DateTime validUntil = DateTime.SpecifyKind(quotationDateTime.AddDays(5), DateTimeKind.Utc);
+        // Cálculos financieros
+        var discount = Discount ?? 0;
+        var finalPrice = lot.Price - discount;
+        var downPaymentPercentage = DownPayment ?? project.DefaultDownPayment ?? 10;
+        var monthsFinanced = MonthsFinanced ?? project.DefaultFinancingMonths ?? 36;
+        var downPaymentAmount = finalPrice * (downPaymentPercentage / 100);
+        var amountFinanced = finalPrice - downPaymentAmount;
 
         return new Quotation
         {
-            Code = code, // Ahora recibimos el código como parámetro
+            Code = code,
             LeadId = LeadId,
-            ProjectName = ProjectName,
+            LotId = LotId,
             AdvisorId = AdvisorId,
-            Status = QuotationStatus.ISSUED, // Por defecto, al crear una cotización está "Emitida"
-            TotalPrice = TotalPrice,
-            Discount = Discount,
-            FinalPrice = FinalPrice,
-            DownPayment = DownPayment,
-            AmountFinanced = AmountFinanced,
-            MonthsFinanced = MonthsFinanced,
-            Block = Block,
-            LotNumber = LotNumber,
-            Area = Area,
-            PricePerM2 = PricePerM2,
-            ExchangeRate = ExchangeRate,
-            ValidUntil = validUntil, // Asignamos la fecha calculada UTC
-            QuotationDate = QuotationDate,
-            // Asegurar que las fechas de auditoría sean UTC
+            Status = QuotationStatus.ISSUED,
+
+            // Precios (históricos al momento de la cotización)
+            TotalPrice = lot.Price,
+            Discount = discount,
+            FinalPrice = finalPrice,
+            DownPayment = downPaymentPercentage,
+            AmountFinanced = amountFinanced,
+            MonthsFinanced = monthsFinanced,
+
+            // Datos históricos del lote al momento de cotización
+            AreaAtQuotation = lot.Area,
+            PricePerM2AtQuotation = lot.Area > 0 ? lot.Price / lot.Area : 0,
+
+            // Información financiera
+            Currency = project.Currency,
+            ExchangeRate = ExchangeRate ?? 1.0m,
+
+            // Fechas
+            QuotationDate = quotationDateTime.ToString("yyyy-MM-dd"),
+            ValidUntil = quotationDateTime.AddDays(ValidityDays),
             CreatedAt = DateTime.UtcNow,
             ModifiedAt = DateTime.UtcNow,
         };
