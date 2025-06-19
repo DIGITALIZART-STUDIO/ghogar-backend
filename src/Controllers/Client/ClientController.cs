@@ -51,6 +51,7 @@ public class ClientsController : ControllerBase
     }
 
     // POST: api/clients
+
     [HttpPost]
     public async Task<ActionResult<Client>> CreateClient(ClientCreateDto clientDto)
     {
@@ -59,7 +60,7 @@ public class ClientsController : ControllerBase
             var client = new Client
             {
                 Name = clientDto.Name,
-                CoOwner = clientDto.CoOwner,
+                CoOwners = clientDto.CoOwners, // Cambio de CoOwner a CoOwners
                 Dni = clientDto.Dni,
                 Ruc = clientDto.Ruc,
                 // Para clientes jurídicos, si no hay CompanyName, usar Name
@@ -71,7 +72,10 @@ public class ClientsController : ControllerBase
                 PhoneNumber = clientDto.PhoneNumber,
                 Email = clientDto.Email,
                 Address = clientDto.Address,
+                Country = clientDto.Country, // Nuevo campo
                 Type = clientDto.Type,
+                SeparateProperty = clientDto.SeparateProperty, // Nuevo campo
+                SeparatePropertyData = clientDto.SeparatePropertyData, // Nuevo campo
             };
 
             var createdClient = await _clientService.CreateClientAsync(client);
@@ -123,14 +127,26 @@ public class ClientsController : ControllerBase
                     existingClient.CompanyName = clientDto.Name;
             }
 
-            if (clientDto.CoOwner != null)
-                existingClient.CoOwner = clientDto.CoOwner;
+            if (clientDto.CoOwners != null)
+                existingClient.CoOwners = clientDto.CoOwners; // Cambio de CoOwner a CoOwners
+
             if (clientDto.PhoneNumber != null)
                 existingClient.PhoneNumber = clientDto.PhoneNumber;
+
             if (clientDto.Email != null)
                 existingClient.Email = clientDto.Email;
+
             if (clientDto.Address != null)
                 existingClient.Address = clientDto.Address;
+
+            if (clientDto.Country != null)
+                existingClient.Country = clientDto.Country; // Nuevo campo
+
+            if (clientDto.SeparateProperty.HasValue)
+                existingClient.SeparateProperty = clientDto.SeparateProperty.Value; // Nuevo campo
+
+            if (clientDto.SeparatePropertyData != null)
+                existingClient.SeparatePropertyData = clientDto.SeparatePropertyData; // Nuevo campo
 
             // Actualizar campos específicos según el tipo
             if (clientDto.Type.HasValue)
@@ -316,8 +332,8 @@ public class ClientsController : ControllerBase
 
                             // Obtener valores de las celdas
                             string name = GetCellValueByReference(workbookPart, row, "A")?.Trim();
-                            string coOwner = GetCellValueByReference(workbookPart, row, "B")
-                                ?.Trim();
+                            string country = GetCellValueByReference(workbookPart, row, "B")
+                                ?.Trim(); // Cambiado de coOwner a country
                             string dni = GetCellValueByReference(workbookPart, row, "C")?.Trim();
                             string ruc = GetCellValueByReference(workbookPart, row, "D")?.Trim();
                             string companyName = GetCellValueByReference(workbookPart, row, "E")
@@ -412,11 +428,49 @@ public class ClientsController : ControllerBase
                             }
                             else
                             {
+                                // Validar que el teléfono no esté vacío
+                                if (string.IsNullOrWhiteSpace(phoneNumber))
+                                {
+                                    importResult.Errors.Add(
+                                        $"Fila {row.RowIndex}: El número de teléfono es obligatorio."
+                                    );
+                                    continue;
+                                }
+
+                                // Verificar que el teléfono sea único
+                                var existingWithPhone =
+                                    await _clientService.GetClientByPhoneNumberAsync(phoneNumber);
+                                if (existingWithPhone != null)
+                                {
+                                    importResult.Errors.Add(
+                                        $"Fila {row.RowIndex}: Ya existe un cliente con el número de teléfono {phoneNumber}."
+                                    );
+                                    continue;
+                                }
+
+                                // Validar que el correo no esté vacío
+                                if (string.IsNullOrWhiteSpace(email))
+                                {
+                                    importResult.Errors.Add(
+                                        $"Fila {row.RowIndex}: El email es obligatorio."
+                                    );
+                                    continue;
+                                }
+
+                                // Validar que la dirección no esté vacía
+                                if (string.IsNullOrWhiteSpace(address))
+                                {
+                                    importResult.Errors.Add(
+                                        $"Fila {row.RowIndex}: La dirección es obligatoria."
+                                    );
+                                    continue;
+                                }
+
                                 // Crear objeto de cliente
                                 var newClient = new Client
                                 {
                                     Name = name,
-                                    CoOwner = coOwner,
+                                    Country = country, // Usar campo Country en vez de CoOwner
                                     // Solo asignar DNI para clientes naturales
                                     Dni = clientType == ClientType.Natural ? dni : null,
                                     // Solo asignar RUC para clientes jurídicos
@@ -434,6 +488,9 @@ public class ClientsController : ControllerBase
                                     Email = email,
                                     Address = address,
                                     Type = clientType,
+                                    SeparateProperty = false, // Valor predeterminado para separación de bienes
+                                    SeparatePropertyData = null, // Valor predeterminado para datos de separación
+                                    CoOwners = null, // Valor predeterminado para copropietarios
                                 };
 
                                 // Crear nuevo cliente
@@ -445,16 +502,19 @@ public class ClientsController : ControllerBase
                             }
 
                             // Crear Lead para el cliente (siempre, independientemente de si el cliente es nuevo o existente)
-                            var lead = new Lead
+                            if (assignedToId.HasValue)
                             {
-                                ClientId = clientId,
-                                AssignedToId = assignedToId,
-                                Status = LeadStatus.Registered,
-                                Procedency = procedency,
-                            };
+                                var lead = new Lead
+                                {
+                                    ClientId = clientId,
+                                    AssignedToId = assignedToId.Value,
+                                    Status = LeadStatus.Registered,
+                                    Procedency = procedency,
+                                };
 
-                            await _leadService.CreateLeadAsync(lead);
-                            importResult.LeadsCreated++;
+                                await _leadService.CreateLeadAsync(lead);
+                                importResult.LeadsCreated++;
+                            }
                             importResult.SuccessCount++;
                         }
                         catch (Exception ex)
@@ -747,7 +807,7 @@ public class ClientsController : ControllerBase
         string[] headers = new string[]
         {
             "Nombre",
-            "Copropietario",
+            "País",
             "DNI",
             "RUC",
             "Nombre Empresa",
@@ -789,7 +849,7 @@ public class ClientsController : ControllerBase
         worksheetData.AppendChild(exampleRow1);
 
         AddCellWithValue(exampleRow1, "A2", "Juan Pérez", sharedStringTablePart);
-        AddCellWithValue(exampleRow1, "B2", "María López", sharedStringTablePart);
+        AddCellWithValue(exampleRow1, "B2", "Perú", sharedStringTablePart);
         AddCellWithValue(exampleRow1, "C2", "12345678", sharedStringTablePart);
         AddCellWithValue(exampleRow1, "F2", "+51999888777", sharedStringTablePart);
         AddCellWithValue(exampleRow1, "G2", "juan.perez@ejemplo.com", sharedStringTablePart);
@@ -843,7 +903,7 @@ public class ClientsController : ControllerBase
                 Width = 20,
                 CustomWidth = true,
             }
-        ); // Copropietario
+        ); // País
         columns.Append(
             new Column
             {
@@ -1418,8 +1478,8 @@ public class ClientsController : ControllerBase
         string[][] instructionsData = new string[][]
         {
             new string[] { "Nombre", "Nombre completo del cliente", "Sí", "" },
-            new string[] { "Copropietario", "Nombre del copropietario", "No", "" },
-            new string[] { "DNI", "Número de DNI", "No*", "*Obligatorio para clientes naturales" },
+            new string[] { "País", "País del cliente", "No", "" },
+            new string[] { "DNI", "Número de DNI", "No", "8 dígitos, único pero no obligatorio" },
             new string[]
             {
                 "RUC",
@@ -1438,11 +1498,11 @@ public class ClientsController : ControllerBase
             {
                 "Teléfono",
                 "Número de teléfono",
-                "No",
-                "Recomendado incluir código de país (+51)",
+                "Sí",
+                "Debe ser único. Recomendado incluir código de país (+51)",
             },
-            new string[] { "Email", "Correo electrónico del cliente", "No", "formato@ejemplo.com" },
-            new string[] { "Dirección", "Dirección completa del cliente", "No", "" },
+            new string[] { "Email", "Correo electrónico del cliente", "Sí", "formato@ejemplo.com" },
+            new string[] { "Dirección", "Dirección completa del cliente", "Sí", "" },
             new string[]
             {
                 "Procedencia",
@@ -1600,7 +1660,7 @@ public class ClientsController : ControllerBase
             new string[]
             {
                 "IMPORTANTE:",
-                "Si no existe DNI ni RUC, se creará como cliente natural. Si existe RUC, será jurídico.",
+                "El teléfono es obligatorio y debe ser único. Si existe RUC, el cliente será jurídico, sino será cliente natural.",
             },
             new string[]
             {
