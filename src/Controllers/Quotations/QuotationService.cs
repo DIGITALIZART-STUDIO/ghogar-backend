@@ -321,6 +321,9 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
         var quotation = await _context
             .Quotations.Include(q => q.Lead)
             .ThenInclude(lead => lead.Client)
+            .Include(q => q.Lot)
+            .ThenInclude(lot => lot.Block)
+            .ThenInclude(block => block.Project)
             .Include(q => q.Lead)
             .ThenInclude(lead => lead.AssignedTo)
             .FirstOrDefaultAsync(q => q.Id == quotationId);
@@ -417,7 +420,54 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .PaddingTop(2)
                                     .PaddingBottom(2)
                                     .AlignLeft()
-                                    .Text($"Copropietario: {client?.CoOwner ?? "-"}");
+                                    .Text(text =>
+                                    {
+                                        text.Span("Copropietario: ");
+
+                                        // Procesar el JSON de co-owners para extraer solo el nombre del primero
+                                        string coOwnerName = "-";
+                                        if (!string.IsNullOrEmpty(client?.CoOwners))
+                                        {
+                                            try
+                                            {
+                                                // Deserializar el JSON a un elemento JsonElement
+                                                var coOwners =
+                                                    System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
+                                                        client.CoOwners
+                                                    );
+
+                                                // Verificar que sea un array y tenga al menos un elemento
+                                                if (
+                                                    coOwners.ValueKind
+                                                        == System.Text.Json.JsonValueKind.Array
+                                                    && coOwners.GetArrayLength() > 0
+                                                )
+                                                {
+                                                    // Obtener el primer elemento
+                                                    var firstCoOwner = coOwners[0];
+
+                                                    // Intentar obtener la propiedad "name" del primer co-owner
+                                                    if (
+                                                        firstCoOwner.TryGetProperty(
+                                                            "name",
+                                                            out var nameElement
+                                                        )
+                                                    )
+                                                    {
+                                                        coOwnerName =
+                                                            nameElement.GetString() ?? "-";
+                                                    }
+                                                }
+                                            }
+                                            catch
+                                            {
+                                                // En caso de error al procesar el JSON, dejar el valor por defecto
+                                                coOwnerName = "-";
+                                            }
+                                        }
+
+                                        text.Span(coOwnerName);
+                                    });
                             });
 
                         // DNI, Celular
@@ -478,7 +528,7 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                     .Cell()
                                     .PaddingRight(16)
                                     .Element(DataCellStyle)
-                                    .Text($"Proyecto: {quotation.ProjectName}");
+                                    .Text($"Proyecto: {quotation.Lot.Block.Project.Name}");
                                 table
                                     .Cell()
                                     .Element(DataCellStyle)
@@ -559,7 +609,7 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
                                 {
                                     new
                                     {
-                                        Lugar = $"{quotation.BlockName} - {quotation.LotNumber}",
+                                        Lugar = $"{quotation.Lot.Block.Name} - {quotation.Lot.LotNumber}",
                                         Area = $"{quotation.AreaAtQuotation} m2",
                                         PrecioM2 = $"{quotation.PricePerM2AtQuotation}",
                                         PrecioLista = $"{quotation.TotalPrice}",
