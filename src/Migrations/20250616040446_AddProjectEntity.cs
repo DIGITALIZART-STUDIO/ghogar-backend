@@ -18,17 +18,28 @@ namespace GestionHogar.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Location = table.Column<string>(type: "text", nullable: false),
-                    Currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false),
+                    Currency = table.Column<string>(
+                        type: "character varying(3)",
+                        maxLength: 3,
+                        nullable: false
+                    ),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
                     DefaultDownPayment = table.Column<decimal>(type: "numeric", nullable: true),
                     DefaultFinancingMonths = table.Column<int>(type: "integer", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ModifiedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    CreatedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
+                    ModifiedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Projects", x => x.Id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "Blocks",
@@ -37,9 +48,15 @@ namespace GestionHogar.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     ProjectId = table.Column<Guid>(type: "uuid", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ModifiedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    IsActive = table.Column<bool>(type: "boolean", nullable: false)
+                    CreatedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
+                    ModifiedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
                 },
                 constraints: table =>
                 {
@@ -49,8 +66,10 @@ namespace GestionHogar.Migrations
                         column: x => x.ProjectId,
                         principalTable: "Projects",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "Lots",
@@ -63,8 +82,14 @@ namespace GestionHogar.Migrations
                     Status = table.Column<int>(type: "integer", nullable: false),
                     BlockId = table.Column<Guid>(type: "uuid", nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ModifiedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    CreatedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
+                    ModifiedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
                 },
                 constraints: table =>
                 {
@@ -74,31 +99,28 @@ namespace GestionHogar.Migrations
                         column: x => x.BlockId,
                         principalTable: "Blocks",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Blocks_ProjectId",
                 table: "Blocks",
-                column: "ProjectId");
+                column: "ProjectId"
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Lots_BlockId",
-                table: "Lots",
-                column: "BlockId");
+            migrationBuilder.CreateIndex(name: "IX_Lots_BlockId", table: "Lots", column: "BlockId");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Lots");
+            migrationBuilder.DropTable(name: "Lots");
 
-            migrationBuilder.DropTable(
-                name: "Blocks");
+            migrationBuilder.DropTable(name: "Blocks");
 
-            migrationBuilder.DropTable(
-                name: "Projects");
+            migrationBuilder.DropTable(name: "Projects");
         }
     }
 }

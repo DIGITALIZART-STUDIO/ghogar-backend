@@ -193,4 +193,21 @@ public class QuotationsController : ControllerBase
             return StatusCode(500, "Error interno del servidor");
         }
     }
+
+    // FIXME: move to separation module
+    [HttpGet("{id:guid}/pdf-separation")]
+    public async Task<ActionResult> GenerateSeparationPdf(Guid id)
+    {
+        try
+        {
+            var pdfBytes = await _quotationService.GenerateSeparationPdfAsync(id);
+
+            return File(pdfBytes, "application/pdf", $"reservacion-{id}.pdf");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al generar PDF de separacion");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
 }
