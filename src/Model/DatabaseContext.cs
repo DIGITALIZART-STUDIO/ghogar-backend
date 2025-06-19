@@ -36,10 +36,13 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<Lot> Lots { get; set; } = null!;
 
+    public DbSet<Reservation> Reservations { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
         Audit.SetUp(builder);
+        BaseModel.SetUp<Reservation>(builder);
     }
 
     public override int SaveChanges()

@@ -173,6 +173,7 @@ var modules = new IModule[]
     new ProjectModule(),
     new BlockModule(),
     new LotModule(),
+    new ReservationModule(),
 };
 foreach (var module in modules)
 {
@@ -218,5 +219,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseSecurityStampValidator();
 app.MapControllers();
+
+// Libraries startup
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 app.Run();

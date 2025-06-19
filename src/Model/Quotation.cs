@@ -1,4 +1,3 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
@@ -57,10 +56,12 @@ public class Quotation : BaseModelWithoutActive
     [Column(TypeName = "decimal(18,2)")]
     public decimal Discount { get; set; } = 0; // Descuento aplicado en esta cotización
 
+    // NOTE: dolares o soles?
     [Required]
     [Column(TypeName = "decimal(18,2)")]
     public decimal FinalPrice { get; set; } // Precio final de esta cotización
 
+    // NOTE: porcentaje?
     [Required]
     [Column(TypeName = "decimal(18,2)")]
     public decimal DownPayment { get; set; } // Porcentaje negociado en esta cotización
@@ -90,6 +91,7 @@ public class Quotation : BaseModelWithoutActive
     [Column(TypeName = "decimal(18,6)")]
     public decimal ExchangeRate { get; set; } = 1.0m; // T.C. de esta cotización
 
+    // FIXME: store DateTime or DateOnly instead of a string
     [Required]
     public string QuotationDate { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd");
 
