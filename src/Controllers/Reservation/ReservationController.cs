@@ -1,0 +1,93 @@
+using GestionHogar.Controllers.Dtos;
+using GestionHogar.Model;
+using GestionHogar.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GestionHogar.Controllers;
+
+[ApiController]
+[Authorize]
+[Route("api/[controller]")]
+public class ReservationsController : ControllerBase
+{
+    private readonly IReservationService _reservationService;
+
+    public ReservationsController(IReservationService reservationService)
+    {
+        _reservationService = reservationService;
+    }
+
+    // GET: api/reservations
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<ReservationDto>>> GetReservations()
+    {
+        var reservations = await _reservationService.GetAllReservationsAsync();
+        return Ok(reservations);
+    }
+
+    // GET: api/reservations/{id}
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ReservationDto>> GetReservation(Guid id)
+    {
+        var reservation = await _reservationService.GetReservationByIdAsync(id);
+        if (reservation == null)
+            return NotFound();
+
+        return Ok(reservation);
+    }
+
+    // POST: api/reservations
+    [HttpPost]
+    public async Task<ActionResult<Reservation>> CreateReservation(
+        ReservationCreateDto reservationDto
+    )
+    {
+        try
+        {
+            var createdReservation = await _reservationService.CreateReservationAsync(
+                reservationDto
+            );
+            return CreatedAtAction(
+                nameof(GetReservation),
+                new { id = createdReservation.Id },
+                createdReservation
+            );
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    // DELETE: api/reservations/{id}
+    [HttpDelete("{id}")]
+    public async Task<ActionResult> DeleteReservation(Guid id)
+    {
+        var success = await _reservationService.DeleteReservationAsync(id);
+        if (!success)
+            return NotFound();
+
+        return NoContent();
+    }
+
+    // GET: api/reservations/client/{clientId}
+    [HttpGet("client/{clientId}")]
+    public async Task<ActionResult<IEnumerable<ReservationDto>>> GetReservationsByClient(
+        Guid clientId
+    )
+    {
+        var reservations = await _reservationService.GetReservationsByClientIdAsync(clientId);
+        return Ok(reservations);
+    }
+
+    // GET: api/reservations/quotation/{quotationId}
+    [HttpGet("quotation/{quotationId}")]
+    public async Task<ActionResult<IEnumerable<ReservationDto>>> GetReservationsByQuotation(
+        Guid quotationId
+    )
+    {
+        var reservations = await _reservationService.GetReservationsByQuotationIdAsync(quotationId);
+        return Ok(reservations);
+    }
+}

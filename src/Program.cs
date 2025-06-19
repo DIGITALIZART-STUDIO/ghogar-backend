@@ -165,6 +165,7 @@ var modules = new IModule[]
     new ProjectModule(),
     new BlockModule(),
     new LotModule(),
+    new ReservationModule(),
 };
 foreach (var module in modules)
 {
