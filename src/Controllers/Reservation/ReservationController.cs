@@ -48,10 +48,12 @@ public class ReservationsController : ControllerBase
             var createdReservation = await _reservationService.CreateReservationAsync(
                 reservationDto
             );
-            
+
             // Get the created reservation as DTO to return
-            var createdReservationDto = await _reservationService.GetReservationByIdAsync(createdReservation.Id);
-            
+            var createdReservationDto = await _reservationService.GetReservationByIdAsync(
+                createdReservation.Id
+            );
+
             return CreatedAtAction(
                 nameof(GetReservation),
                 new { id = createdReservation.Id },
@@ -93,5 +95,24 @@ public class ReservationsController : ControllerBase
     {
         var reservations = await _reservationService.GetReservationsByQuotationIdAsync(quotationId);
         return Ok(reservations);
+    }
+
+    // GET: api/reservations/{id}/pdf
+    [HttpGet("{id}/pdf")]
+    public async Task<ActionResult> GenerateReservationPdf(Guid id)
+    {
+        try
+        {
+            var pdfBytes = await _reservationService.GenerateReservationPdfAsync(id);
+            return File(pdfBytes, "application/pdf", $"separacion-{id}.pdf");
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al generar PDF de separación: {ex.Message}");
+        }
     }
 }
