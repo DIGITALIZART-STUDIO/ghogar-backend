@@ -22,6 +22,9 @@ public class ProjectUpdateDTO
     [Range(1, 360)]
     public int? DefaultFinancingMonths { get; set; }
 
+    [Range(0, 100)]
+    public decimal? MaxDiscountPercentage { get; set; } // Nuevo campo
+
     public void ApplyTo(Project project)
     {
         if (!string.IsNullOrWhiteSpace(Name))
@@ -41,6 +44,9 @@ public class ProjectUpdateDTO
 
         if (DefaultFinancingMonths.HasValue)
             project.DefaultFinancingMonths = DefaultFinancingMonths.Value;
+
+        if (MaxDiscountPercentage.HasValue)
+            project.MaxDiscountPercentage = MaxDiscountPercentage.Value; // Nuevo campo
 
         project.ModifiedAt = DateTime.UtcNow;
     }

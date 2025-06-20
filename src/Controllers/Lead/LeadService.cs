@@ -15,7 +15,11 @@ public class LeadService : ILeadService
 
     public async Task<IEnumerable<Lead>> GetAllLeadsAsync()
     {
-        return await _context.Leads.Include(l => l.Client).Include(l => l.AssignedTo).ToListAsync();
+        return await _context
+            .Leads.Include(l => l.Client)
+            .Include(l => l.AssignedTo)
+            .Include(l => l.Project)
+            .ToListAsync();
     }
 
     public async Task<Lead?> GetLeadByIdAsync(Guid id)
@@ -23,11 +27,16 @@ public class LeadService : ILeadService
         return await _context
             .Leads.Include(l => l.Client)
             .Include(l => l.AssignedTo)
+            .Include(l => l.Project)
             .FirstOrDefaultAsync(l => l.Id == id && l.IsActive);
     }
 
     public async Task<Lead> CreateLeadAsync(Lead lead)
     {
+        // Asegurarnos de que se establezcan las fechas correctamente
+        lead.EntryDate = DateTime.UtcNow;
+        lead.ExpirationDate = DateTime.UtcNow.AddDays(7);
+
         _context.Leads.Add(lead);
         await _context.SaveChangesAsync();
         return lead;
@@ -42,7 +51,19 @@ public class LeadService : ILeadService
         lead.ClientId = updatedLead.ClientId;
         lead.AssignedToId = updatedLead.AssignedToId;
         lead.Status = updatedLead.Status;
-        lead.Procedency = updatedLead.Procedency;
+        lead.CaptureSource = updatedLead.CaptureSource;
+        lead.ProjectId = updatedLead.ProjectId;
+        lead.CompletionReason = updatedLead.CompletionReason;
+
+        // Si se está cancelando, guardar el motivo
+        if (
+            updatedLead.Status == LeadStatus.Canceled
+            && !string.IsNullOrEmpty(updatedLead.CancellationReason)
+        )
+        {
+            lead.CancellationReason = updatedLead.CancellationReason;
+        }
+
         lead.ModifiedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -94,6 +115,7 @@ public class LeadService : ILeadService
             .Leads.Where(l => !l.IsActive)
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
+            .Include(l => l.Project)
             .ToListAsync();
     }
 
@@ -102,6 +124,7 @@ public class LeadService : ILeadService
         return await _context
             .Leads.Where(l => l.IsActive && l.ClientId == clientId)
             .Include(l => l.AssignedTo)
+            .Include(l => l.Project)
             .ToListAsync();
     }
 
@@ -110,6 +133,7 @@ public class LeadService : ILeadService
         return await _context
             .Leads.Where(l => l.IsActive && l.AssignedToId == userId)
             .Include(l => l.Client)
+            .Include(l => l.Project)
             .ToListAsync();
     }
 
@@ -119,6 +143,7 @@ public class LeadService : ILeadService
             .Leads.Where(l => l.IsActive && l.Status == status)
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
+            .Include(l => l.Project)
             .ToListAsync();
     }
 
@@ -145,8 +170,64 @@ public class LeadService : ILeadService
         var leads = await _context
             .Leads.Where(l => l.IsActive && l.AssignedToId == assignedToId)
             .Include(l => l.Client)
+            .Include(l => l.Project)
             .ToListAsync();
 
         return leads.Select(LeadSummaryDto.FromEntity);
+    }
+
+    // Nuevos métodos para manejar reciclaje y expiración
+
+    public async Task<Lead?> RecycleLeadAsync(Guid id, Guid userId)
+    {
+        var lead = await _context.Leads.FirstOrDefaultAsync(l =>
+            l.Id == id
+            && l.IsActive
+            && (l.Status == LeadStatus.Expired || l.Status == LeadStatus.Canceled)
+        );
+
+        if (lead == null)
+            return null;
+
+        lead.RecycleLead(userId);
+
+        await _context.SaveChangesAsync();
+
+        return lead;
+    }
+
+    public async Task<IEnumerable<Lead>> GetExpiredLeadsAsync()
+    {
+        return await _context
+            .Leads.Where(l => l.IsActive && l.Status == LeadStatus.Expired)
+            .Include(l => l.Client)
+            .Include(l => l.AssignedTo)
+            .Include(l => l.Project)
+            .ToListAsync();
+    }
+
+    public async Task<int> CheckAndUpdateExpiredLeadsAsync()
+    {
+        var now = DateTime.UtcNow;
+
+        // Buscar leads activos con fecha de expiración anterior a ahora y que no estén ya marcados como expirados
+        var expiredLeads = await _context
+            .Leads.Where(l =>
+                l.IsActive
+                && l.ExpirationDate < now
+                && l.Status != LeadStatus.Expired
+                && l.Status != LeadStatus.Completed
+                && l.Status != LeadStatus.Canceled
+            )
+            .ToListAsync();
+
+        foreach (var lead in expiredLeads)
+        {
+            lead.Status = LeadStatus.Expired;
+            lead.ModifiedAt = now;
+        }
+
+        await _context.SaveChangesAsync();
+        return expiredLeads.Count;
     }
 }

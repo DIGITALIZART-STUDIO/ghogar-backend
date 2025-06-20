@@ -3,6 +3,7 @@ using System;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestionHogar.Migrations
 {
     [DbContext(typeof(DatabaseContext))]
-    partial class DatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20250620090128_AddLeadRecyclingAndExpirationSupport")]
+    partial class AddLeadRecyclingAndExpirationSupport
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -194,6 +197,10 @@ namespace GestionHogar.Migrations
                     b.Property<DateTime>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Procedency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("ProjectId")
                         .HasColumnType("uuid");
 
@@ -214,6 +221,47 @@ namespace GestionHogar.Migrations
                     b.HasIndex("ProjectId");
 
                     b.ToTable("Leads");
+                });
+
+            modelBuilder.Entity("GestionHogar.Model.LeadActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ActivityDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ActivityType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("LeadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeadId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("LeadActivity");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.LeadTask", b =>
@@ -736,6 +784,25 @@ namespace GestionHogar.Migrations
                     b.Navigation("Project");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.LeadActivity", b =>
+                {
+                    b.HasOne("GestionHogar.Model.Lead", "Lead")
+                        .WithMany("Activities")
+                        .HasForeignKey("LeadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GestionHogar.Model.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Lead");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.LeadTask", b =>
                 {
                     b.HasOne("GestionHogar.Model.User", "AssignedTo")
@@ -866,6 +933,11 @@ namespace GestionHogar.Migrations
             modelBuilder.Entity("GestionHogar.Model.Block", b =>
                 {
                     b.Navigation("Lots");
+                });
+
+            modelBuilder.Entity("GestionHogar.Model.Lead", b =>
+                {
+                    b.Navigation("Activities");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.Project", b =>

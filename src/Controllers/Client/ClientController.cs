@@ -14,6 +14,7 @@ using GestionHogar.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace GestionHogar.Controllers;
 
@@ -25,10 +26,17 @@ public class ClientsController : ControllerBase
     private readonly IClientService _clientService;
     private readonly ILeadService _leadService;
 
-    public ClientsController(IClientService clientService, ILeadService leadService)
+    private readonly DatabaseContext _context;
+
+    public ClientsController(
+        IClientService clientService,
+        ILeadService leadService,
+        DatabaseContext context
+    )
     {
         _clientService = clientService;
         _leadService = leadService;
+        _context = context;
     }
 
     // GET: api/clients
@@ -343,13 +351,15 @@ public class ClientsController : ControllerBase
                             string email = GetCellValueByReference(workbookPart, row, "G")?.Trim();
                             string address = GetCellValueByReference(workbookPart, row, "H")
                                 ?.Trim();
-                            string procedency =
+                            string captureSource =
                                 GetCellValueByReference(workbookPart, row, "I")?.Trim() ?? "";
                             string assignedUserName = GetCellValueByReference(
                                 workbookPart,
                                 row,
                                 "J"
                             )
+                                ?.Trim();
+                            string projectName = GetCellValueByReference(workbookPart, row, "K")
                                 ?.Trim();
 
                             // Si RUC existe pero está vacío, asegurarse de que sea null
@@ -405,6 +415,50 @@ public class ClientsController : ControllerBase
                                         $"Fila {row.RowIndex}: No se encontró el usuario '{assignedUserName}'."
                                     );
                                 }
+                            }
+
+                            // Procesar proyecto (si existe)
+                            Guid? projectId = null;
+                            if (!string.IsNullOrEmpty(projectName))
+                            {
+                                // Buscar el proyecto por su nombre
+                                var project = await _context.Projects.FirstOrDefaultAsync(p =>
+                                    p.Name == projectName && p.IsActive
+                                );
+
+                                if (project != null)
+                                {
+                                    projectId = project.Id;
+                                }
+                                else
+                                {
+                                    importResult.Errors.Add(
+                                        $"Fila {row.RowIndex}: No se encontró el proyecto '{projectName}' o no está activo."
+                                    );
+                                }
+                            }
+
+                            // Convertir el medio de captación de español a enum
+                            LeadCaptureSource captureSourceEnum = LeadCaptureSource.Company; // Valor por defecto
+
+                            Dictionary<string, LeadCaptureSource> captureSourceMapping =
+                                new Dictionary<string, LeadCaptureSource>(
+                                    StringComparer.OrdinalIgnoreCase
+                                )
+                                {
+                                    { "Empresa", LeadCaptureSource.Company },
+                                    { "FB Personal", LeadCaptureSource.PersonalFacebook },
+                                    { "Feria inmobiliaria", LeadCaptureSource.RealEstateFair },
+                                    { "Institucional", LeadCaptureSource.Institutional },
+                                    { "Fidelizado", LeadCaptureSource.Loyalty },
+                                };
+
+                            if (
+                                !string.IsNullOrEmpty(captureSource)
+                                && captureSourceMapping.ContainsKey(captureSource)
+                            )
+                            {
+                                captureSourceEnum = captureSourceMapping[captureSource];
                             }
 
                             // Verificar si el cliente ya existe por DNI o RUC
@@ -509,7 +563,8 @@ public class ClientsController : ControllerBase
                                     ClientId = clientId,
                                     AssignedToId = assignedToId.Value,
                                     Status = LeadStatus.Registered,
-                                    Procedency = procedency,
+                                    CaptureSource = captureSourceEnum,
+                                    ProjectId = projectId,
                                 };
 
                                 await _leadService.CreateLeadAsync(lead);
@@ -651,13 +706,25 @@ public class ClientsController : ControllerBase
                 var userWorksheetData = new SheetData();
                 userWorksheetPart.Worksheet = new Worksheet(userWorksheetData);
 
-                var userListWorksheetPart = workbookPart.AddNewPart<WorksheetPart>();
-                var userListWorksheetData = new SheetData();
-                userListWorksheetPart.Worksheet = new Worksheet(userListWorksheetData);
+                var projectWorksheetPart = workbookPart.AddNewPart<WorksheetPart>();
+                var projectWorksheetData = new SheetData();
+                projectWorksheetPart.Worksheet = new Worksheet(projectWorksheetData);
 
                 var instructionsWorksheetPart = workbookPart.AddNewPart<WorksheetPart>();
                 var instructionsWorksheetData = new SheetData();
                 instructionsWorksheetPart.Worksheet = new Worksheet(instructionsWorksheetData);
+
+                var userListWorksheetPart = workbookPart.AddNewPart<WorksheetPart>();
+                var userListWorksheetData = new SheetData();
+                userListWorksheetPart.Worksheet = new Worksheet(userListWorksheetData);
+
+                var captureSourcesWorksheetPart = workbookPart.AddNewPart<WorksheetPart>();
+                var captureSourcesWorksheetData = new SheetData();
+                captureSourcesWorksheetPart.Worksheet = new Worksheet(captureSourcesWorksheetData);
+
+                var projectListWorksheetPart = workbookPart.AddNewPart<WorksheetPart>();
+                var projectListWorksheetData = new SheetData();
+                projectListWorksheetPart.Worksheet = new Worksheet(projectListWorksheetData);
 
                 // Agregar definiciones de hojas al libro
                 var sheets = spreadsheetDocument.WorkbookPart.Workbook.AppendChild(new Sheets());
@@ -681,10 +748,18 @@ public class ClientsController : ControllerBase
                 sheets.AppendChild(
                     new Sheet()
                     {
+                        Id = spreadsheetDocument.WorkbookPart.GetIdOfPart(projectWorksheetPart),
+                        SheetId = 3,
+                        Name = "Proyectos Disponibles",
+                    }
+                );
+                sheets.AppendChild(
+                    new Sheet()
+                    {
                         Id = spreadsheetDocument.WorkbookPart.GetIdOfPart(
                             instructionsWorksheetPart
                         ),
-                        SheetId = 3,
+                        SheetId = 4,
                         Name = "Instrucciones",
                     }
                 );
@@ -692,14 +767,37 @@ public class ClientsController : ControllerBase
                     new Sheet()
                     {
                         Id = spreadsheetDocument.WorkbookPart.GetIdOfPart(userListWorksheetPart),
-                        SheetId = 4,
+                        SheetId = 5,
                         Name = "ListasOcultas",
+                        State = SheetStateValues.Hidden,
+                    }
+                );
+                sheets.AppendChild(
+                    new Sheet()
+                    {
+                        Id = spreadsheetDocument.WorkbookPart.GetIdOfPart(
+                            captureSourcesWorksheetPart
+                        ),
+                        SheetId = 6,
+                        Name = "MediosCaptacion",
+                        State = SheetStateValues.Hidden,
+                    }
+                );
+                sheets.AppendChild(
+                    new Sheet()
+                    {
+                        Id = spreadsheetDocument.WorkbookPart.GetIdOfPart(projectListWorksheetPart),
+                        SheetId = 7,
+                        Name = "ListaProyectos",
                         State = SheetStateValues.Hidden,
                     }
                 );
 
                 // Obtener la lista de usuarios
                 var users = await _leadService.GetUsersSummaryAsync();
+
+                // Obtener proyectos activos
+                var projects = await _context.Projects.Where(p => p.IsActive).ToListAsync();
 
                 // Crear una tabla de mapeo entre nombres de usuario e IDs en la hoja oculta
                 // Agregar encabezados
@@ -740,37 +838,149 @@ public class ClientsController : ControllerBase
                     mappingRowIndex++;
                 }
 
-                // Definir un nombre para el rango de usuarios
+                // Crear la lista de medios de captación en la hoja oculta
+                var captureSourceHeaderRow = new Row { RowIndex = 1 };
+                captureSourcesWorksheetData.AppendChild(captureSourceHeaderRow);
+
+                AddCellWithValue(
+                    captureSourceHeaderRow,
+                    "A1",
+                    "Medio de Captación",
+                    sharedStringTablePart
+                );
+
+                // Agregar los medios de captación traducidos a español
+                var captureSourcesSpanish = new Dictionary<string, string>
+                {
+                    { "Company", "Empresa" },
+                    { "PersonalFacebook", "FB Personal" },
+                    { "RealEstateFair", "Feria inmobiliaria" },
+                    { "Institutional", "Institucional" },
+                    { "Loyalty", "Fidelizado" },
+                };
+
+                int captureSourceRowIndex = 2;
+                foreach (var source in captureSourcesSpanish)
+                {
+                    var sourceRow = new Row { RowIndex = (uint)captureSourceRowIndex };
+                    captureSourcesWorksheetData.AppendChild(sourceRow);
+
+                    AddCellWithValue(
+                        sourceRow,
+                        $"A{captureSourceRowIndex}",
+                        source.Value,
+                        sharedStringTablePart
+                    );
+
+                    captureSourceRowIndex++;
+                }
+
+                // Crear la lista de proyectos en la hoja oculta
+                var projectHeaderRow = new Row { RowIndex = 1 };
+                projectListWorksheetData.AppendChild(projectHeaderRow);
+
+                AddCellWithValue(projectHeaderRow, "A1", "Nombre Proyecto", sharedStringTablePart);
+                AddCellWithValue(projectHeaderRow, "B1", "ID Proyecto", sharedStringTablePart);
+
+                // Agregar proyectos a la hoja oculta
+                int projectRowIndex = 2;
+                foreach (var project in projects)
+                {
+                    var projectRow = new Row { RowIndex = (uint)projectRowIndex };
+                    projectListWorksheetData.AppendChild(projectRow);
+
+                    // El nombre del proyecto va primero para la lista visual
+                    AddCellWithValue(
+                        projectRow,
+                        $"A{projectRowIndex}",
+                        project.Name,
+                        sharedStringTablePart
+                    );
+
+                    // El ID va en la segunda columna
+                    AddCellWithValue(
+                        projectRow,
+                        $"B{projectRowIndex}",
+                        project.Id.ToString(),
+                        sharedStringTablePart
+                    );
+
+                    projectRowIndex++;
+                }
+
+                // Definir nombres para los rangos
                 var definedNames = new DefinedNames();
+
+                // Lista de usuarios
                 var userListDefinedName = new DefinedName()
                 {
                     Name = "UserList",
-                    // Referencia al rango de nombres de usuarios en la hoja oculta
                     Text = $"'ListasOcultas'!$A$2:$A${mappingRowIndex - 1}",
                 };
                 definedNames.Append(userListDefinedName);
+
+                // Lista de medios de captación
+                var captureSourcesDefinedName = new DefinedName()
+                {
+                    Name = "CaptureSources",
+                    Text = $"'MediosCaptacion'!$A$2:$A${captureSourceRowIndex - 1}",
+                };
+                definedNames.Append(captureSourcesDefinedName);
+
+                // Lista de proyectos
+                var projectListDefinedName = new DefinedName()
+                {
+                    Name = "ProjectList",
+                    Text = $"'ListaProyectos'!$A$2:$A${projectRowIndex - 1}",
+                };
+                definedNames.Append(projectListDefinedName);
+
                 workbookPart.Workbook.AppendChild(definedNames);
 
                 // Configurar cada hoja utilizando métodos separados
                 ConfigureMainSheet(worksheetPart, sharedStringTablePart, users);
                 ConfigureUsersSheet(userWorksheetPart, sharedStringTablePart, users);
+                ConfigureProjectsSheet(projectWorksheetPart, sharedStringTablePart, projects);
                 ConfigureInstructionsSheet(instructionsWorksheetPart, sharedStringTablePart);
 
-                // Configurar la validación de datos para la columna de usuario asignado
+                // Configurar las validaciones de datos para las listas desplegables
                 var dataValidations = new DataValidations();
-                var dataValidation = new DataValidation()
+
+                // Validación para Usuario Asignado (columna J)
+                var userValidation = new DataValidation()
                 {
                     Type = DataValidationValues.List,
                     AllowBlank = true,
                     Formula1 = new Formula1("UserList"),
                     ShowDropDown = false,
                 };
+                var userSqrefAttribute = new OpenXmlAttribute("sqref", "", "J2:J1000");
+                userValidation.SetAttribute(userSqrefAttribute);
+                dataValidations.Append(userValidation);
 
-                // Crear un atributo OpenXml para el rango de celdas
-                var sqrefAttribute = new OpenXmlAttribute("sqref", "", "J2:J1000");
-                dataValidation.SetAttribute(sqrefAttribute);
+                // Validación para Medio de Captación (columna I)
+                var captureSourceValidation = new DataValidation()
+                {
+                    Type = DataValidationValues.List,
+                    AllowBlank = true,
+                    Formula1 = new Formula1("CaptureSources"),
+                    ShowDropDown = false,
+                };
+                var captureSourceSqrefAttribute = new OpenXmlAttribute("sqref", "", "I2:I1000");
+                captureSourceValidation.SetAttribute(captureSourceSqrefAttribute);
+                dataValidations.Append(captureSourceValidation);
 
-                dataValidations.Append(dataValidation);
+                // Validación para Proyecto (columna K)
+                var projectValidation = new DataValidation()
+                {
+                    Type = DataValidationValues.List,
+                    AllowBlank = true,
+                    Formula1 = new Formula1("ProjectList"),
+                    ShowDropDown = false,
+                };
+                var projectSqrefAttribute = new OpenXmlAttribute("sqref", "", "K2:K1000");
+                projectValidation.SetAttribute(projectSqrefAttribute);
+                dataValidations.Append(projectValidation);
 
                 // Añadir las validaciones a la hoja principal
                 worksheetPart.Worksheet.AppendChild(dataValidations);
@@ -795,6 +1005,150 @@ public class ClientsController : ControllerBase
         }
     }
 
+    private void ConfigureProjectsSheet(
+        WorksheetPart projectWorksheetPart,
+        SharedStringTablePart sharedStringTablePart,
+        List<Project> projects
+    )
+    {
+        var worksheetData = projectWorksheetPart.Worksheet.GetFirstChild<SheetData>();
+
+        // 1. Título
+        var titleRow = new Row
+        {
+            RowIndex = 1,
+            Height = 25,
+            CustomHeight = true,
+        };
+        worksheetData.AppendChild(titleRow);
+
+        var titleCell = new Cell
+        {
+            CellReference = "A1",
+            DataType = CellValues.SharedString,
+            CellValue = new CellValue(
+                AddSharedStringItem(sharedStringTablePart, "PROYECTOS DISPONIBLES").ToString()
+            ),
+            StyleIndex = 7, // Estilo amarillo con texto negro
+        };
+        titleRow.AppendChild(titleCell);
+
+        var titleCell2 = new Cell
+        {
+            CellReference = "B1",
+            DataType = CellValues.SharedString,
+            CellValue = new CellValue(AddSharedStringItem(sharedStringTablePart, "").ToString()),
+            StyleIndex = 7, // Estilo amarillo con texto negro
+        };
+        titleRow.AppendChild(titleCell2);
+
+        // 2. Encabezados
+        var headerRow = new Row
+        {
+            RowIndex = 2,
+            Height = 20,
+            CustomHeight = true,
+        };
+        worksheetData.AppendChild(headerRow);
+
+        var idHeaderCell = new Cell
+        {
+            CellReference = "A2",
+            DataType = CellValues.SharedString,
+            CellValue = new CellValue(
+                AddSharedStringItem(sharedStringTablePart, "ID PROYECTO").ToString()
+            ),
+            StyleIndex = 2, // Estilo de encabezado gris con texto blanco
+        };
+        headerRow.AppendChild(idHeaderCell);
+
+        var nameHeaderCell = new Cell
+        {
+            CellReference = "B2",
+            DataType = CellValues.SharedString,
+            CellValue = new CellValue(
+                AddSharedStringItem(sharedStringTablePart, "NOMBRE PROYECTO").ToString()
+            ),
+            StyleIndex = 2, // Estilo de encabezado gris con texto blanco
+        };
+        headerRow.AppendChild(nameHeaderCell);
+
+        // 3. Datos
+        int rowIndex = 3;
+        foreach (var project in projects)
+        {
+            var dataRow = new Row { RowIndex = (uint)rowIndex };
+            worksheetData.AppendChild(dataRow);
+
+            // Alternar estilos para filas pares/impares
+            uint styleIndex = (rowIndex % 2 == 0) ? 3U : 4U;
+
+            var idCell = new Cell
+            {
+                CellReference = $"A{rowIndex}",
+                DataType = CellValues.String,
+                CellValue = new CellValue(project.Id.ToString()),
+                StyleIndex = styleIndex,
+            };
+            dataRow.AppendChild(idCell);
+
+            var nameCell = new Cell
+            {
+                CellReference = $"B{rowIndex}",
+                DataType = CellValues.SharedString,
+                CellValue = new CellValue(
+                    AddSharedStringItem(sharedStringTablePart, project.Name).ToString()
+                ),
+                StyleIndex = styleIndex,
+            };
+            dataRow.AppendChild(nameCell);
+
+            rowIndex++;
+        }
+
+        // 4. Anchos de columna
+        var columns = new Columns();
+        columns.Append(
+            new Column
+            {
+                Min = 1,
+                Max = 1,
+                Width = 36,
+                CustomWidth = true,
+            }
+        );
+        columns.Append(
+            new Column
+            {
+                Min = 2,
+                Max = 2,
+                Width = 25,
+                CustomWidth = true,
+            }
+        );
+
+        var existingColumns = projectWorksheetPart.Worksheet.GetFirstChild<Columns>();
+        if (existingColumns != null)
+            existingColumns.Remove();
+        projectWorksheetPart.Worksheet.InsertAt(columns, 0);
+
+        // 5. Fusionar celdas
+        var mergeCells = new MergeCells();
+        mergeCells.Append(new MergeCell { Reference = "A1:B1" });
+
+        if (projectWorksheetPart.Worksheet.Elements<MergeCells>().Count() == 0)
+        {
+            projectWorksheetPart.Worksheet.AppendChild(mergeCells);
+        }
+        else
+        {
+            var existing = projectWorksheetPart.Worksheet.GetFirstChild<MergeCells>();
+            existing.Remove();
+            projectWorksheetPart.Worksheet.AppendChild(mergeCells);
+        }
+    }
+
+    // Modificar ConfigureMainSheet para incluir LeadCaptureSource y Proyecto
     private void ConfigureMainSheet(
         WorksheetPart worksheetPart,
         SharedStringTablePart sharedStringTablePart,
@@ -814,8 +1168,9 @@ public class ClientsController : ControllerBase
             "Teléfono (+51)",
             "Email",
             "Dirección",
-            "Procedencia",
+            "Medio de Captación", // Cambiado de "Procedencia" a "Medio de Captación"
             "Usuario Asignado",
+            "Proyecto", // Nueva columna para proyectos
         };
 
         // Crear fila de encabezados
@@ -854,7 +1209,7 @@ public class ClientsController : ControllerBase
         AddCellWithValue(exampleRow1, "F2", "+51999888777", sharedStringTablePart);
         AddCellWithValue(exampleRow1, "G2", "juan.perez@ejemplo.com", sharedStringTablePart);
         AddCellWithValue(exampleRow1, "H2", "Av. Principal 123", sharedStringTablePart);
-        AddCellWithValue(exampleRow1, "I2", "Página Web", sharedStringTablePart);
+        AddCellWithValue(exampleRow1, "I2", "Empresa", sharedStringTablePart); // Medio de Captación: Empresa
 
         // Mostrar el nombre del usuario por defecto
         var defaultUser = users.FirstOrDefault();
@@ -882,7 +1237,7 @@ public class ClientsController : ControllerBase
         AddCellWithValue(exampleRow2, "F3", "+51998877665", sharedStringTablePart);
         AddCellWithValue(exampleRow2, "G3", "contacto@empresaabc.com", sharedStringTablePart);
         AddCellWithValue(exampleRow2, "H3", "Jr. Comercial 456", sharedStringTablePart);
-        AddCellWithValue(exampleRow2, "I3", "Referido", sharedStringTablePart);
+        AddCellWithValue(exampleRow2, "I3", "Feria inmobiliaria", sharedStringTablePart); // Medio de Captación: Feria inmobiliaria
 
         // Configurar anchos de columna adecuados
         var columns = new Columns();
@@ -963,10 +1318,10 @@ public class ClientsController : ControllerBase
             {
                 Min = 9,
                 Max = 9,
-                Width = 15,
+                Width = 20,
                 CustomWidth = true,
             }
-        ); // Procedencia
+        ); // Medio de Captación
         columns.Append(
             new Column
             {
@@ -976,6 +1331,15 @@ public class ClientsController : ControllerBase
                 CustomWidth = true,
             }
         ); // Usuario Asignado
+        columns.Append(
+            new Column
+            {
+                Min = 11,
+                Max = 11,
+                Width = 25,
+                CustomWidth = true,
+            }
+        ); // Proyecto
 
         var existingColumns = worksheetPart.Worksheet.GetFirstChild<Columns>();
         if (existingColumns != null)
@@ -1505,15 +1869,22 @@ public class ClientsController : ControllerBase
             new string[] { "Dirección", "Dirección completa del cliente", "Sí", "" },
             new string[]
             {
-                "Procedencia",
-                "Fuente de donde proviene el lead",
+                "Medio de Captación",
+                "Fuente por la que se captó el lead",
                 "No",
-                "Ej: Web, Referido, Campaña, etc.",
+                "Seleccionar de la lista desplegable (Empresa, FB Personal, etc.)",
             },
             new string[]
             {
                 "Usuario Asignado",
                 "Usuario al que se asignará el lead",
+                "No",
+                "Seleccionar de la lista desplegable",
+            },
+            new string[]
+            {
+                "Proyecto",
+                "Proyecto relacionado con el lead",
                 "No",
                 "Seleccionar de la lista desplegable",
             },
