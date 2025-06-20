@@ -11,6 +11,7 @@ public class ProjectDTO
     public bool IsActive { get; set; }
     public decimal? DefaultDownPayment { get; set; }
     public int? DefaultFinancingMonths { get; set; }
+    public decimal? MaxDiscountPercentage { get; set; } // Nuevo campo
     public DateTime CreatedAt { get; set; }
     public DateTime ModifiedAt { get; set; }
 
@@ -33,6 +34,7 @@ public class ProjectDTO
             IsActive = project.IsActive,
             DefaultDownPayment = project.DefaultDownPayment,
             DefaultFinancingMonths = project.DefaultFinancingMonths,
+            MaxDiscountPercentage = project.MaxDiscountPercentage, // Nuevo campo
             CreatedAt = project.CreatedAt,
             ModifiedAt = project.ModifiedAt,
             TotalBlocks = project.Blocks?.Count ?? 0,

@@ -23,6 +23,9 @@ public class ProjectCreateDTO
     [Range(1, 360)]
     public int? DefaultFinancingMonths { get; set; }
 
+    [Range(0, 100)]
+    public decimal? MaxDiscountPercentage { get; set; } // Nuevo campo
+
     public Project ToEntity()
     {
         return new Project
@@ -33,6 +36,7 @@ public class ProjectCreateDTO
             IsActive = true,
             DefaultDownPayment = DefaultDownPayment,
             DefaultFinancingMonths = DefaultFinancingMonths,
+            MaxDiscountPercentage = MaxDiscountPercentage, // Nuevo campo
             CreatedAt = DateTime.UtcNow,
             ModifiedAt = DateTime.UtcNow,
         };

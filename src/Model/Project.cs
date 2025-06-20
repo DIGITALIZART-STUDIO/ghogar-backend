@@ -25,6 +25,10 @@ public class Project : IEntity
 
     public int? DefaultFinancingMonths { get; set; }
 
+    // Límite máximo de descuento permitido por proyecto (como porcentaje)
+    [Range(0, 100)]
+    public decimal? MaxDiscountPercentage { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime ModifiedAt { get; set; } = DateTime.UtcNow;
 
