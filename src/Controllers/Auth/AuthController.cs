@@ -30,9 +30,19 @@ public class AuthController(
 #if DEBUG
         cookieOptions.SameSite = SameSiteMode.Lax;
         cookieOptions.Secure = false;
+        // For localhost development, don't set domain to allow cross-port access
+        if (!string.IsNullOrEmpty(_corsConfig.CookieDomain))
+        {
+            cookieOptions.Domain = _corsConfig.CookieDomain;
+        }
 #else
         cookieOptions.SameSite = SameSiteMode.None;
         cookieOptions.Secure = true;
+        // In production, set the domain for cross-subdomain access
+        if (!string.IsNullOrEmpty(_corsConfig.CookieDomain))
+        {
+            cookieOptions.Domain = _corsConfig.CookieDomain;
+        }
 #endif
 
         // Set access token cookie
