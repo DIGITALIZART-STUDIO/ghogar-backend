@@ -13,8 +13,5 @@ public class LeadCreateDto
     public LeadStatus Status { get; set; } = LeadStatus.Registered;
 
     [Required]
-    public required string Procedency { get; set; }
-
-    [Required]
     public LeadCaptureSource CaptureSource { get; set; } = LeadCaptureSource.Company;
 }

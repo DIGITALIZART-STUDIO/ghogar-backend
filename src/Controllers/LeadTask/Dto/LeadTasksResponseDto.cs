@@ -17,7 +17,6 @@ public class LeadDTO
     public Guid AssignedToId { get; set; }
     public UserBasicDTO AssignedTo { get; set; } = null!;
     public string Status { get; set; } = null!;
-    public string Procedency { get; set; } = null!;
     public bool IsActive { get; set; }
 }
 

@@ -51,7 +51,6 @@ public class LeadService : ILeadService
         lead.ClientId = updatedLead.ClientId;
         lead.AssignedToId = updatedLead.AssignedToId;
         lead.Status = updatedLead.Status;
-        lead.Procedency = updatedLead.Procedency;
         lead.CaptureSource = updatedLead.CaptureSource;
         lead.ProjectId = updatedLead.ProjectId;
         lead.CompletionReason = updatedLead.CompletionReason;

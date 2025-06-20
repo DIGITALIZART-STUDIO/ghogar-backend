@@ -48,7 +48,6 @@ public class LeadsController : ControllerBase
                 ClientId = leadDto.ClientId,
                 AssignedToId = leadDto.AssignedToId,
                 Status = leadDto.Status,
-                Procedency = leadDto.Procedency,
                 CaptureSource = leadDto.CaptureSource,
                 ProjectId = leadDto.ProjectId,
             };
@@ -84,9 +83,6 @@ public class LeadsController : ControllerBase
 
             if (leadDto.Status.HasValue)
                 existingLead.Status = leadDto.Status.Value;
-
-            if (leadDto.Procedency != null)
-                existingLead.Procedency = leadDto.Procedency;
 
             if (leadDto.CaptureSource.HasValue)
                 existingLead.CaptureSource = leadDto.CaptureSource.Value;

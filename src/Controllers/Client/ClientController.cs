@@ -509,7 +509,6 @@ public class ClientsController : ControllerBase
                                     ClientId = clientId,
                                     AssignedToId = assignedToId.Value,
                                     Status = LeadStatus.Registered,
-                                    Procedency = procedency,
                                 };
 
                                 await _leadService.CreateLeadAsync(lead);

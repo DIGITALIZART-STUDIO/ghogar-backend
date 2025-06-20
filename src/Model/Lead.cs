@@ -53,9 +53,6 @@ public class Lead : IEntity
     public LeadStatus Status { get; set; } = LeadStatus.Registered;
 
     [Required]
-    public required string Procedency { get; set; } // Origen del lead (Facebook, página web, Instagram, etc.)
-
-    [Required]
     public LeadCaptureSource CaptureSource { get; set; } // Medio de captación
 
     // Fechas de ingreso y vencimiento (período de 7 días)
