@@ -13,7 +13,8 @@ namespace GestionHogar.Controllers;
 public class AuthController(
     JwtService jwt,
     UserManager<User> userManager,
-    IOptions<CorsConfiguration> corsConfig
+    IOptions<CorsConfiguration> corsConfig,
+    ILogger<AuthController> logger
 ) : ControllerBase
 {
     private readonly CorsConfiguration _corsConfig = corsConfig.Value;
@@ -23,10 +24,9 @@ public class AuthController(
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            SameSite = SameSiteMode.Lax,
-            Secure = false, // Set to true in production with HTTPS
         };
 
+        logger.LogInformation("Cookie domain: {CookieDomain}", _corsConfig.CookieDomain);
 #if DEBUG
         cookieOptions.SameSite = SameSiteMode.Lax;
         cookieOptions.Secure = false;
@@ -59,7 +59,7 @@ public class AuthController(
         "Log in to the system. Returns 2 JWT tokens, access_token and refresh_token. access_token is to be used in Authorization Bearer."
     )]
     [HttpPost("login")]
-    public async Task<ActionResult<LoginResponse>> login([FromBody] LoginRequest request)
+    public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request)
     {
         var user = await userManager.FindByEmailAsync(request.Email);
         if (user == null)
