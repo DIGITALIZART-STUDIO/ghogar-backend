@@ -49,6 +49,8 @@ public class LeadsController : ControllerBase
                 AssignedToId = leadDto.AssignedToId,
                 Status = leadDto.Status,
                 Procedency = leadDto.Procedency,
+                CaptureSource = leadDto.CaptureSource,
+                ProjectId = leadDto.ProjectId,
             };
 
             var createdLead = await _leadService.CreateLeadAsync(lead);
@@ -77,11 +79,23 @@ public class LeadsController : ControllerBase
             if (leadDto.AssignedToId.HasValue)
                 existingLead.AssignedToId = leadDto.AssignedToId;
 
+            if (leadDto.ProjectId.HasValue)
+                existingLead.ProjectId = leadDto.ProjectId;
+
             if (leadDto.Status.HasValue)
                 existingLead.Status = leadDto.Status.Value;
 
             if (leadDto.Procedency != null)
                 existingLead.Procedency = leadDto.Procedency;
+
+            if (leadDto.CaptureSource.HasValue)
+                existingLead.CaptureSource = leadDto.CaptureSource.Value;
+
+            if (leadDto.CompletionReason.HasValue)
+                existingLead.CompletionReason = leadDto.CompletionReason.Value;
+
+            if (leadDto.CancellationReason != null)
+                existingLead.CancellationReason = leadDto.CancellationReason;
 
             var updatedLead = await _leadService.UpdateLeadAsync(id, existingLead);
             return Ok(updatedLead);
@@ -163,6 +177,43 @@ public class LeadsController : ControllerBase
             return NotFound();
 
         return NoContent();
+    }
+
+    // POST: api/leads/{id}/recycle
+    [HttpPost("{id}/recycle")]
+    public async Task<ActionResult<Lead>> RecycleLead(Guid id)
+    {
+        // Obtenemos el ID del usuario actual desde el token JWT
+        var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "id" || c.Type == "sub");
+        if (userIdClaim == null)
+            return BadRequest("No se pudo identificar al usuario actual");
+
+        if (!Guid.TryParse(userIdClaim.Value, out var userId))
+            return BadRequest("ID de usuario inválido");
+
+        var lead = await _leadService.RecycleLeadAsync(id, userId);
+
+        if (lead == null)
+            return NotFound("No se encontró un lead expirado o cancelado con ese ID");
+
+        return Ok(lead);
+    }
+
+    // GET: api/leads/expired
+    [HttpGet("expired")]
+    public async Task<ActionResult<IEnumerable<Lead>>> GetExpiredLeads()
+    {
+        var leads = await _leadService.GetExpiredLeadsAsync();
+        return Ok(leads);
+    }
+
+    // POST: api/leads/check-expired
+    [HttpPost("check-expired")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<ActionResult<object>> CheckAndUpdateExpiredLeads()
+    {
+        var count = await _leadService.CheckAndUpdateExpiredLeadsAsync();
+        return Ok(new { expiredLeadsCount = count });
     }
 
     [HttpDelete("batch")]

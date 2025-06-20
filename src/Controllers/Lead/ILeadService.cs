@@ -15,10 +15,12 @@ public interface ILeadService
     Task<IEnumerable<Lead>> GetLeadsByClientIdAsync(Guid clientId);
     Task<IEnumerable<Lead>> GetLeadsByAssignedToIdAsync(Guid userId);
     Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status);
-
     Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId);
-
     Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();
-
     Task<Lead?> ToggleLeadStatusAsync(Guid id);
+
+    // Nuevos métodos para reciclaje y expiración
+    Task<Lead?> RecycleLeadAsync(Guid id, Guid userId);
+    Task<IEnumerable<Lead>> GetExpiredLeadsAsync();
+    Task<int> CheckAndUpdateExpiredLeadsAsync();
 }
