@@ -3,6 +3,7 @@ using System;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestionHogar.Migrations
 {
     [DbContext(typeof(DatabaseContext))]
-    partial class DatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20250620080005_AddMaxDiscountPercentage")]
+    partial class AddMaxDiscountPercentage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -161,44 +164,21 @@ namespace GestionHogar.Migrations
                     b.Property<Guid?>("AssignedToId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("CancellationReason")
-                        .HasColumnType("text");
-
-                    b.Property<int>("CaptureSource")
-                        .HasColumnType("integer");
-
                     b.Property<Guid?>("ClientId")
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("CompletionReason")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("EntryDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ExpirationDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime?>("LastRecycledAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastRecycledById")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("ProjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("RecycleCount")
-                        .HasColumnType("integer");
+                    b.Property<string>("Procedency")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -208,10 +188,6 @@ namespace GestionHogar.Migrations
                     b.HasIndex("AssignedToId");
 
                     b.HasIndex("ClientId");
-
-                    b.HasIndex("LastRecycledById");
-
-                    b.HasIndex("ProjectId");
 
                     b.ToTable("Leads");
                 });
@@ -719,21 +695,9 @@ namespace GestionHogar.Migrations
                         .WithMany()
                         .HasForeignKey("ClientId");
 
-                    b.HasOne("GestionHogar.Model.User", "LastRecycledBy")
-                        .WithMany()
-                        .HasForeignKey("LastRecycledById");
-
-                    b.HasOne("GestionHogar.Model.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId");
-
                     b.Navigation("AssignedTo");
 
                     b.Navigation("Client");
-
-                    b.Navigation("LastRecycledBy");
-
-                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.LeadTask", b =>

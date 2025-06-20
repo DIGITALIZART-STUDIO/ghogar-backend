@@ -8,6 +8,10 @@ public class LeadSummaryDto
 {
     public Guid Id { get; set; }
     public ClientSummaryDto Client { get; set; } = null!;
+    public LeadStatus Status { get; set; }
+    public DateTime ExpirationDate { get; set; }
+    public string? ProjectName { get; set; }
+    public int RecycleCount { get; set; }
 
     public static LeadSummaryDto FromEntity(Lead lead)
     {
@@ -21,6 +25,10 @@ public class LeadSummaryDto
                 Dni = lead.Client.Dni,
                 Ruc = lead.Client.Ruc,
             },
+            Status = lead.Status,
+            ExpirationDate = lead.ExpirationDate,
+            ProjectName = lead.Project?.Name,
+            RecycleCount = lead.RecycleCount,
         };
     }
 }

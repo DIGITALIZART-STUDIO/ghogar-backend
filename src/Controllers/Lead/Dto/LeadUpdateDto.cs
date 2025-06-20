@@ -6,6 +6,9 @@ public class LeadUpdateDto
 {
     public Guid? ClientId { get; set; }
     public Guid? AssignedToId { get; set; }
+    public Guid? ProjectId { get; set; }
     public LeadStatus? Status { get; set; }
-    public string? Procedency { get; set; }
+    public LeadCaptureSource? CaptureSource { get; set; }
+    public LeadCompletionReason? CompletionReason { get; set; }
+    public string? CancellationReason { get; set; }
 }

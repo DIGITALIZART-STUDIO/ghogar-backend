@@ -174,6 +174,7 @@ var modules = new IModule[]
     new BlockModule(),
     new LotModule(),
     new ReservationModule(),
+    new ExchangeRateModule(),
 };
 foreach (var module in modules)
 {

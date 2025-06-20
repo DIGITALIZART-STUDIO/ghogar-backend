@@ -85,7 +85,7 @@ public class LeadTaskService : ILeadTaskService
                     IsActive = lead.AssignedTo.IsActive,
                 },
                 Status = lead.Status.ToString(),
-                Procedency = lead.Procedency,
+
                 IsActive = lead.IsActive,
             },
             Tasks = tasks
@@ -115,7 +115,7 @@ public class LeadTaskService : ILeadTaskService
                                 },
                                 AssignedToId = t.Lead.AssignedToId.Value,
                                 Status = t.Lead.Status.ToString(),
-                                Procedency = t.Lead.Procedency,
+
                                 IsActive = t.Lead.IsActive,
                             }
                             : null,
@@ -210,7 +210,7 @@ public class LeadTaskService : ILeadTaskService
                     },
                     AssignedToId = t.Lead.AssignedToId ?? Guid.Empty,
                     Status = t.Lead.Status.ToString(),
-                    Procedency = t.Lead.Procedency,
+
                     IsActive = t.Lead.IsActive,
                 },
                 AssignedToId = t.AssignedToId,
