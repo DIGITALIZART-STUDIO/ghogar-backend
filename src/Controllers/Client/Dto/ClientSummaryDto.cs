@@ -8,4 +8,6 @@ public class ClientSummaryDto
     public string Name { get; set; }
     public string? Dni { get; set; }
     public string? Ruc { get; set; }
+
+    public string? PhoneNumber { get; set; }
 }

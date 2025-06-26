@@ -71,6 +71,23 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
         return quotations.Select(QuotationSummaryDTO.FromEntity);
     }
 
+    public async Task<IEnumerable<QuotationSummaryDTO>> GetAcceptedQuotationsByAdvisorIdAsync(
+        Guid advisorId
+    )
+    {
+        var quotations = await _context
+            .Quotations.Include(q => q.Lead)
+            .ThenInclude(l => l!.Client)
+            .Include(q => q.Lot) // **NUEVO: Incluir el lote**
+            .ThenInclude(l => l!.Block)
+            .ThenInclude(b => b.Project)
+            .Where(q => q.AdvisorId == advisorId && q.Status == QuotationStatus.ACCEPTED)
+            .OrderByDescending(q => q.CreatedAt)
+            .ToListAsync();
+
+        return quotations.Select(QuotationSummaryDTO.FromEntity);
+    }
+
     // **NUEVO: Obtener cotizaciones por lote**
     public async Task<IEnumerable<QuotationDTO>> GetQuotationsByLotIdAsync(Guid lotId)
     {

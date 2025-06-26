@@ -70,17 +70,17 @@ public class UsersController(
 
         var usersWithRoles = await (
             from user in db.Users
-            orderby user.CreatedAt
-            select new
-            {
-                User = user,
-                Roles = (
-                    from userRole in db.UserRoles
-                    join role in db.Roles on userRole.RoleId equals role.Id
-                    where userRole.UserId == user.Id
-                    select role.Name
-                ).ToList(),
-            }
+            let roles = (
+                from userRole in db.UserRoles
+                join role in db.Roles on userRole.RoleId equals role.Id
+                where userRole.UserId == user.Id
+                select role.Name
+            ).ToList()
+            orderby roles.Contains(
+                "SUPERADMIN"
+            ) descending, // Primero los SuperAdmin
+            user.CreatedAt descending // Luego por fecha de creación (más recientes primero)
+            select new { User = user, Roles = roles }
         )
             .Skip(skip)
             .Take(pageSize)
@@ -129,8 +129,7 @@ public class UsersController(
             PhoneNumber = dto.Phone,
         };
 
-        // FIXME: Auto generate password and send to the frontend
-        var result = await userManager.CreateAsync(newUser, "Hogar2025/1");
+        var result = await userManager.CreateAsync(newUser, dto.Password);
         if (!result.Succeeded)
         {
             var errors = string.Join(", ", result.Errors.Select(e => e.Description));
@@ -149,21 +148,80 @@ public class UsersController(
         return Ok();
     }
 
+    [EndpointSummary("Update User Data")]
+    [EndpointDescription("Updates user data except password")]
+    [Authorize]
+    [HttpPut("{userId}")]
+    public async Task<ActionResult> UpdateUser(Guid userId, [FromBody] UserUpdateDTO dto)
+    {
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+            return NotFound("Usuario no encontrado");
+
+        user.Name = dto.Name;
+        user.Email = dto.Email;
+        user.PhoneNumber = dto.Phone;
+        user.UserName = GestionHogar.Model.User.CreateUsername(dto.Name);
+
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            return StatusCode(500, "Error actualizando usuario.");
+
+        // Actualizar rol si cambió
+        var currentRoles = await userManager.GetRolesAsync(user);
+        if (!currentRoles.Contains(dto.Role))
+        {
+            await userManager.RemoveFromRolesAsync(user, currentRoles);
+            await userManager.AddToRoleAsync(user, dto.Role);
+        }
+
+        // Obtener roles actualizados
+        var updatedRoles = await userManager.GetRolesAsync(user);
+
+        // Retornar el usuario actualizado y sus roles
+        return Ok(new UserGetDTO { User = user, Roles = updatedRoles });
+    }
+
+    [EndpointSummary("Update User Password")]
+    [EndpointDescription("Updates only the user's password")]
+    [Authorize]
+    [HttpPut("{userId}/password")]
+    public async Task<ActionResult> UpdateUserPassword(
+        Guid userId,
+        [FromBody] UserUpdatePasswordDTO dto
+    )
+    {
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+            return NotFound("Usuario no encontrado");
+
+        // Puedes pedir la contraseña actual si lo deseas (seguridad extra)
+        var token = await userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await userManager.ResetPasswordAsync(user, token, dto.NewPassword);
+
+        if (!result.Succeeded)
+            return BadRequest(result.Errors.Select(e => e.Description));
+
+        return Ok();
+    }
+
     [EndpointSummary("Deactivate User")]
     [EndpointDescription("Deactivates a single User by its ID")]
     [Authorize]
     [HttpDelete("{userId}")]
-    public IActionResult DeactivateUser(Guid userId)
+    public async Task<IActionResult> DeactivateUser(Guid userId)
     {
-        return Ok();
-    }
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (currentUserId == userId.ToString())
+            return BadRequest("No puedes desactivarte a ti mismo.");
 
-    [EndpointSummary("Batch Deactivate User")]
-    [EndpointDescription("Deactivates many users by their IDs")]
-    [Authorize]
-    [HttpDelete]
-    public IActionResult BatchDeactivateUser([FromBody] List<Guid> userIds)
-    {
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+            return NotFound("Usuario no encontrado");
+
+        user.IsActive = false;
+        await userManager.UpdateAsync(user);
+
         return Ok();
     }
 
@@ -171,17 +229,15 @@ public class UsersController(
     [EndpointDescription("Reactivates a single User by its ID")]
     [Authorize]
     [HttpPatch("{userId}/reactivate")]
-    public IActionResult ReactivateUser(Guid userId)
+    public async Task<IActionResult> ReactivateUser(Guid userId)
     {
-        return Ok();
-    }
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+            return NotFound("Usuario no encontrado");
 
-    [EndpointSummary("Batch Reactivate User")]
-    [EndpointDescription("Reactivates many users by their IDs")]
-    [Authorize]
-    [HttpPatch("batch/reactivate")]
-    public IActionResult BatchReactivateUser([FromBody] List<Guid> userIds)
-    {
+        user.IsActive = true;
+        await userManager.UpdateAsync(user);
+
         return Ok();
     }
 }

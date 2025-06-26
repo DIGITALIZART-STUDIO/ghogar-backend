@@ -8,6 +8,7 @@ public interface IQuotationService
     Task<QuotationDTO?> GetQuotationByIdAsync(Guid id);
     Task<IEnumerable<QuotationDTO>> GetQuotationsByLeadIdAsync(Guid leadId);
     Task<IEnumerable<QuotationSummaryDTO>> GetQuotationsByAdvisorIdAsync(Guid advisorId);
+    Task<IEnumerable<QuotationSummaryDTO>> GetAcceptedQuotationsByAdvisorIdAsync(Guid advisorId);
     Task<QuotationDTO> CreateQuotationAsync(QuotationCreateDTO dto);
     Task<QuotationDTO?> UpdateQuotationAsync(Guid id, QuotationUpdateDTO dto);
     Task<bool> DeleteQuotationAsync(Guid id);

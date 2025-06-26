@@ -60,11 +60,11 @@ public class AuthController(
     {
         var user = await userManager.FindByEmailAsync(request.Email);
         if (user == null)
-            return Unauthorized("Credenciales incorrectos");
+            return NotFound("Usuario no encontrado");
 
         var isValid = await userManager.CheckPasswordAsync(user, request.Password);
         if (!isValid)
-            return Unauthorized("Credenciales incorrectos");
+            return BadRequest("Credenciales incorrectas");
 
         var userRoles = await userManager.GetRolesAsync(user);
 
