@@ -154,7 +154,9 @@ public class ReservationService : IReservationService
         reservation.PaymentMethod = reservationDto.PaymentMethod;
         reservation.BankName = reservationDto.BankName;
         reservation.ExchangeRate = reservationDto.ExchangeRate;
-        reservation.ExpiresAt = reservationDto.ExpiresAt;
+        reservation.ExpiresAt = reservationDto.ExpiresAt.Kind == DateTimeKind.Utc 
+            ? reservationDto.ExpiresAt 
+            : DateTime.SpecifyKind(reservationDto.ExpiresAt, DateTimeKind.Utc);
         reservation.Notified = reservationDto.Notified;
         reservation.Schedule = reservationDto.Schedule;
         reservation.ModifiedAt = DateTime.UtcNow;
