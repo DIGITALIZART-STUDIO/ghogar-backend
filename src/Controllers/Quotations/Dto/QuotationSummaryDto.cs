@@ -22,6 +22,8 @@ public class QuotationSummaryDTO
     public QuotationStatus Status { get; set; }
     public string StatusText { get; set; } = string.Empty;
 
+    public decimal ExchangeRate { get; set; }
+
     public string QuotationDate { get; set; } = null!;
     public DateTime ValidUntil { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -56,6 +58,7 @@ public class QuotationSummaryDTO
             ProjectName = quotation.ProjectName, // Usa la propiedad calculada
             TotalPrice = quotation.TotalPrice,
             FinalPrice = quotation.FinalPrice,
+            ExchangeRate = quotation.ExchangeRate,
             BlockName = quotation.BlockName, // Usa la propiedad calculada
             LotNumber = quotation.LotNumber, // Usa la propiedad calculada
             AreaAtQuotation = quotation.AreaAtQuotation, // Usa el área histórica

@@ -368,11 +368,20 @@ public class ClientsController : ControllerBase
                                 ruc = null;
                             }
 
+                            // Asegurar que el teléfono tenga el prefijo "+"
+                            if (
+                                !string.IsNullOrWhiteSpace(phoneNumber)
+                                && !phoneNumber.StartsWith("+")
+                            )
+                            {
+                                phoneNumber = "+" + phoneNumber;
+                            }
+
                             // Validar datos mínimos requeridos
-                            if (string.IsNullOrEmpty(name))
+                            if (string.IsNullOrEmpty(phoneNumber))
                             {
                                 importResult.Errors.Add(
-                                    $"Fila {row.RowIndex}: El nombre es obligatorio."
+                                    $"Fila {row.RowIndex}: El telefono es obligatorio."
                                 );
                                 continue;
                             }
@@ -498,24 +507,6 @@ public class ClientsController : ControllerBase
                                 {
                                     importResult.Errors.Add(
                                         $"Fila {row.RowIndex}: Ya existe un cliente con el número de teléfono {phoneNumber}."
-                                    );
-                                    continue;
-                                }
-
-                                // Validar que el correo no esté vacío
-                                if (string.IsNullOrWhiteSpace(email))
-                                {
-                                    importResult.Errors.Add(
-                                        $"Fila {row.RowIndex}: El email es obligatorio."
-                                    );
-                                    continue;
-                                }
-
-                                // Validar que la dirección no esté vacía
-                                if (string.IsNullOrWhiteSpace(address))
-                                {
-                                    importResult.Errors.Add(
-                                        $"Fila {row.RowIndex}: La dirección es obligatoria."
                                     );
                                     continue;
                                 }
@@ -1841,7 +1832,7 @@ public class ClientsController : ControllerBase
         // 4. Agregar datos para la tabla de instrucciones
         string[][] instructionsData = new string[][]
         {
-            new string[] { "Nombre", "Nombre completo del cliente", "Sí", "" },
+            new string[] { "Nombre", "Nombre completo del cliente", "No", "" },
             new string[] { "País", "País del cliente", "No", "" },
             new string[] { "DNI", "Número de DNI", "No", "8 dígitos, único pero no obligatorio" },
             new string[]
@@ -1863,15 +1854,15 @@ public class ClientsController : ControllerBase
                 "Teléfono",
                 "Número de teléfono",
                 "Sí",
-                "Debe ser único. Recomendado incluir código de país (+51)",
+                "Debe ser único. Recomendado incluir código de país (51), se puede obviar el +",
             },
-            new string[] { "Email", "Correo electrónico del cliente", "Sí", "formato@ejemplo.com" },
-            new string[] { "Dirección", "Dirección completa del cliente", "Sí", "" },
+            new string[] { "Email", "Correo electrónico del cliente", "No", "formato@ejemplo.com" },
+            new string[] { "Dirección", "Dirección completa del cliente", "No", "" },
             new string[]
             {
                 "Medio de Captación",
                 "Fuente por la que se captó el lead",
-                "No",
+                "Si",
                 "Seleccionar de la lista desplegable (Empresa, FB Personal, etc.)",
             },
             new string[]

@@ -12,89 +12,51 @@ public class Client : IEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    [Required]
-    public required string Name { get; set; } // Nombre de persona natural o razón social
+    public string? Name { get; set; } // Ahora opcional
 
     [StringLength(8)]
-    public string? Dni { get; set; } // Para personas naturales - ahora opcional
+    public string? Dni { get; set; } // Opcional
 
     [StringLength(11)]
-    public string? Ruc { get; set; } // Para empresas, opcional
+    public string? Ruc { get; set; } // Opcional
 
-    public string? CompanyName { get; set; } // Nombre comercial (si es diferente de la razón social)
-
-    [Required]
-    public required string PhoneNumber { get; set; }
+    public string? CompanyName { get; set; } // Opcional
 
     [Required]
+    public required string PhoneNumber { get; set; } // Solo este es obligatorio
+
     [EmailAddress]
-    public required string Email { get; set; }
+    public string? Email { get; set; } // Ahora opcional
 
-    [Required]
-    public required string Address { get; set; } // Dirección del cliente
+    public string? Address { get; set; } // Ahora opcional
 
-    public string? Country { get; set; } // País del cliente
+    public string? Country { get; set; } // Opcional
 
-    [Required]
-    public ClientType Type { get; set; } // Natural o Jurídico
+    public ClientType? Type { get; set; } // Ahora opcional
 
     [Column(TypeName = "jsonb")]
-    public string? CoOwners { get; set; } // JSON con los copropietarios, reemplaza a CoOwner
+    public string? CoOwners { get; set; } // Opcional
 
-    public bool SeparateProperty { get; set; } = false; // Indica si tiene separación de bienes
+    public bool SeparateProperty { get; set; } = false;
 
     [Column(TypeName = "jsonb")]
-    public string? SeparatePropertyData { get; set; } // JSON con datos de separación de bienes
+    public string? SeparatePropertyData { get; set; } // Opcional
 
-    // IEntity implementation
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime ModifiedAt { get; set; } = DateTime.UtcNow;
 
-    [NotMapped] // No se guardará en la base de datos
+    [NotMapped]
     public string DisplayName => Type == ClientType.Natural ? Name : CompanyName ?? Name;
 
-    // Validación para asegurar datos correctos por tipo de cliente
+    // Validación mínima solo para importación
     public (bool isValid, string errorMessage) ValidateClientDetails()
     {
-        // Validaciones comunes
-        if (string.IsNullOrEmpty(Name))
-            return (false, "El nombre es obligatorio");
         if (string.IsNullOrEmpty(PhoneNumber))
             return (false, "El número de teléfono es obligatorio");
-        if (string.IsNullOrEmpty(Email))
-            return (false, "El email es obligatorio");
-        if (string.IsNullOrEmpty(Address))
-            return (false, "La dirección es obligatoria");
-
-        // Validaciones específicas por tipo
-        if (Type == ClientType.Natural)
-        {
-            if (Dni != null && Dni.Length != 8)
-                return (false, "El DNI debe tener 8 caracteres");
-            // Limpiar campos que no aplican
-            Ruc = null;
-            CompanyName = null;
-        }
-        else // ClientType.Juridico
-        {
-            if (string.IsNullOrEmpty(Ruc))
-                return (false, "El RUC es obligatorio para clientes tipo Jurídico");
-            if (Ruc.Length != 11)
-                return (false, "El RUC debe tener 11 caracteres");
-
-            // Si no hay CompanyName, usar el Name como CompanyName
-            if (string.IsNullOrEmpty(CompanyName))
-                CompanyName = Name;
-
-            // Limpiar campos que no aplican
-            Dni = null;
-        }
-
         return (true, string.Empty);
     }
 
-    // Mantener el método original por compatibilidad
     public bool ValidateClientData()
     {
         var (isValid, _) = ValidateClientDetails();
@@ -105,6 +67,6 @@ public class Client : IEntity
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ClientType
 {
-    Natural, // Persona natural (usará DNI)
-    Juridico, // Persona jurídica/empresa (usará RUC)
+    Natural,
+    Juridico,
 }
