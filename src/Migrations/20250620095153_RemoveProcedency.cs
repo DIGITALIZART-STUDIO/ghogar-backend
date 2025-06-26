@@ -10,9 +10,7 @@ namespace GestionHogar.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "Procedency",
-                table: "Leads");
+            migrationBuilder.DropColumn(name: "Procedency", table: "Leads");
         }
 
         /// <inheritdoc />
@@ -23,7 +21,8 @@ namespace GestionHogar.Migrations
                 table: "Leads",
                 type: "text",
                 nullable: false,
-                defaultValue: "");
+                defaultValue: ""
+            );
         }
     }
 }

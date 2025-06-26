@@ -23,12 +23,12 @@ public class ClientUpdateDto
     public string? Email { get; set; }
 
     public string? Address { get; set; }
-    
+
     public string? Country { get; set; }
 
     public ClientType? Type { get; set; } // Tipo nullable
-    
+
     public bool? SeparateProperty { get; set; }
-    
+
     public string? SeparatePropertyData { get; set; } // JSON con datos de separación de bienes
 }

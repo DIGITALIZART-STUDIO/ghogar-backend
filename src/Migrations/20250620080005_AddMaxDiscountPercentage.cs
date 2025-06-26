@@ -14,15 +14,14 @@ namespace GestionHogar.Migrations
                 name: "MaxDiscountPercentage",
                 table: "Projects",
                 type: "numeric",
-                nullable: true);
+                nullable: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "MaxDiscountPercentage",
-                table: "Projects");
+            migrationBuilder.DropColumn(name: "MaxDiscountPercentage", table: "Projects");
         }
     }
 }

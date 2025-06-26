@@ -133,6 +133,57 @@ public class ReservationService : IReservationService
         return reservation;
     }
 
+    public async Task<ReservationDto?> UpdateReservationAsync(
+        Guid id,
+        ReservationUpdateDto reservationDto
+    )
+    {
+        var reservation = await _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
+
+        if (reservation == null)
+            return null;
+
+        // Update the reservation properties
+        reservation.ReservationDate = reservationDto.ReservationDate;
+        reservation.AmountPaid = reservationDto.AmountPaid;
+        reservation.Currency = reservationDto.Currency;
+        reservation.Status = reservationDto.Status;
+        reservation.PaymentMethod = reservationDto.PaymentMethod;
+        reservation.BankName = reservationDto.BankName;
+        reservation.ExchangeRate = reservationDto.ExchangeRate;
+        reservation.ExpiresAt = reservationDto.ExpiresAt;
+        reservation.Notified = reservationDto.Notified;
+        reservation.Schedule = reservationDto.Schedule;
+        reservation.ModifiedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        // Return the updated reservation as DTO
+        return new ReservationDto
+        {
+            Id = reservation.Id,
+            ClientId = reservation.ClientId,
+            ClientName = reservation.Client.DisplayName,
+            QuotationId = reservation.QuotationId,
+            QuotationCode = reservation.Quotation.Code,
+            ReservationDate = reservation.ReservationDate,
+            AmountPaid = reservation.AmountPaid,
+            Currency = reservation.Currency,
+            Status = reservation.Status,
+            PaymentMethod = reservation.PaymentMethod,
+            BankName = reservation.BankName,
+            ExchangeRate = reservation.ExchangeRate,
+            ExpiresAt = reservation.ExpiresAt,
+            Notified = reservation.Notified,
+            Schedule = reservation.Schedule,
+            CreatedAt = reservation.CreatedAt,
+            ModifiedAt = reservation.ModifiedAt,
+        };
+    }
+
     public async Task<bool> DeleteReservationAsync(Guid id)
     {
         var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
