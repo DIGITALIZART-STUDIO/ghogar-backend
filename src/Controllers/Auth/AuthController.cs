@@ -21,10 +21,7 @@ public class AuthController(
 
     private void SetAuthCookies(string accessToken, string refreshToken)
     {
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-        };
+        var cookieOptions = new CookieOptions { HttpOnly = true };
 
         logger.LogInformation("Cookie domain: {CookieDomain}", _corsConfig.CookieDomain);
 #if DEBUG

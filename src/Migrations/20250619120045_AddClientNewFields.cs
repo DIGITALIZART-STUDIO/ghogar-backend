@@ -10,60 +10,50 @@ namespace GestionHogar.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.RenameColumn(
-                name: "CoOwner",
-                table: "Clients",
-                newName: "Country");
+            migrationBuilder.RenameColumn(name: "CoOwner", table: "Clients", newName: "Country");
 
             migrationBuilder.AddColumn<string>(
                 name: "CoOwners",
                 table: "Clients",
                 type: "jsonb",
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.AddColumn<bool>(
                 name: "SeparateProperty",
                 table: "Clients",
                 type: "boolean",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
 
             migrationBuilder.AddColumn<string>(
                 name: "SeparatePropertyData",
                 table: "Clients",
                 type: "jsonb",
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Client_PhoneNumber",
                 table: "Clients",
                 column: "PhoneNumber",
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_Client_PhoneNumber",
-                table: "Clients");
+            migrationBuilder.DropIndex(name: "IX_Client_PhoneNumber", table: "Clients");
 
-            migrationBuilder.DropColumn(
-                name: "CoOwners",
-                table: "Clients");
+            migrationBuilder.DropColumn(name: "CoOwners", table: "Clients");
 
-            migrationBuilder.DropColumn(
-                name: "SeparateProperty",
-                table: "Clients");
+            migrationBuilder.DropColumn(name: "SeparateProperty", table: "Clients");
 
-            migrationBuilder.DropColumn(
-                name: "SeparatePropertyData",
-                table: "Clients");
+            migrationBuilder.DropColumn(name: "SeparatePropertyData", table: "Clients");
 
-            migrationBuilder.RenameColumn(
-                name: "Country",
-                table: "Clients",
-                newName: "CoOwner");
+            migrationBuilder.RenameColumn(name: "Country", table: "Clients", newName: "CoOwner");
         }
     }
 }

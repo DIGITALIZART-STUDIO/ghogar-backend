@@ -66,6 +66,31 @@ public class ReservationsController : ControllerBase
         }
     }
 
+    // PATCH: api/reservations/{id}
+    [HttpPatch("{id}")]
+    public async Task<ActionResult<ReservationDto>> UpdateReservation(
+        Guid id,
+        ReservationUpdateDto reservationDto
+    )
+    {
+        try
+        {
+            var updatedReservation = await _reservationService.UpdateReservationAsync(
+                id,
+                reservationDto
+            );
+
+            if (updatedReservation == null)
+                return NotFound();
+
+            return Ok(updatedReservation);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     // DELETE: api/reservations/{id}
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteReservation(Guid id)

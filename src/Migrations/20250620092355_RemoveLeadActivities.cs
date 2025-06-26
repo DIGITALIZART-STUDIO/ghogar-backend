@@ -11,8 +11,7 @@ namespace GestionHogar.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "LeadActivity");
+            migrationBuilder.DropTable(name: "LeadActivity");
         }
 
         /// <inheritdoc />
@@ -25,12 +24,21 @@ namespace GestionHogar.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     LeadId = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ActivityDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ActivityDate = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
                     ActivityType = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CreatedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
                     Description = table.Column<string>(type: "text", nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    ModifiedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    ModifiedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
                 },
                 constraints: table =>
                 {
@@ -40,24 +48,29 @@ namespace GestionHogar.Migrations
                         column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Cascade
+                    );
                     table.ForeignKey(
                         name: "FK_LeadActivity_Leads_LeadId",
                         column: x => x.LeadId,
                         principalTable: "Leads",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_LeadActivity_LeadId",
                 table: "LeadActivity",
-                column: "LeadId");
+                column: "LeadId"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_LeadActivity_UserId",
                 table: "LeadActivity",
-                column: "UserId");
+                column: "UserId"
+            );
         }
     }
 }
