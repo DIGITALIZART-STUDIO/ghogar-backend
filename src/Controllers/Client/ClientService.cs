@@ -261,6 +261,7 @@ public class ClientService : IClientService
                 Name = c.Name,
                 Dni = c.Dni,
                 Ruc = c.Ruc,
+                PhoneNumber = c.PhoneNumber,
             })
             .ToListAsync();
     }

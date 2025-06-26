@@ -87,6 +87,24 @@ public class QuotationsController : ControllerBase
         }
     }
 
+    [HttpGet("advisor/accepted/{advisorId:guid}")]
+    public async Task<
+        ActionResult<IEnumerable<QuotationSummaryDTO>>> GetAcceptedQuotationsByAdvisor(Guid advisorId)
+    {
+        try
+        {
+            var quotations = await _quotationService.GetAcceptedQuotationsByAdvisorIdAsync(
+                advisorId
+            );
+            return Ok(quotations);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener cotizaciones por asesor");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     [HttpPost]
     public async Task<ActionResult<QuotationDTO>> CreateQuotation(QuotationCreateDTO dto)
     {

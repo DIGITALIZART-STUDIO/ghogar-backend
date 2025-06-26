@@ -13,11 +13,25 @@ public class User : IdentityUser<Guid>, IEntity
 
     public static string CreateUsername(string name)
     {
-        // Remove special characters and spaces
-        var sanitizedName = new string(
-            name.Where(c => char.IsLetterOrDigit(c) || c == '_').ToArray()
+        // Quitar tildes y caracteres especiales
+        var normalized = name.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in normalized)
+        {
+            var unicodeCategory = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+            if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                sb.Append(c);
+            }
+        }
+        var noAccents = sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+
+        // Reemplazar espacios por guion bajo y quitar caracteres no alfanuméricos (excepto guion bajo)
+        var username = new string(
+            noAccents.Replace(' ', '_').Where(c => char.IsLetterOrDigit(c) || c == '_').ToArray()
         );
 
-        return sanitizedName;
+        // Convertir a minúsculas
+        return username.ToLower();
     }
 }
