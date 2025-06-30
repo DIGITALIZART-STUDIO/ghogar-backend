@@ -124,6 +124,18 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
         return quotations.Select(QuotationDTO.FromEntity);
     }
 
+    private static string GetLotStatusSpanish(LotStatus status)
+    {
+        return status switch
+        {
+            LotStatus.Available => "Disponible",
+            LotStatus.Quoted => "Cotizado",
+            LotStatus.Reserved => "Reservado",
+            LotStatus.Sold => "Vendido",
+            _ => status.ToString(),
+        };
+    }
+
     public async Task<QuotationDTO> CreateQuotationAsync(QuotationCreateDTO dto)
     {
         // Verificar que el lead existe
@@ -145,9 +157,9 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
         if (lot == null)
             throw new InvalidOperationException($"Lote con ID {dto.LotId} no encontrado");
 
-        if (lot.Status != LotStatus.Available)
+        if (lot.Status != LotStatus.Available && lot.Status != LotStatus.Quoted)
             throw new InvalidOperationException(
-                $"El lote no está disponible para cotizar. Estado actual: {lot.Status}"
+                $"El lote no está disponible para cotizar. Estado actual: {GetLotStatusSpanish(lot.Status)}"
             );
 
         if (!lot.IsActive || !lot.Block.IsActive || !lot.Block.Project.IsActive)
@@ -191,10 +203,27 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
     {
         var quotation = await _context
             .Quotations.Include(q => q.Lot) // **NUEVO: Incluir el lote para validaciones**
+            .ThenInclude(l => l.Block)
+            .ThenInclude(b => b.Project)
             .FirstOrDefaultAsync(q => q.Id == id);
 
         if (quotation == null)
             return null;
+
+        // Validar que el lote está activo
+        if (
+            quotation.Lot == null
+            || !quotation.Lot.IsActive
+            || !quotation.Lot.Block.IsActive
+            || !quotation.Lot.Block.Project.IsActive
+        )
+            throw new InvalidOperationException("El lote, bloque o proyecto no está activo");
+
+        // Validar que el estado del lote permite actualización (ejemplo: solo si está Cotizado o Disponible)
+        if (quotation.Lot.Status != LotStatus.Available && quotation.Lot.Status != LotStatus.Quoted)
+            throw new InvalidOperationException(
+                $"No se puede actualizar la cotización porque el lote no está disponible. Estado actual: {GetLotStatusSpanish(quotation.Lot.Status)}"
+            );
 
         // Si se cambia el asesor, verificar que existe
         if (dto.AdvisorId.HasValue && dto.AdvisorId.Value != quotation.AdvisorId)

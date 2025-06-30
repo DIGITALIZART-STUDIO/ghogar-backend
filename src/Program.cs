@@ -1,10 +1,9 @@
 using System.Text;
-using System.Text.Json.Serialization;
 using GestionHogar.Configuration;
 using GestionHogar.Controllers;
+using GestionHogar.Controllers.ApiPeru;
 using GestionHogar.Model;
 using GestionHogar.Utils;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +28,7 @@ builder
 // Configuration setup
 //
 builder.Services.Configure<CorsConfiguration>(builder.Configuration.GetSection("Cors"));
+builder.Services.Configure<ApiPeruConfiguration>(builder.Configuration.GetSection("ApiPeru"));
 
 // Database setup
 builder.Services.AddDbContext<DatabaseContext>(options =>
@@ -176,6 +176,7 @@ var modules = new IModule[]
     new ReservationModule(),
     new ExchangeRateModule(),
     new PaymentModule(),
+    new ApiPeruModule(),
 };
 foreach (var module in modules)
 {
