@@ -143,7 +143,7 @@ public class ReservationsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Error al cambiar el estado de la reserva: {ex.Message}");
+            return StatusCode(500, $"Error al cambiar el estado de la separacion: {ex.Message}");
         }
     }
 

@@ -266,8 +266,21 @@ public class ReservationService(DatabaseContext context) : IReservationService
         )
             return null;
 
+        var previousStatus = reservation.Status;
         reservation.Status = statusEnum;
         reservation.ModifiedAt = DateTime.UtcNow;
+
+        // Handle custom logic when status changes to CANCELED (which means "paid")
+        if (
+            statusEnum == ReservationStatus.CANCELED
+            && previousStatus != ReservationStatus.CANCELED
+        )
+        {
+            await GeneratePaymentScheduleAsync(reservation);
+        }
+
+        // TODO: Implement logic for when status goes from CANCELED to any other
+        // This should handle cleanup/reversal of payment generation if needed
 
         await context.SaveChangesAsync();
 
@@ -292,6 +305,52 @@ public class ReservationService(DatabaseContext context) : IReservationService
             CreatedAt = reservation.CreatedAt,
             ModifiedAt = reservation.ModifiedAt,
         };
+    }
+
+    /// <summary>
+    /// Generates payment schedule when reservation status changes to CANCELED (which means "paid").
+    /// Creates n monthly payment entities based on the quotation's financing terms.
+    /// </summary>
+    private Task GeneratePaymentScheduleAsync(Reservation reservation)
+    {
+        var quotation = reservation.Quotation;
+
+        // Get the financed amount and months from the quotation
+        var financedAmount = quotation.AmountFinanced;
+        var monthsFinanced = quotation.MonthsFinanced;
+
+        // Parse quotation date (it's stored as string, ugh...)
+        if (!DateTime.TryParse(quotation.QuotationDate, out var quotationDate))
+        {
+            quotationDate = DateTime.UtcNow;
+        }
+
+        // Calculate monthly payment amount
+        var monthlyPayment = financedAmount / monthsFinanced;
+
+        // Generate payment entities
+        var payments = new List<Payment>();
+
+        for (int i = 1; i <= monthsFinanced; i++)
+        {
+            var dueDate = quotationDate.AddMonths(i);
+
+            var payment = new Payment
+            {
+                ReservationId = reservation.Id,
+                Reservation = reservation,
+                DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc),
+                AmountDue = monthlyPayment,
+                Paid = false,
+            };
+
+            payments.Add(payment);
+        }
+
+        // Add all payments to the context
+        context.Payments.AddRange(payments);
+
+        return Task.CompletedTask;
     }
 
     public async Task<byte[]> GenerateReservationPdfAsync(Guid reservationId)
