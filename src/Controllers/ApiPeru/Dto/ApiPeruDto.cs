@@ -29,3 +29,9 @@ public class ResponseApiRucRepresentante
     public string Cargo { get; set; }
     public string FechaDesde { get; set; }
 }
+
+public class ResponseApiDni
+{
+    public string Numero { get; set; }
+    public string NombreCompleto { get; set; }
+}

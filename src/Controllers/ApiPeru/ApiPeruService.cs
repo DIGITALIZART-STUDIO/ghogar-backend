@@ -105,4 +105,38 @@ public class ApiPeruService
             public string fecha_desde { get; set; }
         }
     }
+
+    public async Task<ResponseApiDni> GetDataByDniAsync(string dni)
+    {
+        if (string.IsNullOrWhiteSpace(_config.Token))
+            throw new Exception("API Peru token is not configured");
+
+        var url = $"{_config.BaseUrl}/dni/{dni}?api_token={_config.Token}";
+        var response = await _httpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadFromJsonAsync<ApiPeruDniResponse>();
+        var data = json?.data;
+
+        if (
+            data == null
+            || string.IsNullOrWhiteSpace(data.numero)
+            || string.IsNullOrWhiteSpace(data.nombre_completo)
+        )
+            throw new Exception("DNI no encontrado o inválido.");
+
+        return new ResponseApiDni { Numero = data.numero, NombreCompleto = data.nombre_completo };
+    }
+
+    // Clase interna para deserializar la respuesta del DNI
+    private class ApiPeruDniResponse
+    {
+        public DniData data { get; set; }
+
+        public class DniData
+        {
+            public string numero { get; set; }
+            public string nombre_completo { get; set; }
+        }
+    }
 }
