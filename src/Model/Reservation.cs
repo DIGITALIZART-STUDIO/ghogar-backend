@@ -58,6 +58,9 @@ public class Reservation : BaseModel
 
     // Cronograma de pagos (número de meses, fecha inicio de pago, monto que se tienen que dividir)
     public string? Schedule { get; set; }
+
+    // Navegación hacia los pagos programados
+    public ICollection<Payment> Payments { get; set; } = [];
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -70,8 +73,19 @@ public enum Currency
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ReservationStatus
 {
+    /// <summary>
+    /// Reservation has been issued
+    /// </summary>
     ISSUED,
+
+    /// <summary>
+    /// Payment has been made
+    /// </summary>
     CANCELED,
+
+    /// <summary>
+    /// Reservation has been canceled
+    /// </summary>
     ANULATED,
 }
 

@@ -7,18 +7,11 @@ using QuestPDF.Infrastructure;
 
 namespace GestionHogar.Services;
 
-public class ReservationService : IReservationService
+public class ReservationService(DatabaseContext context) : IReservationService
 {
-    private readonly DatabaseContext _context;
-
-    public ReservationService(DatabaseContext context)
-    {
-        _context = context;
-    }
-
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
     {
-        return await _context
+        return await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.IsActive)
@@ -47,7 +40,7 @@ public class ReservationService : IReservationService
 
     public async Task<ReservationDto?> GetReservationByIdAsync(Guid id)
     {
-        return await _context
+        return await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.Id == id && r.IsActive)
@@ -77,14 +70,12 @@ public class ReservationService : IReservationService
     public async Task<Reservation> CreateReservationAsync(ReservationCreateDto reservationDto)
     {
         // Verificar que la cotización existe y obtener el lead asociado
-        var quotation = await _context
-            .Quotations.Include(q => q.Lead)
-            .ThenInclude(l => l.Client)
-            .FirstOrDefaultAsync(q => q.Id == reservationDto.QuotationId);
-        if (quotation == null)
-        {
-            throw new ArgumentException("La cotización especificada no existe");
-        }
+        var quotation =
+            await context
+                .Quotations.Include(q => q.Lead)
+                .ThenInclude(l => l.Client)
+                .FirstOrDefaultAsync(q => q.Id == reservationDto.QuotationId)
+            ?? throw new ArgumentException("La cotización especificada no existe");
 
         // Verificar que el lead existe
         if (quotation.Lead == null)
@@ -102,7 +93,7 @@ public class ReservationService : IReservationService
         var client = quotation.Lead.Client;
 
         // Verificar que no exista ya una reserva activa para esta cotización
-        var existingReservation = await _context.Reservations.FirstOrDefaultAsync(r =>
+        var existingReservation = await context.Reservations.FirstOrDefaultAsync(r =>
             r.QuotationId == reservationDto.QuotationId && r.IsActive
         );
         if (existingReservation != null)
@@ -128,8 +119,8 @@ public class ReservationService : IReservationService
             Quotation = quotation,
         };
 
-        _context.Reservations.Add(reservation);
-        await _context.SaveChangesAsync();
+        context.Reservations.Add(reservation);
+        await context.SaveChangesAsync();
         return reservation;
     }
 
@@ -138,7 +129,7 @@ public class ReservationService : IReservationService
         ReservationUpdateDto reservationDto
     )
     {
-        var reservation = await _context
+        var reservation = await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
@@ -154,14 +145,15 @@ public class ReservationService : IReservationService
         reservation.PaymentMethod = reservationDto.PaymentMethod;
         reservation.BankName = reservationDto.BankName;
         reservation.ExchangeRate = reservationDto.ExchangeRate;
-        reservation.ExpiresAt = reservationDto.ExpiresAt.Kind == DateTimeKind.Utc 
-            ? reservationDto.ExpiresAt 
-            : DateTime.SpecifyKind(reservationDto.ExpiresAt, DateTimeKind.Utc);
+        reservation.ExpiresAt =
+            reservationDto.ExpiresAt.Kind == DateTimeKind.Utc
+                ? reservationDto.ExpiresAt
+                : DateTime.SpecifyKind(reservationDto.ExpiresAt, DateTimeKind.Utc);
         reservation.Notified = reservationDto.Notified;
         reservation.Schedule = reservationDto.Schedule;
         reservation.ModifiedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
         // Return the updated reservation as DTO
         return new ReservationDto
@@ -188,7 +180,7 @@ public class ReservationService : IReservationService
 
     public async Task<bool> DeleteReservationAsync(Guid id)
     {
-        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
+        var reservation = await context.Reservations.FirstOrDefaultAsync(r =>
             r.Id == id && r.IsActive
         );
         if (reservation == null)
@@ -197,13 +189,13 @@ public class ReservationService : IReservationService
         // Borrado lógico
         reservation.IsActive = false;
         reservation.ModifiedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
         return true;
     }
 
     public async Task<IEnumerable<ReservationDto>> GetReservationsByClientIdAsync(Guid clientId)
     {
-        return await _context
+        return await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.ClientId == clientId && r.IsActive)
@@ -234,7 +226,7 @@ public class ReservationService : IReservationService
         Guid quotationId
     )
     {
-        return await _context
+        return await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.QuotationId == quotationId && r.IsActive)
@@ -261,9 +253,109 @@ public class ReservationService : IReservationService
             .ToListAsync();
     }
 
+    public async Task<ReservationDto?> ChangeStatusAsync(Guid id, string status)
+    {
+        var reservation = await context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
+
+        if (
+            reservation == null
+            || !Enum.TryParse<ReservationStatus>(status, true, out var statusEnum)
+        )
+            return null;
+
+        var previousStatus = reservation.Status;
+        reservation.Status = statusEnum;
+        reservation.ModifiedAt = DateTime.UtcNow;
+
+        // Handle custom logic when status changes to CANCELED (which means "paid")
+        if (
+            statusEnum == ReservationStatus.CANCELED
+            && previousStatus != ReservationStatus.CANCELED
+        )
+        {
+            await GeneratePaymentScheduleAsync(reservation);
+        }
+
+        // TODO: Implement logic for when status goes from CANCELED to any other
+        // This should handle cleanup/reversal of payment generation if needed
+
+        await context.SaveChangesAsync();
+
+        // Return the updated reservation as DTO
+        return new ReservationDto
+        {
+            Id = reservation.Id,
+            ClientId = reservation.ClientId,
+            ClientName = reservation.Client.DisplayName,
+            QuotationId = reservation.QuotationId,
+            QuotationCode = reservation.Quotation.Code,
+            ReservationDate = reservation.ReservationDate,
+            AmountPaid = reservation.AmountPaid,
+            Currency = reservation.Currency,
+            Status = reservation.Status,
+            PaymentMethod = reservation.PaymentMethod,
+            BankName = reservation.BankName,
+            ExchangeRate = reservation.ExchangeRate,
+            ExpiresAt = reservation.ExpiresAt,
+            Notified = reservation.Notified,
+            Schedule = reservation.Schedule,
+            CreatedAt = reservation.CreatedAt,
+            ModifiedAt = reservation.ModifiedAt,
+        };
+    }
+
+    /// <summary>
+    /// Generates payment schedule when reservation status changes to CANCELED (which means "paid").
+    /// Creates n monthly payment entities based on the quotation's financing terms.
+    /// </summary>
+    private Task GeneratePaymentScheduleAsync(Reservation reservation)
+    {
+        var quotation = reservation.Quotation;
+
+        // Get the financed amount and months from the quotation
+        var financedAmount = quotation.AmountFinanced;
+        var monthsFinanced = quotation.MonthsFinanced;
+
+        // Parse quotation date (it's stored as string, ugh...)
+        if (!DateTime.TryParse(quotation.QuotationDate, out var quotationDate))
+        {
+            quotationDate = DateTime.UtcNow;
+        }
+
+        // Calculate monthly payment amount
+        var monthlyPayment = financedAmount / monthsFinanced;
+
+        // Generate payment entities
+        var payments = new List<Payment>();
+
+        for (int i = 1; i <= monthsFinanced; i++)
+        {
+            var dueDate = quotationDate.AddMonths(i);
+
+            var payment = new Payment
+            {
+                ReservationId = reservation.Id,
+                Reservation = reservation,
+                DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc),
+                AmountDue = monthlyPayment,
+                Paid = false,
+            };
+
+            payments.Add(payment);
+        }
+
+        // Add all payments to the context
+        context.Payments.AddRange(payments);
+
+        return Task.CompletedTask;
+    }
+
     public async Task<byte[]> GenerateReservationPdfAsync(Guid reservationId)
     {
-        var reservation = await _context
+        var reservation = await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .ThenInclude(q => q.Lot)

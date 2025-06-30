@@ -38,11 +38,14 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<Reservation> Reservations { get; set; } = null!;
 
+    public DbSet<Payment> Payments { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
         Audit.SetUp(builder);
         BaseModel.SetUp<Reservation>(builder);
+        BaseModel.SetUp<Payment>(builder);
     }
 
     public override int SaveChanges()

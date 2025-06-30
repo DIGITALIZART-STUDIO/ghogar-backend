@@ -56,12 +56,10 @@ public class Quotation : BaseModelWithoutActive
     [Column(TypeName = "decimal(18,2)")]
     public decimal Discount { get; set; } = 0; // Descuento aplicado en esta cotización
 
-    // NOTE: dolares o soles?
     [Required]
     [Column(TypeName = "decimal(18,2)")]
     public decimal FinalPrice { get; set; } // Precio final de esta cotización
 
-    // NOTE: porcentaje?
     [Required]
     [Column(TypeName = "decimal(18,2)")]
     public decimal DownPayment { get; set; } // Porcentaje negociado en esta cotización

@@ -16,7 +16,8 @@ namespace GestionHogar.Migrations
                 type: "integer",
                 nullable: true,
                 oldClrType: typeof(int),
-                oldType: "integer");
+                oldType: "integer"
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "Name",
@@ -24,7 +25,8 @@ namespace GestionHogar.Migrations
                 type: "text",
                 nullable: true,
                 oldClrType: typeof(string),
-                oldType: "text");
+                oldType: "text"
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "Email",
@@ -32,7 +34,8 @@ namespace GestionHogar.Migrations
                 type: "text",
                 nullable: true,
                 oldClrType: typeof(string),
-                oldType: "text");
+                oldType: "text"
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "Address",
@@ -40,7 +43,8 @@ namespace GestionHogar.Migrations
                 type: "text",
                 nullable: true,
                 oldClrType: typeof(string),
-                oldType: "text");
+                oldType: "text"
+            );
         }
 
         /// <inheritdoc />
@@ -54,7 +58,8 @@ namespace GestionHogar.Migrations
                 defaultValue: 0,
                 oldClrType: typeof(int),
                 oldType: "integer",
-                oldNullable: true);
+                oldNullable: true
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "Name",
@@ -64,7 +69,8 @@ namespace GestionHogar.Migrations
                 defaultValue: "",
                 oldClrType: typeof(string),
                 oldType: "text",
-                oldNullable: true);
+                oldNullable: true
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "Email",
@@ -74,7 +80,8 @@ namespace GestionHogar.Migrations
                 defaultValue: "",
                 oldClrType: typeof(string),
                 oldType: "text",
-                oldNullable: true);
+                oldNullable: true
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "Address",
@@ -84,7 +91,8 @@ namespace GestionHogar.Migrations
                 defaultValue: "",
                 oldClrType: typeof(string),
                 oldType: "text",
-                oldNullable: true);
+                oldNullable: true
+            );
         }
     }
 }
