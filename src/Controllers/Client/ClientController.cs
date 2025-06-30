@@ -485,12 +485,18 @@ public class ClientsController : ControllerBase
                             {
                                 existingClient = await _clientService.GetClientByDniAsync(dni);
                             }
+                            if (existingClient == null && !string.IsNullOrWhiteSpace(phoneNumber))
+                            {
+                                existingClient = await _clientService.GetClientByPhoneNumberAsync(
+                                    phoneNumber
+                                );
+                            }
 
                             Guid clientId;
 
                             if (existingClient != null)
                             {
-                                // Si el cliente ya existe, usamos su ID
+                                // Si el cliente ya existe (por RUC, DNI o Teléfono), usamos su ID
                                 clientId = existingClient.Id;
                                 importResult.ClientsExisting++;
                             }
@@ -505,27 +511,13 @@ public class ClientsController : ControllerBase
                                     continue;
                                 }
 
-                                // Verificar que el teléfono sea único
-                                var existingWithPhone =
-                                    await _clientService.GetClientByPhoneNumberAsync(phoneNumber);
-                                if (existingWithPhone != null)
-                                {
-                                    importResult.Errors.Add(
-                                        $"Fila {row.RowIndex}: Ya existe un cliente con el número de teléfono {phoneNumber}."
-                                    );
-                                    continue;
-                                }
-
                                 // Crear objeto de cliente
                                 var newClient = new GestionHogar.Model.Client
                                 {
                                     Name = name,
-                                    Country = country, // Usar campo Country en vez de CoOwner
-                                    // Solo asignar DNI para clientes naturales
+                                    Country = country,
                                     Dni = clientType == ClientType.Natural ? dni : null,
-                                    // Solo asignar RUC para clientes jurídicos
                                     Ruc = clientType == ClientType.Juridico ? ruc : null,
-                                    // Solo asignar CompanyName para clientes jurídicos
                                     CompanyName =
                                         clientType == ClientType.Juridico
                                             ? (
@@ -538,9 +530,9 @@ public class ClientsController : ControllerBase
                                     Email = email,
                                     Address = address,
                                     Type = clientType,
-                                    SeparateProperty = false, // Valor predeterminado para separación de bienes
-                                    SeparatePropertyData = null, // Valor predeterminado para datos de separación
-                                    CoOwners = null, // Valor predeterminado para copropietarios
+                                    SeparateProperty = false,
+                                    SeparatePropertyData = null,
+                                    CoOwners = null,
                                 };
 
                                 // Crear nuevo cliente
@@ -552,20 +544,18 @@ public class ClientsController : ControllerBase
                             }
 
                             // Crear Lead para el cliente (siempre, independientemente de si el cliente es nuevo o existente)
-                            if (assignedToId.HasValue)
+                            var lead = new Lead
                             {
-                                var lead = new Lead
-                                {
-                                    ClientId = clientId,
-                                    AssignedToId = assignedToId.Value,
-                                    Status = LeadStatus.Registered,
-                                    CaptureSource = captureSourceEnum,
-                                    ProjectId = projectId,
-                                };
+                                ClientId = clientId,
+                                AssignedToId = assignedToId,
+                                Status = LeadStatus.Registered,
+                                CaptureSource = captureSourceEnum,
+                                ProjectId = projectId,
+                            };
 
-                                await _leadService.CreateLeadAsync(lead);
-                                importResult.LeadsCreated++;
-                            }
+                            await _leadService.CreateLeadAsync(lead);
+                            importResult.LeadsCreated++;
+
                             importResult.SuccessCount++;
                         }
                         catch (Exception ex)
