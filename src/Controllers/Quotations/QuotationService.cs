@@ -82,6 +82,8 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
             .ThenInclude(l => l!.Block)
             .ThenInclude(b => b.Project)
             .Where(q => q.AdvisorId == advisorId && q.Status == QuotationStatus.ACCEPTED)
+            // **NUEVO: Excluir cotizaciones que ya tienen reservas activas**
+            .Where(q => !_context.Reservations.Any(r => r.QuotationId == q.Id && r.IsActive))
             .OrderByDescending(q => q.CreatedAt)
             .ToListAsync();
 
