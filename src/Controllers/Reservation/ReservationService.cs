@@ -262,6 +262,47 @@ public class ReservationService : IReservationService
             .ToListAsync();
     }
 
+    public async Task<ReservationDto?> ChangeStatusAsync(Guid id, string status)
+    {
+        var reservation = await _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
+
+        if (
+            reservation == null
+            || !Enum.TryParse<ReservationStatus>(status, true, out var statusEnum)
+        )
+            return null;
+
+        reservation.Status = statusEnum;
+        reservation.ModifiedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        // Return the updated reservation as DTO
+        return new ReservationDto
+        {
+            Id = reservation.Id,
+            ClientId = reservation.ClientId,
+            ClientName = reservation.Client.DisplayName,
+            QuotationId = reservation.QuotationId,
+            QuotationCode = reservation.Quotation.Code,
+            ReservationDate = reservation.ReservationDate,
+            AmountPaid = reservation.AmountPaid,
+            Currency = reservation.Currency,
+            Status = reservation.Status,
+            PaymentMethod = reservation.PaymentMethod,
+            BankName = reservation.BankName,
+            ExchangeRate = reservation.ExchangeRate,
+            ExpiresAt = reservation.ExpiresAt,
+            Notified = reservation.Notified,
+            Schedule = reservation.Schedule,
+            CreatedAt = reservation.CreatedAt,
+            ModifiedAt = reservation.ModifiedAt,
+        };
+    }
+
     public async Task<byte[]> GenerateReservationPdfAsync(Guid reservationId)
     {
         var reservation = await _context

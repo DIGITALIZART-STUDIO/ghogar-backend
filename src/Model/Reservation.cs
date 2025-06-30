@@ -60,7 +60,7 @@ public class Reservation : BaseModel
     public string? Schedule { get; set; }
 
     // Navegación hacia los pagos programados
-    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+    public ICollection<Payment> Payments { get; set; } = [];
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -73,8 +73,19 @@ public enum Currency
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ReservationStatus
 {
+    /// <summary>
+    /// Reservation has been issued
+    /// </summary>
     ISSUED,
+
+    /// <summary>
+    /// Payment has been made
+    /// </summary>
     CANCELED,
+
+    /// <summary>
+    /// Reservation has been canceled
+    /// </summary>
     ANULATED,
 }
 

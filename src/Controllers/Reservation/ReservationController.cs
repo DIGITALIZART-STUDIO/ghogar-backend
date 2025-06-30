@@ -122,6 +122,31 @@ public class ReservationsController : ControllerBase
         return Ok(reservations);
     }
 
+    // PUT: api/reservations/{id}/status
+    [HttpPut("{id}/status")]
+    public async Task<ActionResult<ReservationDto>> ChangeReservationStatus(
+        Guid id,
+        ReservationStatusDto statusDto
+    )
+    {
+        try
+        {
+            var updatedReservation = await _reservationService.ChangeStatusAsync(
+                id,
+                statusDto.Status
+            );
+
+            if (updatedReservation == null)
+                return NotFound();
+
+            return Ok(updatedReservation);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al cambiar el estado de la reserva: {ex.Message}");
+        }
+    }
+
     // GET: api/reservations/{id}/pdf
     [HttpGet("{id}/pdf")]
     public async Task<ActionResult> GenerateReservationPdf(Guid id)
