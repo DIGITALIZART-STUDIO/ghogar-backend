@@ -29,6 +29,7 @@ builder
 // Configuration setup
 //
 builder.Services.Configure<CorsConfiguration>(builder.Configuration.GetSection("Cors"));
+builder.Services.Configure<ApiPeruConfiguration>(builder.Configuration.GetSection("ApiPeru"));
 
 // Database setup
 builder.Services.AddDbContext<DatabaseContext>(options =>
