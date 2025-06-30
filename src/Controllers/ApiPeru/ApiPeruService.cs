@@ -317,6 +317,14 @@ public class ApiPeruService
 
     public async Task<ResponseApiDni> GetDataByDniAsync(string dni)
     {
+        // 1. Buscar en la base de datos
+        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Dni == dni);
+        if (client != null && !string.IsNullOrWhiteSpace(client.Name))
+        {
+            return new ResponseApiDni { Numero = client.Dni!, NombreCompleto = client.Name };
+        }
+
+        // 2. Consultar API Perú solo si no existe en la base de datos
         if (string.IsNullOrWhiteSpace(_config.Token))
             throw new Exception("API Peru token is not configured");
 
