@@ -6,17 +6,18 @@ namespace GestionHogar.Dtos;
 
 public class QuotationSummaryDTO
 {
-    public Guid Id { get; set; }
-    public string Code { get; set; } = null!;
-    public string ClientName { get; set; } = null!;
+    public required Guid Id { get; set; }
+    public required string Code { get; set; } = null!;
+    public required string ClientName { get; set; } = null!;
     public string? ClientIdentification { get; set; }
     public string? ClientIdentificationType { get; set; }
-    public string ProjectName { get; set; } = null!;
-    public decimal TotalPrice { get; set; }
-    public decimal FinalPrice { get; set; }
-    public string BlockName { get; set; } = null!; // Cambiado de Block a BlockName
-    public string LotNumber { get; set; } = null!;
-    public decimal AreaAtQuotation { get; set; } // Cambiado de Area a AreaAtQuotation
+    public required string ProjectName { get; set; } = null!;
+    public required decimal TotalPrice { get; set; }
+    public required decimal FinalPrice { get; set; }
+    public required string BlockName { get; set; } = null!; // Cambiado de Block a BlockName
+    public required string LotNumber { get; set; } = null!;
+    public required decimal AreaAtQuotation { get; set; } // Cambiado de Area a AreaAtQuotation
+    public required string Currency { get; set; } // Cambiado de Area a AreaAtQuotation
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public QuotationStatus Status { get; set; }
@@ -66,6 +67,7 @@ public class QuotationSummaryDTO
             StatusText = GetStatusText(quotation.Status),
             ValidUntil = quotation.ValidUntil,
             QuotationDate = quotation.QuotationDate,
+            Currency = quotation.Currency,
             CreatedAt = quotation.CreatedAt,
         };
     }
