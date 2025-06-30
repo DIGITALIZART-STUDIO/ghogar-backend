@@ -70,16 +70,23 @@ public class LeadService : ILeadService
         return lead;
     }
 
-    public async Task<Lead?> ToggleLeadStatusAsync(Guid id)
+    public async Task<Lead?> ChangeLeadStatusAsync(
+        Guid id,
+        LeadStatus status,
+        LeadCompletionReason? reason
+    )
     {
         var lead = await _context.Leads.FirstOrDefaultAsync(l => l.Id == id && l.IsActive);
         if (lead == null)
             return null;
 
-        // Cambiar el estado: si es Registered, cambia a Attended y viceversa
-        lead.Status =
-            lead.Status == LeadStatus.Registered ? LeadStatus.Attended : LeadStatus.Registered;
+        lead.Status = status;
         lead.ModifiedAt = DateTime.UtcNow;
+
+        if (status == LeadStatus.Completed || status == LeadStatus.Canceled)
+            lead.CompletionReason = reason;
+        else
+            lead.CompletionReason = null;
 
         await _context.SaveChangesAsync();
         return lead;
@@ -91,7 +98,8 @@ public class LeadService : ILeadService
         if (lead == null)
             return false;
 
-        lead.IsActive = false;
+        lead.IsActive = false; // El lead queda inactivo
+        lead.Status = LeadStatus.Canceled; // Estado cancelado
         lead.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return true;
@@ -104,6 +112,13 @@ public class LeadService : ILeadService
             return false;
 
         lead.IsActive = true;
+
+        // Si la fecha de expiración ya pasó, lo ponemos en Expired, si no, en Registered
+        if (lead.ExpirationDate < DateTime.UtcNow)
+            lead.Status = LeadStatus.Expired;
+        else
+            lead.Status = LeadStatus.Registered;
+
         lead.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return true;
@@ -221,13 +236,26 @@ public class LeadService : ILeadService
             )
             .ToListAsync();
 
+        Console.WriteLine($"[CheckAndUpdateExpiredLeadsAsync] Fecha actual: {now}");
+        Console.WriteLine(
+            $"[CheckAndUpdateExpiredLeadsAsync] Leads encontrados para expirar: {expiredLeads.Count}"
+        );
+
         foreach (var lead in expiredLeads)
         {
+            Console.WriteLine(
+                $"Expirando Lead: Id={lead.Id}, ExpirationDate={lead.ExpirationDate}, Status={lead.Status}, IsActive={lead.IsActive}"
+            );
             lead.Status = LeadStatus.Expired;
             lead.ModifiedAt = now;
         }
 
         await _context.SaveChangesAsync();
+
+        Console.WriteLine(
+            $"[CheckAndUpdateExpiredLeadsAsync] Leads expirados actualizados: {expiredLeads.Count}"
+        );
+
         return expiredLeads.Count;
     }
 }

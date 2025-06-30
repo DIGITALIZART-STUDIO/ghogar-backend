@@ -102,23 +102,35 @@ public class LeadsController : ControllerBase
         }
     }
 
-    // PUT: api/leads/{id}/toggle-status
-    [HttpPut("{id}/toggle-status")]
-    public async Task<ActionResult<Lead>> ToggleLeadStatus(Guid id)
+    // PUT: api/leads/{id}/status
+    [HttpPut("{id}/status")]
+    public async Task<ActionResult<Lead>> UpdateLeadStatus(Guid id, LeadStatusUpdateDto dto)
     {
-        try
+        // Validaciones igual que antes...
+        if (
+            dto.Status != LeadStatus.Registered
+            && dto.Status != LeadStatus.Completed
+            && dto.Status != LeadStatus.Canceled
+        )
         {
-            var updatedLead = await _leadService.ToggleLeadStatusAsync(id);
-
-            if (updatedLead == null)
-                return NotFound($"No se encontró un lead activo con el ID: {id}");
-
-            return Ok(updatedLead);
+            return BadRequest("Solo se permite cambiar a Registered, Completed o Canceled.");
         }
-        catch (Exception ex)
+
+        if (
+            (dto.Status == LeadStatus.Completed || dto.Status == LeadStatus.Canceled)
+            && dto.CompletionReason == null
+        )
         {
-            return BadRequest(ex.Message);
+            return BadRequest(
+                "Debe especificar una razón de finalización para Completed o Canceled."
+            );
         }
+
+        var lead = await _leadService.ChangeLeadStatusAsync(id, dto.Status, dto.CompletionReason);
+        if (lead == null)
+            return NotFound();
+
+        return Ok(lead);
     }
 
     // DELETE: api/leads/{id}
@@ -205,7 +217,7 @@ public class LeadsController : ControllerBase
 
     // POST: api/leads/check-expired
     [HttpPost("check-expired")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "SuperAdmin,Manager, Admin")]
     public async Task<ActionResult<object>> CheckAndUpdateExpiredLeads()
     {
         var count = await _leadService.CheckAndUpdateExpiredLeadsAsync();

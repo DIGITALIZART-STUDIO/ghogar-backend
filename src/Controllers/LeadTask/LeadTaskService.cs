@@ -279,6 +279,34 @@ public class LeadTaskService : ILeadTaskService
 
     public async Task<LeadTask> CreateTaskAsync(LeadTask task)
     {
+        var lead = await _context.Leads.FirstOrDefaultAsync(l => l.Id == task.LeadId);
+
+        if (lead != null)
+        {
+            // Buscar si ya existe una tarea de tipo Call para este lead
+            bool hasCallTask = await _context.LeadTasks.AnyAsync(t =>
+                t.LeadId == task.LeadId && t.Type == TaskType.Call && t.IsActive
+            );
+
+            if (task.Type == TaskType.Call && lead.Status == LeadStatus.Registered)
+            {
+                // Si es la primera llamada, pasa a Attended
+                lead.Status = LeadStatus.Attended;
+                lead.ModifiedAt = DateTime.UtcNow;
+            }
+            else if (
+                hasCallTask
+                && task.Type != TaskType.Call
+                && lead.Status == LeadStatus.Attended
+            )
+            {
+                // Si ya hay una llamada y ahora se crea otra tarea distinta, pasa a InFollowUp
+                lead.Status = LeadStatus.InFollowUp;
+                lead.ModifiedAt = DateTime.UtcNow;
+            }
+            // Si no hay llamada previa y se crea una tarea distinta a llamada, no cambia el estado
+        }
+
         _context.LeadTasks.Add(task);
         await _context.SaveChangesAsync();
         return task;
@@ -290,6 +318,7 @@ public class LeadTaskService : ILeadTaskService
         if (task == null)
             return null;
 
+        // Actualiza los datos de la tarea
         task.LeadId = updatedTask.LeadId;
         task.AssignedToId = updatedTask.AssignedToId;
         task.Description = updatedTask.Description;
@@ -298,6 +327,45 @@ public class LeadTaskService : ILeadTaskService
         task.CompletedDate = updatedTask.CompletedDate;
         task.Type = updatedTask.Type;
         task.ModifiedAt = DateTime.UtcNow;
+
+        // Lógica para actualizar el estado del lead
+        var lead = await _context.Leads.FirstOrDefaultAsync(l => l.Id == task.LeadId);
+        if (lead != null && lead.IsActive)
+        {
+            // Solo cambiar si el lead está en Registered, Attended o InFollowUp
+            if (
+                lead.Status == LeadStatus.Registered
+                || lead.Status == LeadStatus.Attended
+                || lead.Status == LeadStatus.InFollowUp
+            )
+            {
+                // Tareas activas para este lead
+                var activeTasks = await _context
+                    .LeadTasks.Where(t => t.LeadId == lead.Id && t.IsActive)
+                    .ToListAsync();
+
+                bool hasCallTask = activeTasks.Any(t => t.Type == TaskType.Call);
+                bool hasOtherTask = activeTasks.Any(t => t.Type != TaskType.Call);
+
+                if (!hasCallTask)
+                {
+                    // Si ya no hay llamada, vuelve a Registered
+                    lead.Status = LeadStatus.Registered;
+                }
+                else if (hasCallTask && hasOtherTask)
+                {
+                    // Si hay llamada y otra tarea, pasa a InFollowUp
+                    lead.Status = LeadStatus.InFollowUp;
+                }
+                else if (hasCallTask && !hasOtherTask)
+                {
+                    // Solo llamada, pasa a Attended
+                    lead.Status = LeadStatus.Attended;
+                }
+
+                lead.ModifiedAt = DateTime.UtcNow;
+            }
+        }
 
         await _context.SaveChangesAsync();
         return task;

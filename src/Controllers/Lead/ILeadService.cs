@@ -17,7 +17,7 @@ public interface ILeadService
     Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status);
     Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId);
     Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();
-    Task<Lead?> ToggleLeadStatusAsync(Guid id);
+    Task<Lead?> ChangeLeadStatusAsync(Guid id, LeadStatus status, LeadCompletionReason? reason);
 
     // Nuevos métodos para reciclaje y expiración
     Task<Lead?> RecycleLeadAsync(Guid id, Guid userId);
