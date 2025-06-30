@@ -41,7 +41,7 @@ public class ClientsController : ControllerBase
 
     // GET: api/clients
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Client>>> GetClients()
+    public async Task<ActionResult<IEnumerable<GestionHogar.Model.Client>>> GetClients()
     {
         var clients = await _clientService.GetAllClientsAsync();
         return Ok(clients);
@@ -49,7 +49,7 @@ public class ClientsController : ControllerBase
 
     // GET: api/clients/{id}
     [HttpGet("{id}")]
-    public async Task<ActionResult<Client>> GetClient(Guid id)
+    public async Task<ActionResult<GestionHogar.Model.Client>> GetClient(Guid id)
     {
         var client = await _clientService.GetClientByIdAsync(id);
         if (client == null)
@@ -61,11 +61,13 @@ public class ClientsController : ControllerBase
     // POST: api/clients
 
     [HttpPost]
-    public async Task<ActionResult<Client>> CreateClient(ClientCreateDto clientDto)
+    public async Task<ActionResult<GestionHogar.Model.Client>> CreateClient(
+        ClientCreateDto clientDto
+    )
     {
         try
         {
-            var client = new Client
+            var client = new GestionHogar.Model.Client
             {
                 Name = clientDto.Name,
                 CoOwners = clientDto.CoOwners, // Cambio de CoOwner a CoOwners
@@ -97,7 +99,10 @@ public class ClientsController : ControllerBase
 
     // PUT: api/clients/{id}
     [HttpPut("{id}")]
-    public async Task<ActionResult<Client>> UpdateClient(Guid id, ClientUpdateDto clientDto)
+    public async Task<ActionResult<GestionHogar.Model.Client>> UpdateClient(
+        Guid id,
+        ClientUpdateDto clientDto
+    )
     {
         try
         {
@@ -270,7 +275,7 @@ public class ClientsController : ControllerBase
 
     // GET: api/clients/inactive
     [HttpGet("inactive")]
-    public async Task<ActionResult<IEnumerable<Client>>> GetInactiveClients()
+    public async Task<ActionResult<IEnumerable<GestionHogar.Model.Client>>> GetInactiveClients()
     {
         var clients = await _clientService.GetInactiveClientsAsync();
         return Ok(clients);
@@ -471,7 +476,7 @@ public class ClientsController : ControllerBase
                             }
 
                             // Verificar si el cliente ya existe por DNI o RUC
-                            Client existingClient = null;
+                            GestionHogar.Model.Client existingClient = null;
                             if (!string.IsNullOrEmpty(ruc))
                             {
                                 existingClient = await _clientService.GetClientByRucAsync(ruc);
@@ -512,7 +517,7 @@ public class ClientsController : ControllerBase
                                 }
 
                                 // Crear objeto de cliente
-                                var newClient = new Client
+                                var newClient = new GestionHogar.Model.Client
                                 {
                                     Name = name,
                                     Country = country, // Usar campo Country en vez de CoOwner
