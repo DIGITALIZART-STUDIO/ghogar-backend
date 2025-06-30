@@ -20,4 +20,7 @@ public class Payment : BaseModel
     [Required]
     [Column(TypeName = "decimal(18,2)")]
     public decimal AmountDue { get; set; }
+
+    // Estado del pago
+    public bool Paid { get; set; } = false;
 }

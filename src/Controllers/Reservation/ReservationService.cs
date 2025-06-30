@@ -7,18 +7,11 @@ using QuestPDF.Infrastructure;
 
 namespace GestionHogar.Services;
 
-public class ReservationService : IReservationService
+public class ReservationService(DatabaseContext context) : IReservationService
 {
-    private readonly DatabaseContext _context;
-
-    public ReservationService(DatabaseContext context)
-    {
-        _context = context;
-    }
-
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
     {
-        return await _context
+        return await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.IsActive)
@@ -47,7 +40,7 @@ public class ReservationService : IReservationService
 
     public async Task<ReservationDto?> GetReservationByIdAsync(Guid id)
     {
-        return await _context
+        return await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.Id == id && r.IsActive)
@@ -77,14 +70,12 @@ public class ReservationService : IReservationService
     public async Task<Reservation> CreateReservationAsync(ReservationCreateDto reservationDto)
     {
         // Verificar que la cotización existe y obtener el lead asociado
-        var quotation = await _context
-            .Quotations.Include(q => q.Lead)
-            .ThenInclude(l => l.Client)
-            .FirstOrDefaultAsync(q => q.Id == reservationDto.QuotationId);
-        if (quotation == null)
-        {
-            throw new ArgumentException("La cotización especificada no existe");
-        }
+        var quotation =
+            await context
+                .Quotations.Include(q => q.Lead)
+                .ThenInclude(l => l.Client)
+                .FirstOrDefaultAsync(q => q.Id == reservationDto.QuotationId)
+            ?? throw new ArgumentException("La cotización especificada no existe");
 
         // Verificar que el lead existe
         if (quotation.Lead == null)
@@ -102,7 +93,7 @@ public class ReservationService : IReservationService
         var client = quotation.Lead.Client;
 
         // Verificar que no exista ya una reserva activa para esta cotización
-        var existingReservation = await _context.Reservations.FirstOrDefaultAsync(r =>
+        var existingReservation = await context.Reservations.FirstOrDefaultAsync(r =>
             r.QuotationId == reservationDto.QuotationId && r.IsActive
         );
         if (existingReservation != null)
@@ -128,8 +119,8 @@ public class ReservationService : IReservationService
             Quotation = quotation,
         };
 
-        _context.Reservations.Add(reservation);
-        await _context.SaveChangesAsync();
+        context.Reservations.Add(reservation);
+        await context.SaveChangesAsync();
         return reservation;
     }
 
@@ -138,7 +129,7 @@ public class ReservationService : IReservationService
         ReservationUpdateDto reservationDto
     )
     {
-        var reservation = await _context
+        var reservation = await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
@@ -162,7 +153,7 @@ public class ReservationService : IReservationService
         reservation.Schedule = reservationDto.Schedule;
         reservation.ModifiedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
         // Return the updated reservation as DTO
         return new ReservationDto
@@ -189,7 +180,7 @@ public class ReservationService : IReservationService
 
     public async Task<bool> DeleteReservationAsync(Guid id)
     {
-        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
+        var reservation = await context.Reservations.FirstOrDefaultAsync(r =>
             r.Id == id && r.IsActive
         );
         if (reservation == null)
@@ -198,13 +189,13 @@ public class ReservationService : IReservationService
         // Borrado lógico
         reservation.IsActive = false;
         reservation.ModifiedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
         return true;
     }
 
     public async Task<IEnumerable<ReservationDto>> GetReservationsByClientIdAsync(Guid clientId)
     {
-        return await _context
+        return await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.ClientId == clientId && r.IsActive)
@@ -235,7 +226,7 @@ public class ReservationService : IReservationService
         Guid quotationId
     )
     {
-        return await _context
+        return await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.QuotationId == quotationId && r.IsActive)
@@ -264,7 +255,7 @@ public class ReservationService : IReservationService
 
     public async Task<ReservationDto?> ChangeStatusAsync(Guid id, string status)
     {
-        var reservation = await _context
+        var reservation = await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
@@ -278,7 +269,7 @@ public class ReservationService : IReservationService
         reservation.Status = statusEnum;
         reservation.ModifiedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
         // Return the updated reservation as DTO
         return new ReservationDto
@@ -305,7 +296,7 @@ public class ReservationService : IReservationService
 
     public async Task<byte[]> GenerateReservationPdfAsync(Guid reservationId)
     {
-        var reservation = await _context
+        var reservation = await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .ThenInclude(q => q.Lot)
