@@ -1,11 +1,9 @@
 using System.Text;
-using System.Text.Json.Serialization;
 using GestionHogar.Configuration;
 using GestionHogar.Controllers;
 using GestionHogar.Controllers.ApiPeru;
 using GestionHogar.Model;
 using GestionHogar.Utils;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -177,6 +175,7 @@ var modules = new IModule[]
     new LotModule(),
     new ReservationModule(),
     new ExchangeRateModule(),
+    new PaymentModule(),
     new ApiPeruModule(),
 };
 foreach (var module in modules)

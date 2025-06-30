@@ -89,7 +89,8 @@ public class QuotationsController : ControllerBase
 
     [HttpGet("advisor/accepted/{advisorId:guid}")]
     public async Task<
-        ActionResult<IEnumerable<QuotationSummaryDTO>>> GetAcceptedQuotationsByAdvisor(Guid advisorId)
+        ActionResult<IEnumerable<QuotationSummaryDTO>>
+    > GetAcceptedQuotationsByAdvisor(Guid advisorId)
     {
         try
         {
