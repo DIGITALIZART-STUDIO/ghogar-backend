@@ -11,6 +11,36 @@ public class WordTemplateService
         Dictionary<string, string> placeholders
     )
     {
+        // FIXME: move to a proper place
+        var provisionalPlaceholders = new Dictionary<string, string>()
+        {
+            { "{nro_contrato}", "" },
+            { "{honorifico_cliente}", "" },
+            { "{nombre_cliente}", "" },
+            { "{dni_cliente}", "" },
+            { "{estado_civil_cliente}", "" },
+            { "{ocupacion_cliente}", "" },
+            { "{domicilio_cliente}", "" },
+            { "{distrito_cliente}", "" },
+            { "{provincia_cliente}", "" },
+            { "{departamento_cliente}", "" },
+            { "{nombre_proyecto}", "" },
+            { "{precio_dolares_metro_cuadrado}", "" },
+            { "{area_terreno}", "" },
+            { "{precio_departamento_dolares}", "" },
+            { "{precio_departamento_dolares_letras}", "" },
+            { "{precio_cochera_dolares}", "" },
+            { "{precio_cochera_dolares_letras}", "" },
+            { "{area_cochera}", "" },
+            { "{nro_signada_cochera}", "" },
+            { "{precio_total_dolares}", "" },
+            { "{precio_total_dolares_letras}", "" },
+            { "{precio_inicial_dolares}", "" },
+            { "{precio_inicial_dolares_letras}", "" },
+            { "{fecha_suscripcion_contrato_letras}", "" },
+            { "{}", "" },
+        };
+
         try
         {
             using var inputStream = new MemoryStream(docxBytes);
@@ -25,13 +55,13 @@ public class WordTemplateService
 
             if (document.MainDocumentPart == null)
             {
-                return (Array.Empty<byte>(), "Document does not contain a main document part");
+                return ([], "Document does not contain a main document part");
             }
 
             var body = document.MainDocumentPart.Document.Body;
             if (body == null)
             {
-                return (Array.Empty<byte>(), "Document does not contain a body");
+                return ([], "Document does not contain a body");
             }
 
             // Replace placeholders in all text runs
@@ -63,7 +93,7 @@ public class WordTemplateService
         }
         catch (Exception ex)
         {
-            return (Array.Empty<byte>(), $"Error processing document: {ex.Message}");
+            return ([], $"Error processing document: {ex.Message}");
         }
     }
 }
