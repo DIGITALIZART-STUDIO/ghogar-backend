@@ -1,16 +1,16 @@
-namespace PeruControl.Services;
+namespace GestionHogar.Services;
 
-public class LibreOfficeConverterService(ILogger<LibreOfficeConverterService> logger)
+public class SofficeConverterService(ILogger<SofficeConverterService> logger)
 {
     // writes to a temp file, invokes soffice on it, returns the
     // converted bytes, and cleans up
-    public (byte[], string?) ConvertToPdf(byte[] inputBytes, string imputExtension)
+    public (byte[], string?) ConvertToPdf(byte[] inputBytes, string inputExtension)
     {
         var unixms = DateTimeOffset.Now.ToUnixTimeMilliseconds();
         var tempDir = Path.Combine(Path.GetTempPath(), "gen_files");
         Directory.CreateDirectory(tempDir);
 
-        var tempFilePath = Path.Combine(tempDir, $"file_{unixms}.{imputExtension}");
+        var tempFilePath = Path.Combine(tempDir, $"file_{unixms}.{inputExtension}");
         var pdfFilePath = Path.Combine(tempDir, $"file_{unixms}.pdf");
         try
         {
@@ -118,4 +118,3 @@ public class LibreOfficeConverterService(ILogger<LibreOfficeConverterService> lo
         }
     }
 }
-

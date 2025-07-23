@@ -1,4 +1,3 @@
-using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
@@ -7,43 +6,13 @@ namespace GestionHogar.Services;
 public class WordTemplateService
 {
     public (byte[], string?) ReplacePlaceholders(
-        byte[] docxBytes,
+        Stream docxStream,
         Dictionary<string, string> placeholders
     )
     {
-        // FIXME: move to a proper place
-        var provisionalPlaceholders = new Dictionary<string, string>()
-        {
-            { "{nro_contrato}", "" },
-            { "{honorifico_cliente}", "" },
-            { "{nombre_cliente}", "" },
-            { "{dni_cliente}", "" },
-            { "{estado_civil_cliente}", "" },
-            { "{ocupacion_cliente}", "" },
-            { "{domicilio_cliente}", "" },
-            { "{distrito_cliente}", "" },
-            { "{provincia_cliente}", "" },
-            { "{departamento_cliente}", "" },
-            { "{nombre_proyecto}", "" },
-            { "{precio_dolares_metro_cuadrado}", "" },
-            { "{area_terreno}", "" },
-            { "{precio_departamento_dolares}", "" },
-            { "{precio_departamento_dolares_letras}", "" },
-            { "{precio_cochera_dolares}", "" },
-            { "{precio_cochera_dolares_letras}", "" },
-            { "{area_cochera}", "" },
-            { "{nro_signada_cochera}", "" },
-            { "{precio_total_dolares}", "" },
-            { "{precio_total_dolares_letras}", "" },
-            { "{precio_inicial_dolares}", "" },
-            { "{precio_inicial_dolares_letras}", "" },
-            { "{fecha_suscripcion_contrato_letras}", "" },
-            { "{}", "" },
-        };
-
         try
         {
-            using var inputStream = new MemoryStream(docxBytes);
+            using var inputStream = docxStream;
             using var outputStream = new MemoryStream();
 
             // Copy the original document to the output stream
@@ -88,6 +57,7 @@ public class WordTemplateService
 
             // Save changes
             document.MainDocumentPart.Document.Save();
+            document.Save();
 
             return (outputStream.ToArray(), null);
         }
