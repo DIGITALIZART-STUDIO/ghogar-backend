@@ -38,13 +38,14 @@ public class ReservationService(DatabaseContext context) : IReservationService
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<ReservationDto>> GetAllCanceledReservationsAsync()
+    public async Task<IEnumerable<ReservationWithPaymentsDto>> GetAllCanceledReservationsAsync()
     {
         return await context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
+            .Include(r => r.Payments)
             .Where(r => r.IsActive && r.Status == ReservationStatus.CANCELED)
-            .Select(r => new ReservationDto
+            .Select(r => new ReservationWithPaymentsDto
             {
                 Id = r.Id,
                 ClientId = r.ClientId,
@@ -63,6 +64,12 @@ public class ReservationService(DatabaseContext context) : IReservationService
                 Schedule = r.Schedule,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
+                PaymentCount = r.Payments.Count(p => p.Paid), // Solo pagos realizados
+                NextPaymentDueDate = r
+                    .Payments.Where(p => !p.Paid)
+                    .OrderBy(p => p.DueDate)
+                    .Select(p => (DateTime?)p.DueDate)
+                    .FirstOrDefault(),
             })
             .ToListAsync();
     }

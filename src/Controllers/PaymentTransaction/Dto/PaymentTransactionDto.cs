@@ -46,3 +46,15 @@ public class PaymentDTO
     public DateTime DueDate { get; set; }
     public bool Paid { get; set; }
 }
+
+public class PaymentQuotaSimpleDTO
+{
+    public Guid Id { get; set; }
+    public Guid ReservationId { get; set; }
+    public string ClientName { get; set; } = string.Empty;
+    public string QuotationCode { get; set; } = string.Empty;
+    public decimal AmountDue { get; set; }
+    public DateTime DueDate { get; set; }
+    public bool Paid { get; set; }
+    public Currency Currency { get; set; }
+}

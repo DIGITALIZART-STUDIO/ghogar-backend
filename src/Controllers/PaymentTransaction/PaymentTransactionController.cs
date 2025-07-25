@@ -54,6 +54,44 @@ public class PaymentTransactionController : ControllerBase
         }
     }
 
+    [HttpGet("by-reservation/{reservationId:guid}")]
+    public async Task<ActionResult<IEnumerable<PaymentTransactionDTO>>> GetByReservationId(
+        Guid reservationId
+    )
+    {
+        try
+        {
+            var result = await _service.GetByReservationIdAsync(reservationId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener transacciones por ReservationId");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    [HttpGet("quota-status/by-reservation/{reservationId:guid}/{excludeTransactionId:guid?}")]
+    public async Task<ActionResult<IEnumerable<PaymentQuotaSimpleDTO>>> GetQuotaStatus(
+        Guid reservationId,
+        Guid? excludeTransactionId
+    )
+    {
+        try
+        {
+            var result = await _service.GetQuotaStatusByReservationAsync(
+                reservationId,
+                excludeTransactionId
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener estado de cuotas");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     [HttpPost]
     public async Task<ActionResult<PaymentTransactionDTO>> Create(PaymentTransactionCreateDTO dto)
     {
