@@ -16,6 +16,7 @@ public interface ILeadService
     Task<IEnumerable<Lead>> GetLeadsByAssignedToIdAsync(Guid userId);
     Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status);
     Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId);
+    Task<IEnumerable<LeadSummaryDto>> GetAvailableLeadsForQuotationByUserAsync(Guid assignedToId);
     Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();
     Task<Lead?> ChangeLeadStatusAsync(Guid id, LeadStatus status, LeadCompletionReason? reason);
 

@@ -26,6 +26,15 @@ public class ReservationsController : ControllerBase
         return Ok(reservations);
     }
 
+    [HttpGet("canceled")]
+    public async Task<
+        ActionResult<IEnumerable<ReservationWithPaymentsDto>>
+    > GetAllCanceledReservations()
+    {
+        var reservations = await _reservationService.GetAllCanceledReservationsAsync();
+        return Ok(reservations);
+    }
+
     // GET: api/reservations/{id}
     [HttpGet("{id}")]
     public async Task<ActionResult<ReservationDto>> GetReservation(Guid id)

@@ -240,4 +240,46 @@ public class UsersController(
 
         return Ok();
     }
+
+    [EndpointSummary("Update Profile Password")]
+    [EndpointDescription("Allows the authenticated user to update their password.")]
+    [Authorize]
+    [HttpPut("profile/password")]
+    public async Task<ActionResult> UpdateProfilePassword([FromBody] UpdateProfilePasswordDTO dto)
+    {
+        // Validaciones básicas
+        if (
+            string.IsNullOrWhiteSpace(dto.CurrentPassword)
+            || string.IsNullOrWhiteSpace(dto.NewPassword)
+            || string.IsNullOrWhiteSpace(dto.ConfirmPassword)
+        )
+            return BadRequest("Todos los campos son obligatorios.");
+
+        if (dto.NewPassword != dto.ConfirmPassword)
+            return BadRequest("La nueva contraseña y la confirmación no coinciden.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId == null)
+            return Unauthorized();
+
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null)
+            return Unauthorized();
+
+        // Verifica la contraseña actual
+        var passwordCheck = await userManager.CheckPasswordAsync(user, dto.CurrentPassword);
+        if (!passwordCheck)
+            return BadRequest("La contraseña actual es incorrecta.");
+
+        // Cambia la contraseña
+        var result = await userManager.ChangePasswordAsync(
+            user,
+            dto.CurrentPassword,
+            dto.NewPassword
+        );
+        if (!result.Succeeded)
+            return BadRequest(result.Errors.Select(e => e.Description));
+
+        return Ok(new { message = "Contraseña actualizada correctamente." });
+    }
 }

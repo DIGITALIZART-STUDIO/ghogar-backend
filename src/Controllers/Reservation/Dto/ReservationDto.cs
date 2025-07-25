@@ -23,3 +23,9 @@ public class ReservationDto
     public DateTime CreatedAt { get; set; }
     public DateTime ModifiedAt { get; set; }
 }
+
+public class ReservationWithPaymentsDto : ReservationDto
+{
+    public int PaymentCount { get; set; }
+    public DateTime? NextPaymentDueDate { get; set; }
+}
