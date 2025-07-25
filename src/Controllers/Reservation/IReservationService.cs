@@ -6,6 +6,7 @@ namespace GestionHogar.Services;
 public interface IReservationService
 {
     Task<IEnumerable<ReservationDto>> GetAllReservationsAsync();
+    Task<IEnumerable<ReservationDto>> GetAllCanceledReservationsAsync();
     Task<ReservationDto?> GetReservationByIdAsync(Guid id);
     Task<Reservation> CreateReservationAsync(ReservationCreateDto reservationDto);
     Task<ReservationDto?> UpdateReservationAsync(Guid id, ReservationUpdateDto reservationDto);

@@ -38,6 +38,35 @@ public class ReservationService(DatabaseContext context) : IReservationService
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<ReservationDto>> GetAllCanceledReservationsAsync()
+    {
+        return await context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .Where(r => r.IsActive && r.Status == ReservationStatus.CANCELED)
+            .Select(r => new ReservationDto
+            {
+                Id = r.Id,
+                ClientId = r.ClientId,
+                ClientName = r.Client.DisplayName,
+                QuotationId = r.QuotationId,
+                QuotationCode = r.Quotation.Code,
+                ReservationDate = r.ReservationDate,
+                AmountPaid = r.AmountPaid,
+                Currency = r.Currency,
+                Status = r.Status,
+                PaymentMethod = r.PaymentMethod,
+                BankName = r.BankName,
+                ExchangeRate = r.ExchangeRate,
+                ExpiresAt = r.ExpiresAt,
+                Notified = r.Notified,
+                Schedule = r.Schedule,
+                CreatedAt = r.CreatedAt,
+                ModifiedAt = r.ModifiedAt,
+            })
+            .ToListAsync();
+    }
+
     public async Task<ReservationDto?> GetReservationByIdAsync(Guid id)
     {
         return await context
