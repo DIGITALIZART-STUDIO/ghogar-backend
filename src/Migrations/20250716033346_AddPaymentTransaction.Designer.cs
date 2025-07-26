@@ -3,6 +3,7 @@ using System;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestionHogar.Migrations
 {
     [DbContext(typeof(DatabaseContext))]
-    partial class DatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20250716033346_AddPaymentTransaction")]
+    partial class AddPaymentTransaction
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -325,56 +328,14 @@ namespace GestionHogar.Migrations
                     b.Property<bool>("Paid")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid?>("PaymentTransactionId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid>("ReservationId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PaymentTransactionId");
-
                     b.HasIndex("ReservationId");
 
                     b.ToTable("Payments");
-                });
-
-            modelBuilder.Entity("GestionHogar.Model.PaymentTransaction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AmountPaid")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("PaymentDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("PaymentMethod")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ReferenceNumber")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("ReservationId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReservationId");
-
-                    b.ToTable("PaymentTransactions");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.Project", b =>
@@ -845,24 +806,11 @@ namespace GestionHogar.Migrations
 
             modelBuilder.Entity("GestionHogar.Model.Payment", b =>
                 {
-                    b.HasOne("GestionHogar.Model.PaymentTransaction", null)
-                        .WithMany("Payments")
-                        .HasForeignKey("PaymentTransactionId");
-
                     b.HasOne("GestionHogar.Model.Reservation", "Reservation")
                         .WithMany("Payments")
                         .HasForeignKey("ReservationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Reservation");
-                });
-
-            modelBuilder.Entity("GestionHogar.Model.PaymentTransaction", b =>
-                {
-                    b.HasOne("GestionHogar.Model.Reservation", "Reservation")
-                        .WithMany()
-                        .HasForeignKey("ReservationId");
 
                     b.Navigation("Reservation");
                 });
@@ -967,11 +915,6 @@ namespace GestionHogar.Migrations
             modelBuilder.Entity("GestionHogar.Model.Block", b =>
                 {
                     b.Navigation("Lots");
-                });
-
-            modelBuilder.Entity("GestionHogar.Model.PaymentTransaction", b =>
-                {
-                    b.Navigation("Payments");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.Project", b =>

@@ -51,3 +51,10 @@ public class UserUpdatePasswordDTO
     [MinLength(8, ErrorMessage = "La contraseña debe tener al menos 8 caracteres")]
     public required string NewPassword { get; set; }
 }
+
+public class UpdateProfilePasswordDTO
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
+}

@@ -40,6 +40,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<Payment> Payments { get; set; } = null!;
 
+    public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

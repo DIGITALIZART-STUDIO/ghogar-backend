@@ -292,4 +292,13 @@ public class LeadsController : ControllerBase
         var leads = await _leadService.GetAssignedLeadsSummaryAsync(assignedToId);
         return Ok(leads);
     }
+
+    [HttpGet("assigned/{assignedToId:guid}/available-for-quotation")]
+    public async Task<
+        ActionResult<IEnumerable<LeadSummaryDto>>
+    > GetAvailableLeadsForQuotationByUser(Guid assignedToId)
+    {
+        var leads = await _leadService.GetAvailableLeadsForQuotationByUserAsync(assignedToId);
+        return Ok(leads);
+    }
 }

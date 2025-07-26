@@ -147,6 +147,7 @@ public class LeadService : ILeadService
     {
         return await _context
             .Leads.Where(l => l.IsActive && l.AssignedToId == userId)
+            .OrderByDescending(l => l.CreatedAt)
             .Include(l => l.Client)
             .Include(l => l.Project)
             .ToListAsync();
@@ -176,14 +177,44 @@ public class LeadService : ILeadService
                     ur.UserId == u.Id && ur.RoleId == salesAdvisorRoleId
                 )
             )
-            .Select(u => new UserSummaryDto { Id = u.Id, UserName = u.UserName })
+            .Select(u => new UserSummaryDto { Id = u.Id, UserName = u.Name })
             .ToListAsync();
     }
 
+    /**
+     * Método para obtener un resumen de los leads asignados a un usuario.
+     * Incluye información del cliente y proyecto.
+     */
     public async Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId)
     {
         var leads = await _context
             .Leads.Where(l => l.IsActive && l.AssignedToId == assignedToId)
+            .Include(l => l.Client)
+            .Include(l => l.Project)
+            .ToListAsync();
+
+        return leads.Select(LeadSummaryDto.FromEntity);
+    }
+
+    /**
+     * Método para obtener leads disponibles para cotización de un usuario específico.
+     * Excluye leads cancelados, expirados, completados o que ya tengan una cotización aceptada.
+     */
+    public async Task<IEnumerable<LeadSummaryDto>> GetAvailableLeadsForQuotationByUserAsync(
+        Guid assignedToId
+    )
+    {
+        var leads = await _context
+            .Leads.Where(l =>
+                l.IsActive
+                && l.AssignedToId == assignedToId
+                && l.Status != LeadStatus.Canceled
+                && l.Status != LeadStatus.Expired
+                && l.Status != LeadStatus.Completed
+                && !_context.Quotations.Any(q =>
+                    q.LeadId == l.Id && q.Status == QuotationStatus.ACCEPTED
+                )
+            )
             .Include(l => l.Client)
             .Include(l => l.Project)
             .ToListAsync();
