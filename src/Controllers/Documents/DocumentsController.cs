@@ -7,10 +7,9 @@ namespace GestionHogar.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class ContractController(
+public class DocumentsController(
     WordTemplateService wordTemplateService,
-    SofficeConverterService sofficeConverterService,
-    ILogger<ContractController> logger
+    SofficeConverterService sofficeConverterService
 ) : ControllerBase
 {
     [HttpGet("{id:guid}/pdf")]
