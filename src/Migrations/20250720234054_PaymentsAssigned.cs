@@ -15,21 +15,31 @@ namespace GestionHogar.Migrations
                 name: "PaymentTransactionId",
                 table: "Payments",
                 type: "uuid",
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.CreateTable(
                 name: "PaymentTransactions",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    PaymentDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    PaymentDate = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
                     AmountPaid = table.Column<decimal>(type: "numeric(18,2)", nullable: false),
                     ReservationId = table.Column<Guid>(type: "uuid", nullable: true),
                     PaymentMethod = table.Column<int>(type: "integer", nullable: false),
                     ReferenceNumber = table.Column<string>(type: "text", nullable: true),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ModifiedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    CreatedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
+                    ModifiedAt = table.Column<DateTime>(
+                        type: "timestamp with time zone",
+                        nullable: false
+                    ),
                 },
                 constraints: table =>
                 {
@@ -38,25 +48,30 @@ namespace GestionHogar.Migrations
                         name: "FK_PaymentTransactions_Reservations_ReservationId",
                         column: x => x.ReservationId,
                         principalTable: "Reservations",
-                        principalColumn: "Id");
-                });
+                        principalColumn: "Id"
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Payments_PaymentTransactionId",
                 table: "Payments",
-                column: "PaymentTransactionId");
+                column: "PaymentTransactionId"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_PaymentTransactions_ReservationId",
                 table: "PaymentTransactions",
-                column: "ReservationId");
+                column: "ReservationId"
+            );
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Payments_PaymentTransactions_PaymentTransactionId",
                 table: "Payments",
                 column: "PaymentTransactionId",
                 principalTable: "PaymentTransactions",
-                principalColumn: "Id");
+                principalColumn: "Id"
+            );
         }
 
         /// <inheritdoc />
@@ -64,18 +79,14 @@ namespace GestionHogar.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_Payments_PaymentTransactions_PaymentTransactionId",
-                table: "Payments");
+                table: "Payments"
+            );
 
-            migrationBuilder.DropTable(
-                name: "PaymentTransactions");
+            migrationBuilder.DropTable(name: "PaymentTransactions");
 
-            migrationBuilder.DropIndex(
-                name: "IX_Payments_PaymentTransactionId",
-                table: "Payments");
+            migrationBuilder.DropIndex(name: "IX_Payments_PaymentTransactionId", table: "Payments");
 
-            migrationBuilder.DropColumn(
-                name: "PaymentTransactionId",
-                table: "Payments");
+            migrationBuilder.DropColumn(name: "PaymentTransactionId", table: "Payments");
         }
     }
 }
