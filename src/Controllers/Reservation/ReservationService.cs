@@ -7,11 +7,20 @@ using QuestPDF.Infrastructure;
 
 namespace GestionHogar.Services;
 
-public class ReservationService(DatabaseContext context) : IReservationService
+public class ReservationService : IReservationService
 {
+    private readonly DatabaseContext _context;
+    private readonly PaginationService _paginationService;
+
+    public ReservationService(DatabaseContext context, PaginationService paginationService)
+    {
+        _context = context;
+        _paginationService = paginationService;
+    }
+
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
     {
-        return await context
+        return await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.IsActive)
@@ -40,7 +49,7 @@ public class ReservationService(DatabaseContext context) : IReservationService
 
     public async Task<IEnumerable<ReservationWithPaymentsDto>> GetAllCanceledReservationsAsync()
     {
-        return await context
+        return await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Include(r => r.Payments)
@@ -74,9 +83,48 @@ public class ReservationService(DatabaseContext context) : IReservationService
             .ToListAsync();
     }
 
+    public async Task<
+        PaginatedResponseV2<ReservationWithPaymentsDto>
+    > GetAllCanceledReservationsPaginatedAsync(int page, int pageSize)
+    {
+        var query = _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .Include(r => r.Payments)
+            .Where(r => r.IsActive && r.Status == ReservationStatus.CANCELED)
+            .Select(r => new ReservationWithPaymentsDto
+            {
+                Id = r.Id,
+                ClientId = r.ClientId,
+                ClientName = r.Client.DisplayName,
+                QuotationId = r.QuotationId,
+                QuotationCode = r.Quotation.Code,
+                ReservationDate = r.ReservationDate,
+                AmountPaid = r.AmountPaid,
+                Currency = r.Currency,
+                Status = r.Status,
+                PaymentMethod = r.PaymentMethod,
+                BankName = r.BankName,
+                ExchangeRate = r.ExchangeRate,
+                ExpiresAt = r.ExpiresAt,
+                Notified = r.Notified,
+                Schedule = r.Schedule,
+                CreatedAt = r.CreatedAt,
+                ModifiedAt = r.ModifiedAt,
+                PaymentCount = r.Payments.Count(p => p.Paid),
+                NextPaymentDueDate = r
+                    .Payments.Where(p => !p.Paid)
+                    .OrderBy(p => p.DueDate)
+                    .Select(p => (DateTime?)p.DueDate)
+                    .FirstOrDefault(),
+            });
+
+        return await _paginationService.PaginateAsync(query, page, pageSize);
+    }
+
     public async Task<ReservationDto?> GetReservationByIdAsync(Guid id)
     {
-        return await context
+        return await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.Id == id && r.IsActive)
@@ -107,7 +155,7 @@ public class ReservationService(DatabaseContext context) : IReservationService
     {
         // Verificar que la cotización existe y obtener el lead asociado
         var quotation =
-            await context
+            await _context
                 .Quotations.Include(q => q.Lead)
                 .ThenInclude(l => l.Client)
                 .FirstOrDefaultAsync(q => q.Id == reservationDto.QuotationId)
@@ -129,7 +177,7 @@ public class ReservationService(DatabaseContext context) : IReservationService
         var client = quotation.Lead.Client;
 
         // Verificar que no exista ya una reserva activa para esta cotización
-        var existingReservation = await context.Reservations.FirstOrDefaultAsync(r =>
+        var existingReservation = await _context.Reservations.FirstOrDefaultAsync(r =>
             r.QuotationId == reservationDto.QuotationId && r.IsActive
         );
         if (existingReservation != null)
@@ -155,8 +203,8 @@ public class ReservationService(DatabaseContext context) : IReservationService
             Quotation = quotation,
         };
 
-        context.Reservations.Add(reservation);
-        await context.SaveChangesAsync();
+        _context.Reservations.Add(reservation);
+        await _context.SaveChangesAsync();
         return reservation;
     }
 
@@ -165,7 +213,7 @@ public class ReservationService(DatabaseContext context) : IReservationService
         ReservationUpdateDto reservationDto
     )
     {
-        var reservation = await context
+        var reservation = await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
@@ -189,7 +237,7 @@ public class ReservationService(DatabaseContext context) : IReservationService
         reservation.Schedule = reservationDto.Schedule;
         reservation.ModifiedAt = DateTime.UtcNow;
 
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
 
         // Return the updated reservation as DTO
         return new ReservationDto
@@ -216,7 +264,7 @@ public class ReservationService(DatabaseContext context) : IReservationService
 
     public async Task<bool> DeleteReservationAsync(Guid id)
     {
-        var reservation = await context.Reservations.FirstOrDefaultAsync(r =>
+        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
             r.Id == id && r.IsActive
         );
         if (reservation == null)
@@ -225,13 +273,13 @@ public class ReservationService(DatabaseContext context) : IReservationService
         // Borrado lógico
         reservation.IsActive = false;
         reservation.ModifiedAt = DateTime.UtcNow;
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
         return true;
     }
 
     public async Task<IEnumerable<ReservationDto>> GetReservationsByClientIdAsync(Guid clientId)
     {
-        return await context
+        return await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.ClientId == clientId && r.IsActive)
@@ -262,7 +310,7 @@ public class ReservationService(DatabaseContext context) : IReservationService
         Guid quotationId
     )
     {
-        return await context
+        return await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Where(r => r.QuotationId == quotationId && r.IsActive)
@@ -291,7 +339,7 @@ public class ReservationService(DatabaseContext context) : IReservationService
 
     public async Task<ReservationDto?> ChangeStatusAsync(Guid id, string status)
     {
-        var reservation = await context
+        var reservation = await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
@@ -318,7 +366,7 @@ public class ReservationService(DatabaseContext context) : IReservationService
         // TODO: Implement logic for when status goes from CANCELED to any other
         // This should handle cleanup/reversal of payment generation if needed
 
-        await context.SaveChangesAsync();
+        await _context.SaveChangesAsync();
 
         // Return the updated reservation as DTO
         return new ReservationDto
@@ -384,14 +432,14 @@ public class ReservationService(DatabaseContext context) : IReservationService
         }
 
         // Add all payments to the context
-        context.Payments.AddRange(payments);
+        _context.Payments.AddRange(payments);
 
         return Task.CompletedTask;
     }
 
     public async Task<byte[]> GenerateReservationPdfAsync(Guid reservationId)
     {
-        var reservation = await context
+        var reservation = await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .ThenInclude(q => q.Lot)

@@ -7,6 +7,10 @@ public interface IReservationService
 {
     Task<IEnumerable<ReservationDto>> GetAllReservationsAsync();
     Task<IEnumerable<ReservationWithPaymentsDto>> GetAllCanceledReservationsAsync();
+    Task<PaginatedResponseV2<ReservationWithPaymentsDto>> GetAllCanceledReservationsPaginatedAsync(
+        int page,
+        int pageSize
+    );
     Task<ReservationDto?> GetReservationByIdAsync(Guid id);
     Task<Reservation> CreateReservationAsync(ReservationCreateDto reservationDto);
     Task<ReservationDto?> UpdateReservationAsync(Guid id, ReservationUpdateDto reservationDto);
