@@ -179,6 +179,7 @@ var modules = new IModule[]
     new ApiPeruModule(),
     new PaymentTransactionModule(),
     new PaginationModule(),
+    new DashboardModule(),
 };
 foreach (var module in modules)
 {
