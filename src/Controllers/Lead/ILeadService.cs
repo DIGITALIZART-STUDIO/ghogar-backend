@@ -34,6 +34,9 @@ public interface ILeadService
     Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();
     Task<Lead?> ChangeLeadStatusAsync(Guid id, LeadStatus status, LeadCompletionReason? reason);
 
+    // Método para generar código único de Lead
+    Task<string> GenerateLeadCodeAsync();
+
     // Nuevos métodos para reciclaje y expiración
     Task<Lead?> RecycleLeadAsync(Guid id, Guid userId);
     Task<IEnumerable<Lead>> GetExpiredLeadsAsync();

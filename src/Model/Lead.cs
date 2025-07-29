@@ -37,6 +37,10 @@ public class Lead : IEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
+    // Código único de cotización
+    [Required]
+    public required string Code { get; set; }
+
     // Relación con el cliente
     public Guid? ClientId { get; set; }
 

@@ -560,9 +560,13 @@ public class ClientsController : ControllerBase
                                 importResult.ClientsCreated++;
                             }
 
+                            // Generar el código único para el lead antes de crear el objeto
+                            var leadCode = await _leadService.GenerateLeadCodeAsync();
+
                             // Crear Lead para el cliente (siempre, independientemente de si el cliente es nuevo o existente)
                             var lead = new Lead
                             {
+                                Code = leadCode, // Ahora sí cumple con el required
                                 ClientId = clientId,
                                 AssignedToId = assignedToId,
                                 Status = LeadStatus.Registered,

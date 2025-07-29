@@ -13,6 +13,31 @@ public class LeadService : ILeadService
         _context = context;
     }
 
+    public async Task<string> GenerateLeadCodeAsync()
+    {
+        // Formato: LEAD-YYYY-XXXXX donde YYYY es el año actual y XXXXX es un número secuencial
+        int year = DateTime.UtcNow.Year;
+        var yearPrefix = $"LEAD-{year}-";
+
+        // Buscar el último código generado este año
+        var lastLead = await _context
+            .Leads.Where(l => l.Code.StartsWith(yearPrefix))
+            .OrderByDescending(l => l.Code)
+            .FirstOrDefaultAsync();
+
+        int sequence = 1;
+        if (lastLead != null)
+        {
+            var parts = lastLead.Code.Split('-');
+            if (parts.Length == 3 && int.TryParse(parts[2], out int lastSequence))
+            {
+                sequence = lastSequence + 1;
+            }
+        }
+
+        return $"{yearPrefix}{sequence:D5}";
+    }
+
     public async Task<IEnumerable<Lead>> GetAllLeadsAsync()
     {
         return await _context
@@ -49,6 +74,9 @@ public class LeadService : ILeadService
 
     public async Task<Lead> CreateLeadAsync(Lead lead)
     {
+        // Generar el código único para el lead
+        lead.Code = await GenerateLeadCodeAsync();
+
         // Asegurarnos de que se establezcan las fechas correctamente
         lead.EntryDate = DateTime.UtcNow;
         lead.ExpirationDate = DateTime.UtcNow.AddDays(7);

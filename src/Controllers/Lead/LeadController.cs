@@ -61,6 +61,7 @@ public class LeadsController : ControllerBase
         {
             var lead = new Lead
             {
+                Code = "", // Valor temporal, será reemplazado en el service
                 ClientId = leadDto.ClientId,
                 AssignedToId = leadDto.AssignedToId,
                 Status = leadDto.Status,
