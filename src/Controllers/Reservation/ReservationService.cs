@@ -1190,7 +1190,7 @@ public class ReservationService : IReservationService
         };
 
         // Fill template
-        var (filledBytes, fillError) = odsTemplateService.ReplacePlaceholders(
+        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholders(
             templateBytes,
             placeholders
         );
@@ -1198,7 +1198,7 @@ public class ReservationService : IReservationService
             throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
 
         // Convert to PDF
-        var (pdfBytes, pdfError) = sofficeConverterService.ConvertToPdf(filledBytes, "ods");
+        var (pdfBytes, pdfError) = _sofficeConverterService.ConvertToPdf(filledBytes, "ods");
         if (pdfError != null)
             throw new ArgumentException($"Error al convertir ODS a PDF: {pdfError}");
 
@@ -1232,7 +1232,7 @@ public class ReservationService : IReservationService
         };
 
         // Fill template
-        var (filledBytes, fillError) = odsTemplateService.ReplacePlaceholders(
+        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholders(
             templateBytes,
             placeholders
         );
@@ -1240,7 +1240,7 @@ public class ReservationService : IReservationService
             throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
 
         // Convert to PDF
-        var (pdfBytes, pdfError) = sofficeConverterService.ConvertToPdf(filledBytes, "ods");
+        var (pdfBytes, pdfError) = _sofficeConverterService.ConvertToPdf(filledBytes, "ods");
         if (pdfError != null)
             throw new ArgumentException($"Error al convertir ODS a PDF: {pdfError}");
 
