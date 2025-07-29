@@ -5,7 +5,7 @@ namespace GestionHogar.Dtos;
 public class PaymentTransactionDTO
 {
     public Guid Id { get; set; }
-    public DateTime PaymentDate { get; set; }
+    public DateTimeOffset PaymentDate { get; set; }
     public decimal AmountPaid { get; set; }
     public Guid? ReservationId { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
