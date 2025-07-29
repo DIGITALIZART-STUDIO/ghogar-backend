@@ -1227,7 +1227,7 @@ public class ReservationService : IReservationService
             templateBytes,
             staticPlaceholders,
             dynamicRowsData,
-            24 // Template row number
+            23 // Template row number
         );
         if (fillError != null)
             throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");

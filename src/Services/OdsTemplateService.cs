@@ -4,7 +4,7 @@ using System.Xml;
 
 namespace GestionHogar.Services;
 
-public class OdsTemplateService
+public class OdsTemplateService(ILogger<OdsTemplateService> logger)
 {
     public (byte[], string?) ReplacePlaceholders(
         byte[] odsBytes,
@@ -94,15 +94,18 @@ public class OdsTemplateService
     {
         try
         {
-            using var inputStream = new MemoryStream(odsBytes);
             using var outputStream = new MemoryStream();
 
             // Copy the original ODS to output stream
-            inputStream.CopyTo(outputStream);
+            outputStream.Write(odsBytes, 0, odsBytes.Length);
             outputStream.Position = 0;
 
             // Open as ZIP archive for modification
-            using var archive = new ZipArchive(outputStream, ZipArchiveMode.Update, true);
+            using var archive = new ZipArchive(
+                outputStream,
+                ZipArchiveMode.Update,
+                leaveOpen: true
+            );
 
             // Find the content.xml file
             var contentEntry = archive.GetEntry("content.xml");
@@ -205,17 +208,23 @@ public class OdsTemplateService
             contentEntry.Delete();
             var newContentEntry = archive.CreateEntry("content.xml");
 
-            using var newContentStream = newContentEntry.Open();
-            using var writer = new StreamWriter(newContentStream, Encoding.UTF8);
-            writer.Write(modifiedXml);
+            // Write the modified XML to the new entry
+            using (var newContentStream = newContentEntry.Open())
+            {
+                var xmlBytes = Encoding.UTF8.GetBytes(modifiedXml);
+                newContentStream.Write(xmlBytes, 0, xmlBytes.Length);
+            }
 
-            // Close archive to finalize changes
+            // Close the archive to finalize changes but keep the stream open
             archive.Dispose();
 
-            return (outputStream.ToArray(), null);
+            // Now get the bytes from the output stream
+            var resultBytes = outputStream.ToArray();
+            return (resultBytes, null);
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "Error processing ODS document with dynamic rows");
             return (
                 Array.Empty<byte>(),
                 $"Error processing ODS document with dynamic rows: {ex.Message}"
