@@ -16,10 +16,26 @@ public class LeadService : ILeadService
     public async Task<IEnumerable<Lead>> GetAllLeadsAsync()
     {
         return await _context
-            .Leads.Include(l => l.Client)
+            .Leads.OrderByDescending(l => l.CreatedAt)
+            .Include(l => l.Client)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
             .ToListAsync();
+    }
+
+    public async Task<PaginatedResponseV2<Lead>> GetAllLeadsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService
+    )
+    {
+        var query = _context
+            .Leads.OrderByDescending(l => l.CreatedAt)
+            .Include(l => l.Client)
+            .Include(l => l.AssignedTo)
+            .Include(l => l.Project);
+
+        return await paginationService.PaginateAsync(query, page, pageSize);
     }
 
     public async Task<Lead?> GetLeadByIdAsync(Guid id)
@@ -138,6 +154,7 @@ public class LeadService : ILeadService
     {
         return await _context
             .Leads.Where(l => l.IsActive && l.ClientId == clientId)
+            .OrderByDescending(l => l.CreatedAt)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
             .ToListAsync();
@@ -151,6 +168,22 @@ public class LeadService : ILeadService
             .Include(l => l.Client)
             .Include(l => l.Project)
             .ToListAsync();
+    }
+
+    public async Task<PaginatedResponseV2<Lead>> GetLeadsByAssignedToIdPaginatedAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        PaginationService paginationService
+    )
+    {
+        var query = _context
+            .Leads.Where(l => l.IsActive && l.AssignedToId == userId)
+            .OrderByDescending(l => l.CreatedAt)
+            .Include(l => l.Client)
+            .Include(l => l.Project);
+
+        return await paginationService.PaginateAsync(query, page, pageSize);
     }
 
     public async Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status)
@@ -201,7 +234,8 @@ public class LeadService : ILeadService
      * Excluye leads cancelados, expirados, completados o que ya tengan una cotización aceptada.
      */
     public async Task<IEnumerable<LeadSummaryDto>> GetAvailableLeadsForQuotationByUserAsync(
-        Guid assignedToId
+        Guid assignedToId,
+        Guid? excludeQuotationId = null
     )
     {
         var leads = await _context
@@ -212,7 +246,9 @@ public class LeadService : ILeadService
                 && l.Status != LeadStatus.Expired
                 && l.Status != LeadStatus.Completed
                 && !_context.Quotations.Any(q =>
-                    q.LeadId == l.Id && q.Status == QuotationStatus.ACCEPTED
+                    q.LeadId == l.Id
+                    && q.Status == QuotationStatus.ACCEPTED
+                    && (!excludeQuotationId.HasValue || q.Id != excludeQuotationId.Value)
                 )
             )
             .Include(l => l.Client)

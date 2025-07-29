@@ -47,6 +47,23 @@ public class ClientsController : ControllerBase
         return Ok(clients);
     }
 
+    [HttpGet("paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<GestionHogar.Model.Client>>
+    > GetClientsPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10
+    )
+    {
+        var result = await _clientService.GetAllClientsPaginatedAsync(
+            page,
+            pageSize,
+            paginationService
+        );
+        return Ok(result);
+    }
+
     // GET: api/clients/{id}
     [HttpGet("{id}")]
     public async Task<ActionResult<GestionHogar.Model.Client>> GetClient(Guid id)

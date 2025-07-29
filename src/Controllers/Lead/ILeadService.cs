@@ -6,6 +6,11 @@ namespace GestionHogar.Services;
 public interface ILeadService
 {
     Task<IEnumerable<Lead>> GetAllLeadsAsync();
+    Task<PaginatedResponseV2<Lead>> GetAllLeadsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService
+    );
     Task<Lead?> GetLeadByIdAsync(Guid id);
     Task<Lead> CreateLeadAsync(Lead lead);
     Task<Lead?> UpdateLeadAsync(Guid id, Lead lead);
@@ -14,9 +19,18 @@ public interface ILeadService
     Task<IEnumerable<Lead>> GetInactiveLeadsAsync();
     Task<IEnumerable<Lead>> GetLeadsByClientIdAsync(Guid clientId);
     Task<IEnumerable<Lead>> GetLeadsByAssignedToIdAsync(Guid userId);
+    Task<PaginatedResponseV2<Lead>> GetLeadsByAssignedToIdPaginatedAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        PaginationService paginationService
+    );
     Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status);
     Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId);
-    Task<IEnumerable<LeadSummaryDto>> GetAvailableLeadsForQuotationByUserAsync(Guid assignedToId);
+    Task<IEnumerable<LeadSummaryDto>> GetAvailableLeadsForQuotationByUserAsync(
+        Guid assignedToId,
+        Guid? excludeQuotationId = null
+    );
     Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();
     Task<Lead?> ChangeLeadStatusAsync(Guid id, LeadStatus status, LeadCompletionReason? reason);
 
