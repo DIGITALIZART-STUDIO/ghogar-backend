@@ -148,32 +148,29 @@ public class OdsTemplateService(ILogger<OdsTemplateService> logger)
                 return (Array.Empty<byte>(), "Could not find parent table for template row");
             }
 
+                        // Get the next sibling BEFORE removing the template row
+            XmlNode? nextSibling = templateRow.NextSibling;
+
             // Create new rows based on dynamic data
             var newRows = new List<XmlNode>();
             foreach (var rowData in dynamicRowsData)
             {
                 // Clone the template row
                 var newRow = templateRow.CloneNode(true);
-
+                
                 // Replace placeholders in the new row
                 foreach (var placeholder in rowData)
                 {
                     ReplaceInXmlNode(newRow, placeholder.Key, placeholder.Value);
                 }
-
+                
                 newRows.Add(newRow);
             }
 
             // Remove the original template row
             parentTable.RemoveChild(templateRow);
 
-            // Insert the new rows at the same position
-            XmlNode? nextSibling = null;
-            if (templateRowNumber < rows.Count)
-            {
-                nextSibling = rows[templateRowNumber]; // Next row after template
-            }
-
+            // Insert the new rows at the same position where the template row was
             foreach (var newRow in newRows)
             {
                 if (nextSibling != null)
