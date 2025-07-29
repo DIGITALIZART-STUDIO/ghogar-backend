@@ -5,4 +5,4 @@ echo "Running migrations..."
 ./efbundle
 echo "Migrations ran successfully"
 
-./out/GestionHogar
+./GestionHogar
