@@ -5,7 +5,7 @@
 namespace GestionHogar.Migrations
 {
     /// <inheritdoc />
-    public partial class AddPaymentTransaction : Migration
+    public partial class MigrationTemp : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder) { }

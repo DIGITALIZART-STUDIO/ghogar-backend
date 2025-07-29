@@ -12,10 +12,18 @@ namespace GestionHogar.Controllers;
 public class ReservationsController : ControllerBase
 {
     private readonly IReservationService _reservationService;
+    private readonly WordTemplateService _wordTemplateService;
+    private readonly SofficeConverterService _sofficeConverterService;
 
-    public ReservationsController(IReservationService reservationService)
+    public ReservationsController(
+        IReservationService reservationService,
+        WordTemplateService wordTemplateService,
+        SofficeConverterService sofficeConverterService
+    )
     {
         _reservationService = reservationService;
+        _wordTemplateService = wordTemplateService;
+        _sofficeConverterService = sofficeConverterService;
     }
 
     // GET: api/reservations
@@ -184,6 +192,130 @@ public class ReservationsController : ControllerBase
         catch (Exception ex)
         {
             return StatusCode(500, $"Error al generar PDF de separación: {ex.Message}");
+        }
+    }
+
+    // GET: api/reservations/{id}/contract/pdf
+    [HttpGet("{id}/contract/pdf")]
+    public ActionResult GenerateContractPdf(Guid id)
+    {
+        // Load template bytes
+        var templatePath = "Templates/plantilla_contrato_gestion_hogar.docx";
+        using var inputFileStream = new FileStream(templatePath, FileMode.Open, FileAccess.Read);
+
+        var placeholders = new Dictionary<string, string>()
+        {
+            { "{nro_contrato}", "" },
+            { "{honorifico_cliente}", "" },
+            { "{nombre_cliente}", "" },
+            { "{dni_cliente}", "" },
+            { "{estado_civil_cliente}", "" },
+            { "{ocupacion_cliente}", "" },
+            { "{domicilio_cliente}", "" },
+            { "{distrito_cliente}", "" },
+            { "{provincia_cliente}", "" },
+            { "{departamento_cliente}", "" },
+            { "{nombre_proyecto}", "" },
+            { "{precio_dolares_metro_cuadrado}", "" },
+            { "{area_terreno}", "" },
+            { "{precio_departamento_dolares}", "" },
+            { "{precio_departamento_dolares_letras}", "" },
+            { "{precio_cochera_dolares}", "" },
+            { "{precio_cochera_dolares_letras}", "" },
+            { "{area_cochera}", "" },
+            { "{nro_signada_cochera}", "" },
+            { "{precio_total_dolares}", "" },
+            { "{precio_total_dolares_letras}", "" },
+            { "{precio_inicial_dolares}", "" },
+            { "{precio_inicial_dolares_letras}", "" },
+            { "{fecha_suscripcion_contrato_letras}", "" },
+        };
+
+        // Fill template
+        var (filledBytes, fillError) = _wordTemplateService.ReplacePlaceholders(
+            inputFileStream,
+            placeholders
+        );
+        if (fillError != null)
+            return BadRequest(fillError);
+
+        // Convert to PDF
+        var (pdfBytes, pdfError) = _sofficeConverterService.ConvertToPdf(filledBytes, "docx");
+        if (pdfError != null)
+            return BadRequest(fillError);
+
+        // Profit
+        return File(pdfBytes, "application/pdf", $"contrato-{id}.pdf");
+    }
+
+    // GET: api/reservations/{id}/contract/docx
+    [HttpGet("{id}/contract/docx")]
+    public ActionResult GenerateContractDocx(Guid id)
+    {
+        // Load template bytes
+        var templatePath = "Templates/plantilla_contrato_gestion_hogar.docx";
+        using var inputFileStream = new FileStream(templatePath, FileMode.Open, FileAccess.Read);
+
+        var placeholders = new Dictionary<string, string>()
+        {
+            { "{nro_contrato}", "" },
+            { "{honorifico_cliente}", "" },
+            { "{nombre_cliente}", "" },
+            { "{dni_cliente}", "" },
+            { "{estado_civil_cliente}", "" },
+            { "{ocupacion_cliente}", "" },
+            { "{domicilio_cliente}", "" },
+            { "{distrito_cliente}", "" },
+            { "{provincia_cliente}", "" },
+            { "{departamento_cliente}", "" },
+            { "{nombre_proyecto}", "" },
+            { "{precio_dolares_metro_cuadrado}", "" },
+            { "{area_terreno}", "" },
+            { "{precio_departamento_dolares}", "" },
+            { "{precio_departamento_dolares_letras}", "" },
+            { "{precio_cochera_dolares}", "" },
+            { "{precio_cochera_dolares_letras}", "" },
+            { "{area_cochera}", "" },
+            { "{nro_signada_cochera}", "" },
+            { "{precio_total_dolares}", "" },
+            { "{precio_total_dolares_letras}", "" },
+            { "{precio_inicial_dolares}", "" },
+            { "{precio_inicial_dolares_letras}", "" },
+            { "{fecha_suscripcion_contrato_letras}", "" },
+        };
+
+        // Fill template
+        var (filledBytes, fillError) = _wordTemplateService.ReplacePlaceholders(
+            inputFileStream,
+            placeholders
+        );
+        if (fillError != null)
+            return BadRequest(fillError);
+
+        // Return Word document directly
+        return File(
+            filledBytes,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            $"contrato-{id}.docx"
+        );
+    }
+
+    // GET: api/reservations/{id}/schedule/pdf
+    [HttpGet("{id}/schedule/pdf")]
+    public async Task<ActionResult> GenerateSchedulePdf(Guid id)
+    {
+        try
+        {
+            var pdfBytes = await _reservationService.GenerateSchedulePdfAsync(id);
+            return File(pdfBytes, "application/pdf", $"cronograma-{id}.pdf");
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al generar PDF de cronograma: {ex.Message}");
         }
     }
 }

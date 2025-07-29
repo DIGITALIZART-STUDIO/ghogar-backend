@@ -3,6 +3,7 @@ using GestionHogar.Configuration;
 using GestionHogar.Controllers;
 using GestionHogar.Controllers.ApiPeru;
 using GestionHogar.Model;
+using GestionHogar.Services;
 using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -185,6 +186,10 @@ foreach (var module in modules)
 {
     module.SetupModule(builder.Services, builder.Configuration);
 }
+
+// Extra services
+builder.Services.AddScoped<WordTemplateService>();
+builder.Services.AddScoped<SofficeConverterService>();
 
 var app = builder.Build();
 

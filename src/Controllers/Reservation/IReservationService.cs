@@ -19,4 +19,5 @@ public interface IReservationService
     Task<IEnumerable<ReservationDto>> GetReservationsByQuotationIdAsync(Guid quotationId);
     Task<ReservationDto?> ChangeStatusAsync(Guid id, string status);
     Task<byte[]> GenerateReservationPdfAsync(Guid reservationId);
+    Task<byte[]> GenerateSchedulePdfAsync(Guid reservationId);
 }

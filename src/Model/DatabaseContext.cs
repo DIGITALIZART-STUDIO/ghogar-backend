@@ -48,6 +48,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
         Audit.SetUp(builder);
         BaseModel.SetUp<Reservation>(builder);
         BaseModel.SetUp<Payment>(builder);
+        BaseModel.SetUp<PaymentTransaction>(builder);
+        PaymentTransaction.SetUp<PaymentTransaction>(builder);
     }
 
     public override int SaveChanges()
