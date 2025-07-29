@@ -7,6 +7,8 @@ namespace GestionHogar.Controllers.Dtos;
 public class LeadSummaryDto
 {
     public Guid Id { get; set; }
+
+    public string Code { get; set; } = null!; // Código único del Lead, requerido para identificarlo
     public ClientSummaryDto Client { get; set; } = null!;
     public LeadStatus Status { get; set; }
     public DateTime ExpirationDate { get; set; }
@@ -18,10 +20,11 @@ public class LeadSummaryDto
         return new LeadSummaryDto
         {
             Id = lead.Id,
+            Code = lead.Code,
             Client = new ClientSummaryDto
             {
                 Id = lead.Client!.Id,
-                Name = lead.Client.Name,
+                Name = lead.Client.Name!,
                 Dni = lead.Client.Dni,
                 Ruc = lead.Client.Ruc,
             },

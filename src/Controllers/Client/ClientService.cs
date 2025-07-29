@@ -18,6 +18,16 @@ public class ClientService : IClientService
         return await _context.Clients.ToListAsync();
     }
 
+    public async Task<PaginatedResponseV2<Client>> GetAllClientsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService
+    )
+    {
+        var query = _context.Clients.OrderByDescending(c => c.CreatedAt);
+        return await paginationService.PaginateAsync(query, page, pageSize);
+    }
+
     public async Task<Client?> GetClientByIdAsync(Guid id)
     {
         return await _context.Clients.FirstOrDefaultAsync(c => c.Id == id && c.IsActive);

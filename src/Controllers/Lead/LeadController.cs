@@ -26,6 +26,22 @@ public class LeadsController : ControllerBase
         return Ok(leads);
     }
 
+    // GET: api/leads/paginated
+    [HttpGet("paginated")]
+    public async Task<ActionResult<PaginatedResponseV2<Lead>>> GetLeadsPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10
+    )
+    {
+        var result = await _leadService.GetAllLeadsPaginatedAsync(
+            page,
+            pageSize,
+            paginationService
+        );
+        return Ok(result);
+    }
+
     // GET: api/leads/{id}
     [HttpGet("{id}")]
     public async Task<ActionResult<Lead>> GetLead(Guid id)
@@ -45,6 +61,7 @@ public class LeadsController : ControllerBase
         {
             var lead = new Lead
             {
+                Code = "", // Valor temporal, será reemplazado en el service
                 ClientId = leadDto.ClientId,
                 AssignedToId = leadDto.AssignedToId,
                 Status = leadDto.Status,
@@ -166,6 +183,24 @@ public class LeadsController : ControllerBase
     {
         var leads = await _leadService.GetLeadsByAssignedToIdAsync(userId);
         return Ok(leads);
+    }
+
+    // GET: api/leads/assignedto/{userId}/paginated
+    [HttpGet("assignedto/{userId}/paginated")]
+    public async Task<ActionResult<PaginatedResponseV2<Lead>>> GetLeadsByAssignedToPaginated(
+        Guid userId,
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10
+    )
+    {
+        var result = await _leadService.GetLeadsByAssignedToIdPaginatedAsync(
+            userId,
+            page,
+            pageSize,
+            paginationService
+        );
+        return Ok(result);
     }
 
     // GET: api/leads/status/{status}
@@ -293,12 +328,22 @@ public class LeadsController : ControllerBase
         return Ok(leads);
     }
 
-    [HttpGet("assigned/{assignedToId:guid}/available-for-quotation")]
+    [HttpGet("assigned/{assignedToId:guid}/available-for-quotation/{excludeQuotationId:guid?}")]
     public async Task<
         ActionResult<IEnumerable<LeadSummaryDto>>
-    > GetAvailableLeadsForQuotationByUser(Guid assignedToId)
+    > GetAvailableLeadsForQuotationByUser(Guid assignedToId, Guid? excludeQuotationId)
     {
-        var leads = await _leadService.GetAvailableLeadsForQuotationByUserAsync(assignedToId);
-        return Ok(leads);
+        try
+        {
+            var leads = await _leadService.GetAvailableLeadsForQuotationByUserAsync(
+                assignedToId,
+                excludeQuotationId
+            );
+            return Ok(leads);
+        }
+        catch
+        {
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 }
