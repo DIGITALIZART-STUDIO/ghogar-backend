@@ -1,4 +1,5 @@
 using GestionHogar.Dtos;
+using GestionHogar.Model;
 using GestionHogar.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -55,6 +56,24 @@ public class QuotationsController : ControllerBase
         }
     }
 
+    [HttpGet("by-reservation/{reservationId:guid}")]
+    public async Task<ActionResult<QuotationDTO>> GetQuotationByReservationId(Guid reservationId)
+    {
+        try
+        {
+            var quotation = await _quotationService.GetQuotationByReservationIdAsync(reservationId);
+            if (quotation == null)
+                return NotFound($"No se encontró cotización para la reserva {reservationId}");
+
+            return Ok(quotation);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener cotización por reserva");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     [HttpGet("lead/{leadId:guid}")]
     public async Task<ActionResult<IEnumerable<QuotationDTO>>> GetQuotationsByLeadId(Guid leadId)
     {
@@ -83,6 +102,33 @@ public class QuotationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al obtener cotizaciones por asesor");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    [HttpGet("advisor/{advisorId:guid}/paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<QuotationSummaryDTO>>
+    > GetQuotationsByAdvisorPaginated(
+        Guid advisorId,
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10
+    )
+    {
+        try
+        {
+            var result = await _quotationService.GetQuotationsByAdvisorIdPaginatedAsync(
+                advisorId,
+                page,
+                pageSize,
+                paginationService
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener cotizaciones paginadas por asesor");
             return StatusCode(500, "Error interno del servidor");
         }
     }

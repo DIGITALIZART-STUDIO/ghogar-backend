@@ -43,6 +43,18 @@ public class ReservationsController : ControllerBase
         return Ok(reservations);
     }
 
+    [HttpGet("canceled/paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<ReservationWithPaymentsDto>>
+    > GetAllCanceledReservationsPaginated([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    {
+        var result = await _reservationService.GetAllCanceledReservationsPaginatedAsync(
+            page,
+            pageSize
+        );
+        return Ok(result);
+    }
+
     // GET: api/reservations/{id}
     [HttpGet("{id}")]
     public async Task<ActionResult<ReservationDto>> GetReservation(Guid id)

@@ -47,6 +47,23 @@ public class ClientsController : ControllerBase
         return Ok(clients);
     }
 
+    [HttpGet("paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<GestionHogar.Model.Client>>
+    > GetClientsPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10
+    )
+    {
+        var result = await _clientService.GetAllClientsPaginatedAsync(
+            page,
+            pageSize,
+            paginationService
+        );
+        return Ok(result);
+    }
+
     // GET: api/clients/{id}
     [HttpGet("{id}")]
     public async Task<ActionResult<GestionHogar.Model.Client>> GetClient(Guid id)
@@ -543,9 +560,13 @@ public class ClientsController : ControllerBase
                                 importResult.ClientsCreated++;
                             }
 
+                            // Generar el código único para el lead antes de crear el objeto
+                            var leadCode = await _leadService.GenerateLeadCodeAsync();
+
                             // Crear Lead para el cliente (siempre, independientemente de si el cliente es nuevo o existente)
                             var lead = new Lead
                             {
+                                Code = leadCode, // Ahora sí cumple con el required
                                 ClientId = clientId,
                                 AssignedToId = assignedToId,
                                 Status = LeadStatus.Registered,

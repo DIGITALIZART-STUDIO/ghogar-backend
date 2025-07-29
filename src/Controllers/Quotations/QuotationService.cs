@@ -38,6 +38,26 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
         return quotation != null ? QuotationDTO.FromEntity(quotation) : null;
     }
 
+    public async Task<QuotationDTO?> GetQuotationByReservationIdAsync(Guid reservationId)
+    {
+        var reservation = await _context
+            .Reservations.Include(r => r.Quotation)
+            .ThenInclude(q => q.Lead)
+            .ThenInclude(l => l!.Client)
+            .Include(r => r.Quotation)
+            .ThenInclude(q => q.Advisor)
+            .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(l => l!.Block)
+            .ThenInclude(b => b.Project)
+            .FirstOrDefaultAsync(r => r.Id == reservationId);
+
+        if (reservation?.Quotation == null)
+            return null;
+
+        return QuotationDTO.FromEntity(reservation.Quotation);
+    }
+
     public async Task<IEnumerable<QuotationDTO>> GetQuotationsByLeadIdAsync(Guid leadId)
     {
         var quotations = await _context
@@ -69,6 +89,28 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
             .ToListAsync();
 
         return quotations.Select(QuotationSummaryDTO.FromEntity);
+    }
+
+    public async Task<
+        PaginatedResponseV2<QuotationSummaryDTO>
+    > GetQuotationsByAdvisorIdPaginatedAsync(
+        Guid advisorId,
+        int page,
+        int pageSize,
+        PaginationService paginationService
+    )
+    {
+        var query = _context
+            .Quotations.Include(q => q.Lead)
+            .ThenInclude(l => l!.Client)
+            .Include(q => q.Lot)
+            .ThenInclude(l => l!.Block)
+            .ThenInclude(b => b.Project)
+            .Where(q => q.AdvisorId == advisorId)
+            .OrderByDescending(q => q.CreatedAt)
+            .Select(q => QuotationSummaryDTO.FromEntity(q));
+
+        return await paginationService.PaginateAsync(query, page, pageSize);
     }
 
     public async Task<IEnumerable<QuotationSummaryDTO>> GetAcceptedQuotationsByAdvisorIdAsync(

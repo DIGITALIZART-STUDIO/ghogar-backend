@@ -6,6 +6,12 @@ namespace GestionHogar.Services;
 public interface IClientService
 {
     Task<IEnumerable<Client>> GetAllClientsAsync();
+
+    Task<PaginatedResponseV2<Client>> GetAllClientsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService
+    );
     Task<Client?> GetClientByIdAsync(Guid id);
     Task<Client> CreateClientAsync(Client client);
     Task<Client?> UpdateClientAsync(Guid id, Client client);

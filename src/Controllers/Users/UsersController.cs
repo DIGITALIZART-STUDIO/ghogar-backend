@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using GestionHogar.Model;
+using GestionHogar.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -51,54 +52,29 @@ public class UsersController(
     [EndpointDescription("Gets information about all users")]
     [Authorize]
     [HttpGet("all")]
-    public async Task<ActionResult<PaginatedResponse<UserGetDTO>>> GetUsers(
+    public async Task<ActionResult<PaginatedResponseV2<UserGetDTO>>> GetUsers(
+        [FromServices] PaginationService paginationService,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10
     )
     {
-        // Validate parameters
-        if (page < 1)
-            page = 1;
-        if (pageSize < 1 || pageSize > 100)
-            pageSize = 10;
+        var query = db
+            .Users.Select(user => new UserGetDTO
+            {
+                User = user,
+                Roles = (
+                    from userRole in db.UserRoles
+                    join role in db.Roles on userRole.RoleId equals role.Id
+                    where userRole.UserId == user.Id
+                    select role.Name
+                ).ToList(),
+            })
+            .OrderByDescending(x => x.Roles.Contains("SUPERADMIN"))
+            .ThenByDescending(x => x.User.CreatedAt);
 
-        // Calculate items to skip
-        int skip = (page - 1) * pageSize;
+        var paginated = await paginationService.PaginateAsync(query, page, pageSize);
 
-        // Get total count
-        var totalCount = await db.Users.CountAsync();
-
-        var usersWithRoles = await (
-            from user in db.Users
-            let roles = (
-                from userRole in db.UserRoles
-                join role in db.Roles on userRole.RoleId equals role.Id
-                where userRole.UserId == user.Id
-                select role.Name
-            ).ToList()
-            orderby roles.Contains(
-                "SUPERADMIN"
-            ) descending, // Primero los SuperAdmin
-            user.CreatedAt descending // Luego por fecha de creación (más recientes primero)
-            select new { User = user, Roles = roles }
-        )
-            .Skip(skip)
-            .Take(pageSize)
-            .ToListAsync();
-
-        // Create response
-        var response = new PaginatedResponse<UserGetDTO>
-        {
-            Items = usersWithRoles
-                .Select(x => new UserGetDTO { User = x.User, Roles = x.Roles })
-                .ToList(),
-            Page = page,
-            PageSize = pageSize,
-            TotalCount = totalCount,
-            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
-        };
-
-        return Ok(response);
+        return Ok(paginated);
     }
 
     [EndpointSummary("Create User")]
