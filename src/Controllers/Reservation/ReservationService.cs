@@ -1108,38 +1108,75 @@ public class ReservationService : IReservationService
 
     public async Task<byte[]> GenerateSchedulePdfAsync(Guid reservationId)
     {
+        // Fetch the reservation with all related data
+        var reservation =
+            await _context
+                .Reservations.Include(r => r.Client)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lot)
+                .ThenInclude(l => l.Block)
+                .ThenInclude(b => b.Project)
+                .Include(r => r.Payments) // All payments (paid and unpaid)
+                .FirstOrDefaultAsync(r => r.Id == reservationId && r.IsActive)
+            ?? throw new ArgumentException("Reserva no encontrada");
+
+        var client = reservation.Client;
+        var quotation = reservation.Quotation;
+        var project = quotation?.Lot?.Block?.Project;
+        var allPayments = reservation.Payments.OrderBy(p => p.DueDate).ToList();
+
+        // Calculate totals
+        var initialAmount = reservation.AmountPaid;
+        var creditAmount = quotation?.AmountFinanced ?? 0;
+        var totalSaleAmount = quotation?.FinalPrice ?? 0;
+
+        // Format currency symbol
+        var currencySymbol = reservation.Currency == Currency.SOLES ? "S/" : "$";
+
+        // Static placeholders (unique data)
+        var staticPlaceholders = new Dictionary<string, string>()
+        {
+            { "{NOMBRE_PROYECTO}", project?.Name?.ToUpper() ?? "" },
+            { "{nombre_cliente}", client?.Name ?? client?.CompanyName ?? "" },
+            { "{lote_cliente}", quotation?.LotNumber ?? "" },
+            { "{total_inicial}", $"{currencySymbol} {initialAmount:N2}" },
+            { "{total_credito}", $"{currencySymbol} {creditAmount:N2}" },
+            { "{total_venta}", $"{currencySymbol} {totalSaleAmount:N2}" },
+            { "{nro_cuotas}", allPayments.Count.ToString() },
+        };
+
+        // Dynamic placeholders (one row per payment in the schedule)
+        var dynamicRowsData = new List<Dictionary<string, string>>();
+        decimal remainingAmount = creditAmount;
+
+        for (int i = 0; i < allPayments.Count; i++)
+        {
+            var payment = allPayments[i];
+
+            // Calculate remaining amount AFTER this payment
+            remainingAmount -= payment.AmountDue;
+
+            var rowData = new Dictionary<string, string>()
+            {
+                { "{nro_cuota}", (i + 1).ToString() },
+                { "{fecha_pago_cuota}", payment.DueDate.ToString("dd/MM/yyyy") },
+                { "{monto_restante}", $"{currencySymbol} {remainingAmount:N2}" },
+                { "{monto_cuota}", $"{currencySymbol} {payment.AmountDue:N2}" },
+            };
+
+            dynamicRowsData.Add(rowData);
+        }
+
         // Load the ODS template
         var templatePath = "Templates/cronograma_de_pagos.ods";
         var templateBytes = await File.ReadAllBytesAsync(templatePath);
 
-        var placeholders = new Dictionary<string, string>()
-        {
-            { "{cliente_nombre}", "" },
-            { "{proyecto_nombre}", "" },
-            { "{fecha_separacion}", "" },
-            { "{monto_separacion}", "" },
-            { "{moneda}", "" },
-            { "{numero_cuotas}", "" },
-            { "{monto_cuota}", "" },
-            { "{monto_total}", "" },
-            { "{fecha_vencimiento_1}", "" },
-            { "{fecha_vencimiento_2}", "" },
-            { "{fecha_vencimiento_3}", "" },
-            { "{fecha_vencimiento_4}", "" },
-            { "{fecha_vencimiento_5}", "" },
-            { "{fecha_vencimiento_6}", "" },
-            { "{fecha_vencimiento_7}", "" },
-            { "{fecha_vencimiento_8}", "" },
-            { "{fecha_vencimiento_9}", "" },
-            { "{fecha_vencimiento_10}", "" },
-            { "{fecha_vencimiento_11}", "" },
-            { "{fecha_vencimiento_12}", "" },
-        };
-
-        // Fill template
-        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholders(
+        // Fill template with dynamic rows (row 19 is 0-based, so 20 in 1-based)
+        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholdersWithDynamicRows(
             templateBytes,
-            placeholders
+            staticPlaceholders,
+            dynamicRowsData,
+            20 // Template row number (converting from 0-based 19 to 1-based 20)
         );
         if (fillError != null)
             throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
