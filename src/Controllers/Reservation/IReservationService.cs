@@ -22,4 +22,6 @@ public interface IReservationService
     Task<byte[]> GenerateSchedulePdfAsync(Guid reservationId);
     Task<byte[]> GenerateProcessedPaymentsPdfAsync(Guid reservationId);
     Task<byte[]> GenerateReceiptPdfAsync(Guid reservationId);
+    Task<byte[]> GenerateContractPdfAsync(Guid reservationId);
+    Task<byte[]> GenerateContractDocxAsync(Guid reservationId);
 }

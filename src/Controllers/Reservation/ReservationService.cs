@@ -13,18 +13,21 @@ public class ReservationService : IReservationService
     private readonly PaginationService _paginationService;
     private readonly OdsTemplateService _odsTemplateService;
     private readonly SofficeConverterService _sofficeConverterService;
+    private readonly WordTemplateService _wordTemplateService;
 
     public ReservationService(
         DatabaseContext context,
         PaginationService paginationService,
         OdsTemplateService odsTemplateService,
-        SofficeConverterService sofficeConverterService
+        SofficeConverterService sofficeConverterService,
+        WordTemplateService wordTemplateService
     )
     {
         _context = context;
         _paginationService = paginationService;
         _odsTemplateService = odsTemplateService;
         _sofficeConverterService = sofficeConverterService;
+        _wordTemplateService = wordTemplateService;
     }
 
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
@@ -1390,5 +1393,106 @@ public class ReservationService : IReservationService
 
         // For larger numbers, you'd need to extend this logic
         return number.ToString();
+    }
+
+    public async Task<byte[]> GenerateContractPdfAsync(Guid reservationId)
+    {
+        var docxBytes = await GenerateContractDocxAsync(reservationId);
+        
+        // Convert to PDF
+        var (pdfBytes, pdfError) = _sofficeConverterService.ConvertToPdf(docxBytes, "docx");
+        if (pdfError != null)
+            throw new ArgumentException($"Error al convertir contrato a PDF: {pdfError}");
+
+        return pdfBytes;
+    }
+
+    public async Task<byte[]> GenerateContractDocxAsync(Guid reservationId)
+    {
+        // Fetch the reservation with all related data
+        var reservation =
+            await _context
+                .Reservations.Include(r => r.Client)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lot)
+                .ThenInclude(l => l.Block)
+                .ThenInclude(b => b.Project)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lead)
+                .ThenInclude(l => l.AssignedTo)
+                .FirstOrDefaultAsync(r => r.Id == reservationId && r.IsActive)
+            ?? throw new ArgumentException("Reserva no encontrada");
+
+        var client = reservation.Client;
+        var quotation = reservation.Quotation;
+        var project = quotation?.Lot?.Block?.Project;
+        var lot = quotation?.Lot;
+        var block = quotation?.Lot?.Block;
+
+        // Generate contract number
+        var contractNumber = $"CNT-{reservation.ReservationDate:yyyyMMdd}-{reservationId.ToString()[..8].ToUpper()}";
+
+        // Format client title (honorific)
+        var clientTitle = client?.Type == ClientType.Natural ? "Sr./Sra." : "Empresa";
+
+        // Load template
+        var templatePath = "Templates/plantilla_contrato_gestion_hogar.docx";
+        using var inputFileStream = new FileStream(templatePath, FileMode.Open, FileAccess.Read);
+
+        var placeholders = new Dictionary<string, string>()
+        {
+            { "{nro_contrato}", contractNumber },
+            { "{honorifico_cliente}", clientTitle },
+            { "{nombre_cliente}", client?.Name ?? client?.CompanyName ?? "" },
+            { "{dni_cliente}", client?.Dni ?? client?.Ruc ?? "" },
+            { "{estado_civil_cliente}", "" }, // You might want to add this field to the Client model
+            { "{ocupacion_cliente}", "" }, // You might want to add this field to the Client model
+            { "{domicilio_cliente}", client?.Address ?? "" },
+            { "{distrito_cliente}", "" }, // You might want to add these address fields
+            { "{provincia_cliente}", "" },
+            { "{departamento_cliente}", client?.Country ?? "" },
+            { "{nombre_proyecto}", project?.Name ?? "" },
+            { "{precio_dolares_metro_cuadrado}", $"$ {quotation?.PricePerM2AtQuotation ?? 0:N2}" },
+            { "{area_terreno}", $"{quotation?.AreaAtQuotation ?? 0:N2}" },
+            { "{precio_departamento_dolares}", $"$ {quotation?.FinalPrice ?? 0:N2}" },
+            { "{precio_departamento_dolares_letras}", ConvertAmountToWords(quotation?.FinalPrice ?? 0, Currency.DOLARES) },
+            { "{precio_cochera_dolares}", "" }, // Parking space price - you might need to add this
+            { "{precio_cochera_dolares_letras}", "" },
+            { "{area_cochera}", "" }, // Parking space area
+            { "{nro_signada_cochera}", "" }, // Parking space number
+            { "{precio_total_dolares}", $"$ {quotation?.FinalPrice ?? 0:N2}" },
+            { "{precio_total_dolares_letras}", ConvertAmountToWords(quotation?.FinalPrice ?? 0, Currency.DOLARES) },
+            { "{precio_inicial_dolares}", $"$ {reservation.AmountPaid:N2}" },
+            { "{precio_inicial_dolares_letras}", ConvertAmountToWords(reservation.AmountPaid, Currency.DOLARES) },
+            { "{fecha_suscripcion_contrato_letras}", ConvertDateToWords(reservation.ReservationDate) },
+        };
+
+        // Fill template
+        var (filledBytes, fillError) = _wordTemplateService.ReplacePlaceholders(
+            inputFileStream,
+            placeholders
+        );
+        if (fillError != null)
+            throw new ArgumentException($"Error al procesar plantilla de contrato: {fillError}");
+
+        return filledBytes;
+    }
+
+    /// <summary>
+    /// Converts a DateOnly to words in Spanish
+    /// </summary>
+    private string ConvertDateToWords(DateOnly date)
+    {
+        var months = new[]
+        {
+            "", "enero", "febrero", "marzo", "abril", "mayo", "junio",
+            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+        };
+
+        var dayWords = ConvertNumberToWords(date.Day).ToLower();
+        var monthWord = months[date.Month];
+        var yearWords = ConvertNumberToWords(date.Year).ToLower();
+
+        return $"{dayWords} de {monthWord} del año {yearWords}";
     }
 }
