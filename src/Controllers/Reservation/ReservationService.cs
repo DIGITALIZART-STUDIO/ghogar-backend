@@ -1207,28 +1207,57 @@ public class ReservationService : IReservationService
 
     public async Task<byte[]> GenerateReceiptPdfAsync(Guid reservationId)
     {
+        // Fetch the reservation with all related data
+        var reservation =
+            await _context
+                .Reservations.Include(r => r.Client)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lot)
+                .ThenInclude(l => l.Block)
+                .ThenInclude(b => b.Project)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lead)
+                .ThenInclude(l => l.AssignedTo)
+                .FirstOrDefaultAsync(r => r.Id == reservationId && r.IsActive)
+            ?? throw new ArgumentException("Reserva no encontrada");
+
+        var client = reservation.Client;
+        var quotation = reservation.Quotation;
+        var project = quotation?.Lot?.Block?.Project;
+        var assignedUser = quotation?.Lead?.AssignedTo;
+
+        // Format payment method in Spanish
+        var paymentMethodText = reservation.PaymentMethod switch
+        {
+            PaymentMethod.CASH => "Efectivo",
+            PaymentMethod.BANK_DEPOSIT => "Depósito Bancario",
+            PaymentMethod.BANK_TRANSFER => "Transferencia Bancaria",
+            _ => "No especificado",
+        };
+
+        // Format currency
+        var currencySymbol = reservation.Currency == Currency.SOLES ? "S/" : "$";
+
         // Load the ODS template
         var templatePath = "Templates/recibo.ods";
         var templateBytes = await File.ReadAllBytesAsync(templatePath);
 
         var placeholders = new Dictionary<string, string>()
         {
-            { "{numero_recibo}", "" },
-            { "{fecha_recibo}", "" },
-            { "{cliente_nombre}", "" },
-            { "{cliente_dni}", "" },
-            { "{cliente_direccion}", "" },
-            { "{proyecto_nombre}", "" },
-            { "{concepto_pago}", "" },
-            { "{monto_pagado}", "" },
-            { "{monto_pagado_letras}", "" },
-            { "{moneda}", "" },
-            { "{forma_pago}", "" },
-            { "{numero_operacion}", "" },
-            { "{fecha_operacion}", "" },
-            { "{banco}", "" },
-            { "{vendedor_nombre}", "" },
-            { "{vendedor_dni}", "" },
+            { "{NOMBRE_PROYECTO}", project?.Name?.ToUpper() ?? "" },
+            { "{nombre_cliente}", client?.Name ?? client?.CompanyName ?? "" },
+            { "{dni_cliente}", client?.Dni ?? client?.Ruc ?? "" },
+            { "{emision_recibo}", reservation.ReservationDate.ToString("dd/MM/yyyy") },
+            { "{lote_cliente}", quotation?.LotNumber ?? "" },
+            { "{forma_pago_cliente}", paymentMethodText },
+            { "{precio_total_venta}", $"{currencySymbol} {quotation?.FinalPrice ?? 0:N2}" },
+            { "{nro_cuota}", "Separación" },
+            { "{monto_cuota}", $"{currencySymbol} {reservation.AmountPaid:N2}" },
+            { "{monto_cuota_total}", $"{currencySymbol} {reservation.AmountPaid:N2}" },
+            {
+                "{total_letras}",
+                ConvertAmountToWords(reservation.AmountPaid, reservation.Currency)
+            },
         };
 
         // Fill template
@@ -1245,5 +1274,121 @@ public class ReservationService : IReservationService
             throw new ArgumentException($"Error al convertir ODS a PDF: {pdfError}");
 
         return pdfBytes;
+    }
+
+    /// <summary>
+    /// Converts a decimal amount to words in Spanish
+    /// </summary>
+    private string ConvertAmountToWords(decimal amount, Currency currency)
+    {
+        // This is a basic implementation - you might want to use a more comprehensive library
+        var currencyName = currency == Currency.SOLES ? "SOLES" : "DÓLARES";
+        var integerPart = (int)Math.Floor(amount);
+        var decimalPart = (int)Math.Round((amount - integerPart) * 100);
+
+        var words = ConvertNumberToWords(integerPart);
+
+        if (decimalPart > 0)
+        {
+            words += $" CON {decimalPart:00}/100";
+        }
+        else
+        {
+            words += " CON 00/100";
+        }
+
+        return $"{words} {currencyName}";
+    }
+
+    /// <summary>
+    /// Converts an integer to words in Spanish (basic implementation)
+    /// </summary>
+    private string ConvertNumberToWords(int number)
+    {
+        if (number == 0)
+            return "CERO";
+
+        var ones = new[]
+        {
+            "",
+            "UNO",
+            "DOS",
+            "TRES",
+            "CUATRO",
+            "CINCO",
+            "SEIS",
+            "SIETE",
+            "OCHO",
+            "NUEVE",
+        };
+        var tens = new[]
+        {
+            "",
+            "",
+            "VEINTE",
+            "TREINTA",
+            "CUARENTA",
+            "CINCUENTA",
+            "SESENTA",
+            "SETENTA",
+            "OCHENTA",
+            "NOVENTA",
+        };
+        var teens = new[]
+        {
+            "DIEZ",
+            "ONCE",
+            "DOCE",
+            "TRECE",
+            "CATORCE",
+            "QUINCE",
+            "DIECISÉIS",
+            "DIECISIETE",
+            "DIECIOCHO",
+            "DIECINUEVE",
+        };
+        var hundreds = new[]
+        {
+            "",
+            "CIENTO",
+            "DOSCIENTOS",
+            "TRESCIENTOS",
+            "CUATROCIENTOS",
+            "QUINIENTOS",
+            "SEISCIENTOS",
+            "SETECIENTOS",
+            "OCHOCIENTOS",
+            "NOVECIENTOS",
+        };
+
+        if (number < 10)
+            return ones[number];
+        if (number < 20)
+            return teens[number - 10];
+        if (number < 100)
+        {
+            var ten = number / 10;
+            var one = number % 10;
+            if (ten == 2 && one > 0)
+                return $"VEINTI{ones[one]}";
+            return tens[ten] + (one > 0 ? $" Y {ones[one]}" : "");
+        }
+        if (number < 1000)
+        {
+            var hundred = number / 100;
+            var remainder = number % 100;
+            var hundredText = hundred == 1 && remainder == 0 ? "CIEN" : hundreds[hundred];
+            return hundredText + (remainder > 0 ? $" {ConvertNumberToWords(remainder)}" : "");
+        }
+        if (number < 1000000)
+        {
+            var thousand = number / 1000;
+            var remainder = number % 1000;
+            var thousandText = thousand == 1 ? "MIL" : $"{ConvertNumberToWords(thousand)} MIL";
+            return thousandText + (remainder > 0 ? $" {ConvertNumberToWords(remainder)}" : "");
+        }
+
+        // For larger numbers, you'd need to extend this logic
+        return number.ToString();
     }
 }
