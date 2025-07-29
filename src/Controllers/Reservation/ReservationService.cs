@@ -7,7 +7,11 @@ using QuestPDF.Infrastructure;
 
 namespace GestionHogar.Services;
 
-public class ReservationService(DatabaseContext context) : IReservationService
+public class ReservationService(
+    DatabaseContext context,
+    OdsTemplateService odsTemplateService,
+    SofficeConverterService sofficeConverterService
+) : IReservationService
 {
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
     {
@@ -1047,5 +1051,51 @@ public class ReservationService(DatabaseContext context) : IReservationService
         });
 
         return document.GeneratePdf();
+    }
+
+    public async Task<byte[]> GenerateSchedulePdfAsync(Guid reservationId)
+    {
+        // Load the ODS template
+        var templatePath = "Templates/cronograma_de_pagos.ods";
+        var templateBytes = await File.ReadAllBytesAsync(templatePath);
+
+        var placeholders = new Dictionary<string, string>()
+        {
+            { "{cliente_nombre}", "" },
+            { "{proyecto_nombre}", "" },
+            { "{fecha_separacion}", "" },
+            { "{monto_separacion}", "" },
+            { "{moneda}", "" },
+            { "{numero_cuotas}", "" },
+            { "{monto_cuota}", "" },
+            { "{monto_total}", "" },
+            { "{fecha_vencimiento_1}", "" },
+            { "{fecha_vencimiento_2}", "" },
+            { "{fecha_vencimiento_3}", "" },
+            { "{fecha_vencimiento_4}", "" },
+            { "{fecha_vencimiento_5}", "" },
+            { "{fecha_vencimiento_6}", "" },
+            { "{fecha_vencimiento_7}", "" },
+            { "{fecha_vencimiento_8}", "" },
+            { "{fecha_vencimiento_9}", "" },
+            { "{fecha_vencimiento_10}", "" },
+            { "{fecha_vencimiento_11}", "" },
+            { "{fecha_vencimiento_12}", "" },
+        };
+
+        // Fill template
+        var (filledBytes, fillError) = odsTemplateService.ReplacePlaceholders(
+            templateBytes,
+            placeholders
+        );
+        if (fillError != null)
+            throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
+
+        // Convert to PDF
+        var (pdfBytes, pdfError) = sofficeConverterService.ConvertToPdf(filledBytes, "ods");
+        if (pdfError != null)
+            throw new ArgumentException($"Error al convertir ODS a PDF: {pdfError}");
+
+        return pdfBytes;
     }
 }

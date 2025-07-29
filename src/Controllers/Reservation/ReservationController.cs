@@ -287,4 +287,23 @@ public class ReservationsController : ControllerBase
             $"contrato-{id}.docx"
         );
     }
+
+    // GET: api/reservations/{id}/schedule/pdf
+    [HttpGet("{id}/schedule/pdf")]
+    public async Task<ActionResult> GenerateSchedulePdf(Guid id)
+    {
+        try
+        {
+            var pdfBytes = await _reservationService.GenerateSchedulePdfAsync(id);
+            return File(pdfBytes, "application/pdf", $"cronograma-{id}.pdf");
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al generar PDF de cronograma: {ex.Message}");
+        }
+    }
 }
