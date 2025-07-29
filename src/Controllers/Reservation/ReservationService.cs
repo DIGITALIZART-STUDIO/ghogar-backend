@@ -13,18 +13,21 @@ public class ReservationService : IReservationService
     private readonly PaginationService _paginationService;
     private readonly OdsTemplateService _odsTemplateService;
     private readonly SofficeConverterService _sofficeConverterService;
+    private readonly WordTemplateService _wordTemplateService;
 
     public ReservationService(
         DatabaseContext context,
         PaginationService paginationService,
         OdsTemplateService odsTemplateService,
-        SofficeConverterService sofficeConverterService
+        SofficeConverterService sofficeConverterService,
+        WordTemplateService wordTemplateService
     )
     {
         _context = context;
         _paginationService = paginationService;
         _odsTemplateService = odsTemplateService;
         _sofficeConverterService = sofficeConverterService;
+        _wordTemplateService = wordTemplateService;
     }
 
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
@@ -448,21 +451,18 @@ public class ReservationService : IReservationService
 
     public async Task<byte[]> GenerateReservationPdfAsync(Guid reservationId)
     {
-        var reservation = await _context
-            .Reservations.Include(r => r.Client)
-            .Include(r => r.Quotation)
-            .ThenInclude(q => q.Lot)
-            .ThenInclude(q => q.Block)
-            .ThenInclude(b => b.Project)
-            .Include(r => r.Quotation)
-            .ThenInclude(q => q.Lead)
-            .ThenInclude(l => l.AssignedTo)
-            .FirstOrDefaultAsync(r => r.Id == reservationId);
-
-        if (reservation == null)
-        {
-            throw new ArgumentException("Reserva no encontrada");
-        }
+        var reservation =
+            await _context
+                .Reservations.Include(r => r.Client)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lot)
+                .ThenInclude(q => q.Block)
+                .ThenInclude(b => b.Project)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lead)
+                .ThenInclude(l => l.AssignedTo)
+                .FirstOrDefaultAsync(r => r.Id == reservationId)
+            ?? throw new ArgumentException("Reserva no encontrada");
 
         var client = reservation.Client;
         var quotation = reservation.Quotation;
@@ -1108,38 +1108,75 @@ public class ReservationService : IReservationService
 
     public async Task<byte[]> GenerateSchedulePdfAsync(Guid reservationId)
     {
+        // Fetch the reservation with all related data
+        var reservation =
+            await _context
+                .Reservations.Include(r => r.Client)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lot)
+                .ThenInclude(l => l.Block)
+                .ThenInclude(b => b.Project)
+                .Include(r => r.Payments) // All payments (paid and unpaid)
+                .FirstOrDefaultAsync(r => r.Id == reservationId && r.IsActive)
+            ?? throw new ArgumentException("Reserva no encontrada");
+
+        var client = reservation.Client;
+        var quotation = reservation.Quotation;
+        var project = quotation?.Lot?.Block?.Project;
+        var allPayments = reservation.Payments.OrderBy(p => p.DueDate).ToList();
+
+        // Calculate totals
+        var initialAmount = reservation.AmountPaid;
+        var creditAmount = quotation?.AmountFinanced ?? 0;
+        var totalSaleAmount = quotation?.FinalPrice ?? 0;
+
+        // Format currency symbol
+        var currencySymbol = reservation.Currency == Currency.SOLES ? "S/" : "$";
+
+        // Static placeholders (unique data)
+        var staticPlaceholders = new Dictionary<string, string>()
+        {
+            { "{NOMBRE_PROYECTO}", project?.Name?.ToUpper() ?? "" },
+            { "{nombre_cliente}", client?.Name ?? client?.CompanyName ?? "" },
+            { "{lote_cliente}", quotation?.LotNumber ?? "" },
+            { "{total_inicial}", $"{currencySymbol} {initialAmount:N2}" },
+            { "{total_credito}", $"{currencySymbol} {creditAmount:N2}" },
+            { "{total_venta}", $"{currencySymbol} {totalSaleAmount:N2}" },
+            { "{nro_cuotas}", allPayments.Count.ToString() },
+        };
+
+        // Dynamic placeholders (one row per payment in the schedule)
+        var dynamicRowsData = new List<Dictionary<string, string>>();
+        decimal remainingAmount = creditAmount;
+
+        for (int i = 0; i < allPayments.Count; i++)
+        {
+            var payment = allPayments[i];
+
+            // Calculate remaining amount AFTER this payment
+            remainingAmount -= payment.AmountDue;
+
+            var rowData = new Dictionary<string, string>()
+            {
+                { "{nro_cuota}", (i + 1).ToString() },
+                { "{fecha_pago_cuota}", payment.DueDate.ToString("dd/MM/yyyy") },
+                { "{monto_restante}", $"{currencySymbol} {remainingAmount:N2}" },
+                { "{monto_cuota}", $"{currencySymbol} {payment.AmountDue:N2}" },
+            };
+
+            dynamicRowsData.Add(rowData);
+        }
+
         // Load the ODS template
         var templatePath = "Templates/cronograma_de_pagos.ods";
         var templateBytes = await File.ReadAllBytesAsync(templatePath);
 
-        var placeholders = new Dictionary<string, string>()
-        {
-            { "{cliente_nombre}", "" },
-            { "{proyecto_nombre}", "" },
-            { "{fecha_separacion}", "" },
-            { "{monto_separacion}", "" },
-            { "{moneda}", "" },
-            { "{numero_cuotas}", "" },
-            { "{monto_cuota}", "" },
-            { "{monto_total}", "" },
-            { "{fecha_vencimiento_1}", "" },
-            { "{fecha_vencimiento_2}", "" },
-            { "{fecha_vencimiento_3}", "" },
-            { "{fecha_vencimiento_4}", "" },
-            { "{fecha_vencimiento_5}", "" },
-            { "{fecha_vencimiento_6}", "" },
-            { "{fecha_vencimiento_7}", "" },
-            { "{fecha_vencimiento_8}", "" },
-            { "{fecha_vencimiento_9}", "" },
-            { "{fecha_vencimiento_10}", "" },
-            { "{fecha_vencimiento_11}", "" },
-            { "{fecha_vencimiento_12}", "" },
-        };
-
-        // Fill template
-        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholders(
+        // Fill template with dynamic rows (row 19 is 0-based, so 20 in 1-based)
+        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholdersWithDynamicRows(
             templateBytes,
-            placeholders
+            staticPlaceholders,
+            dynamicRowsData,
+            20 // Template row number (converting from 0-based 19 to 1-based 20)
         );
         if (fillError != null)
             throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
@@ -1154,39 +1191,145 @@ public class ReservationService : IReservationService
 
     public async Task<byte[]> GenerateProcessedPaymentsPdfAsync(Guid reservationId)
     {
+        // Fetch the reservation with all related data
+        var reservation =
+            await _context
+                .Reservations.Include(r => r.Client)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lot)
+                .ThenInclude(l => l.Block)
+                .ThenInclude(b => b.Project)
+                .Include(r => r.Payments.Where(p => p.Paid)) // Only paid payments
+                .FirstOrDefaultAsync(r => r.Id == reservationId && r.IsActive)
+            ?? throw new ArgumentException("Reserva no encontrada");
+
+        var client = reservation.Client;
+        var quotation = reservation.Quotation;
+        var project = quotation?.Lot?.Block?.Project;
+        var paidPayments = reservation.Payments.Where(p => p.Paid).OrderBy(p => p.DueDate).ToList();
+
+        // Calculate totals
+        var initialAmount = reservation.AmountPaid;
+        var creditAmount = quotation?.AmountFinanced ?? 0;
+        var totalSaleAmount = quotation?.FinalPrice ?? 0;
+        var totalPaidAmount = paidPayments.Sum(p => p.AmountDue);
+        var currentBalance = creditAmount - totalPaidAmount;
+
+        // Format currency symbol
+        var currencySymbol = reservation.Currency == Currency.SOLES ? "S/" : "$";
+
+        // Static placeholders (unique data)
+        var staticPlaceholders = new Dictionary<string, string>()
+        {
+            { "{NOMBRE_PROYECTO}", project?.Name?.ToUpper() ?? "" },
+            { "{nombre_cliente}", client?.Name ?? client?.CompanyName ?? "" },
+            { "{lote_cliente}", quotation?.LotNumber ?? "" },
+            { "{total_inicial}", $"{currencySymbol} {initialAmount:N2}" },
+            { "{total_credito}", $"{currencySymbol} {creditAmount:N2}" },
+            { "{total_venta}", $"{currencySymbol} {totalSaleAmount:N2}" },
+            { "{fecha_y_hora_pago_inicial}", reservation.ReservationDate.ToString("dd/MM/yyyy") },
+            { "{subtotal_monto_pagos}", $"{currencySymbol} {totalPaidAmount:N2}" },
+            { "{subtotal_nro_cuotas}", paidPayments.Count.ToString() },
+            { "{total_pagado}", $"{currencySymbol} {(initialAmount + totalPaidAmount):N2}" },
+            { "{saldo_actual}", $"{currencySymbol} {currentBalance:N2}" },
+        };
+
+        // Dynamic placeholders (one row per payment)
+        var dynamicRowsData = new List<Dictionary<string, string>>();
+        decimal runningBalance = creditAmount;
+
+        for (int i = 0; i < paidPayments.Count; i++)
+        {
+            var payment = paidPayments[i];
+            runningBalance -= payment.AmountDue;
+
+            var rowData = new Dictionary<string, string>()
+            {
+                { "{nro_pago}", (i + 1).ToString() },
+                { "{fecha_y_hora_pago}", payment.DueDate.ToString("dd/MM/yyyy") },
+                { "{monto_pago}", $"{currencySymbol} {payment.AmountDue:N2}" },
+                { "{nro_cuotas}", "1" }, // Each payment represents 1 installment
+                { "{saldo_restante}", $"{currencySymbol} {runningBalance:N2}" },
+            };
+
+            dynamicRowsData.Add(rowData);
+        }
+
         // Load the ODS template
         var templatePath = "Templates/pagos_realizados.ods";
         var templateBytes = await File.ReadAllBytesAsync(templatePath);
 
+        // Fill template with dynamic rows (row 24 is the template row)
+        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholdersWithDynamicRows(
+            templateBytes,
+            staticPlaceholders,
+            dynamicRowsData,
+            23 // Template row number
+        );
+        if (fillError != null)
+            throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
+
+        // Convert to PDF
+        var (pdfBytes, pdfError) = _sofficeConverterService.ConvertToPdf(filledBytes, "ods");
+        if (pdfError != null)
+            throw new ArgumentException($"Error al convertir ODS a PDF: {pdfError}");
+
+        return pdfBytes;
+    }
+
+    public async Task<byte[]> GenerateReceiptPdfAsync(Guid reservationId)
+    {
+        // Fetch the reservation with all related data
+        var reservation =
+            await _context
+                .Reservations.Include(r => r.Client)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lot)
+                .ThenInclude(l => l.Block)
+                .ThenInclude(b => b.Project)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lead)
+                .ThenInclude(l => l.AssignedTo)
+                .FirstOrDefaultAsync(r => r.Id == reservationId && r.IsActive)
+            ?? throw new ArgumentException("Reserva no encontrada");
+
+        var client = reservation.Client;
+        var quotation = reservation.Quotation;
+        var project = quotation?.Lot?.Block?.Project;
+        var assignedUser = quotation?.Lead?.AssignedTo;
+
+        // Format payment method in Spanish
+        var paymentMethodText = reservation.PaymentMethod switch
+        {
+            PaymentMethod.CASH => "Efectivo",
+            PaymentMethod.BANK_DEPOSIT => "Depósito Bancario",
+            PaymentMethod.BANK_TRANSFER => "Transferencia Bancaria",
+            _ => "No especificado",
+        };
+
+        // Format currency
+        var currencySymbol = reservation.Currency == Currency.SOLES ? "S/" : "$";
+
+        // Load the ODS template
+        var templatePath = "Templates/recibo.ods";
+        var templateBytes = await File.ReadAllBytesAsync(templatePath);
+
         var placeholders = new Dictionary<string, string>()
         {
-            { "{cliente_nombre}", "" },
-            { "{proyecto_nombre}", "" },
-            { "{fecha_separacion}", "" },
-            { "{monto_separacion}", "" },
-            { "{moneda}", "" },
-            { "{numero_pagos_realizados}", "" },
-            { "{monto_total_pagado}", "" },
-            { "{fecha_pago_1}", "" },
-            { "{monto_pago_1}", "" },
-            { "{fecha_pago_2}", "" },
-            { "{monto_pago_2}", "" },
-            { "{fecha_pago_3}", "" },
-            { "{monto_pago_3}", "" },
-            { "{fecha_pago_4}", "" },
-            { "{monto_pago_4}", "" },
-            { "{fecha_pago_5}", "" },
-            { "{monto_pago_5}", "" },
-            { "{fecha_pago_6}", "" },
-            { "{monto_pago_6}", "" },
-            { "{fecha_pago_7}", "" },
-            { "{monto_pago_7}", "" },
-            { "{fecha_pago_8}", "" },
-            { "{monto_pago_8}", "" },
-            { "{fecha_pago_9}", "" },
-            { "{monto_pago_9}", "" },
-            { "{fecha_pago_10}", "" },
-            { "{monto_pago_10}", "" },
+            { "{NOMBRE_PROYECTO}", project?.Name?.ToUpper() ?? "" },
+            { "{nombre_cliente}", client?.Name ?? client?.CompanyName ?? "" },
+            { "{dni_cliente}", client?.Dni ?? client?.Ruc ?? "" },
+            { "{emision_recibo}", reservation.ReservationDate.ToString("dd/MM/yyyy") },
+            { "{lote_cliente}", quotation?.LotNumber ?? "" },
+            { "{forma_pago_cliente}", paymentMethodText },
+            { "{precio_total_venta}", $"{currencySymbol} {quotation?.FinalPrice ?? 0:N2}" },
+            { "{nro_cuota}", "Separación" },
+            { "{monto_cuota}", $"{currencySymbol} {reservation.AmountPaid:N2}" },
+            { "{monto_cuota_total}", $"{currencySymbol} {reservation.AmountPaid:N2}" },
+            {
+                "{total_letras}",
+                ConvertAmountToWords(reservation.AmountPaid, reservation.Currency)
+            },
         };
 
         // Fill template
@@ -1205,45 +1348,245 @@ public class ReservationService : IReservationService
         return pdfBytes;
     }
 
-    public async Task<byte[]> GenerateReceiptPdfAsync(Guid reservationId)
+    /// <summary>
+    /// Converts a decimal amount to words in Spanish
+    /// </summary>
+    private string ConvertAmountToWords(decimal amount, Currency currency)
     {
-        // Load the ODS template
-        var templatePath = "Templates/recibo.ods";
-        var templateBytes = await File.ReadAllBytesAsync(templatePath);
+        // This is a basic implementation - you might want to use a more comprehensive library
+        var currencyName = currency == Currency.SOLES ? "SOLES" : "DÓLARES";
+        var integerPart = (int)Math.Floor(amount);
+        var decimalPart = (int)Math.Round((amount - integerPart) * 100);
+
+        var words = ConvertNumberToWords(integerPart);
+
+        if (decimalPart > 0)
+        {
+            words += $" CON {decimalPart:00}/100";
+        }
+        else
+        {
+            words += " CON 00/100";
+        }
+
+        return $"{words} {currencyName}";
+    }
+
+    /// <summary>
+    /// Converts an integer to words in Spanish (basic implementation)
+    /// </summary>
+    private string ConvertNumberToWords(int number)
+    {
+        if (number == 0)
+            return "CERO";
+
+        var ones = new[]
+        {
+            "",
+            "UNO",
+            "DOS",
+            "TRES",
+            "CUATRO",
+            "CINCO",
+            "SEIS",
+            "SIETE",
+            "OCHO",
+            "NUEVE",
+        };
+        var tens = new[]
+        {
+            "",
+            "",
+            "VEINTE",
+            "TREINTA",
+            "CUARENTA",
+            "CINCUENTA",
+            "SESENTA",
+            "SETENTA",
+            "OCHENTA",
+            "NOVENTA",
+        };
+        var teens = new[]
+        {
+            "DIEZ",
+            "ONCE",
+            "DOCE",
+            "TRECE",
+            "CATORCE",
+            "QUINCE",
+            "DIECISÉIS",
+            "DIECISIETE",
+            "DIECIOCHO",
+            "DIECINUEVE",
+        };
+        var hundreds = new[]
+        {
+            "",
+            "CIENTO",
+            "DOSCIENTOS",
+            "TRESCIENTOS",
+            "CUATROCIENTOS",
+            "QUINIENTOS",
+            "SEISCIENTOS",
+            "SETECIENTOS",
+            "OCHOCIENTOS",
+            "NOVECIENTOS",
+        };
+
+        if (number < 10)
+            return ones[number];
+        if (number < 20)
+            return teens[number - 10];
+        if (number < 100)
+        {
+            var ten = number / 10;
+            var one = number % 10;
+            if (ten == 2 && one > 0)
+                return $"VEINTI{ones[one]}";
+            return tens[ten] + (one > 0 ? $" Y {ones[one]}" : "");
+        }
+        if (number < 1000)
+        {
+            var hundred = number / 100;
+            var remainder = number % 100;
+            var hundredText = hundred == 1 && remainder == 0 ? "CIEN" : hundreds[hundred];
+            return hundredText + (remainder > 0 ? $" {ConvertNumberToWords(remainder)}" : "");
+        }
+        if (number < 1000000)
+        {
+            var thousand = number / 1000;
+            var remainder = number % 1000;
+            var thousandText = thousand == 1 ? "MIL" : $"{ConvertNumberToWords(thousand)} MIL";
+            return thousandText + (remainder > 0 ? $" {ConvertNumberToWords(remainder)}" : "");
+        }
+
+        // For larger numbers, you'd need to extend this logic
+        return number.ToString();
+    }
+
+    public async Task<byte[]> GenerateContractPdfAsync(Guid reservationId)
+    {
+        var docxBytes = await GenerateContractDocxAsync(reservationId);
+
+        // Convert to PDF
+        var (pdfBytes, pdfError) = _sofficeConverterService.ConvertToPdf(docxBytes, "docx");
+        if (pdfError != null)
+            throw new ArgumentException($"Error al convertir contrato a PDF: {pdfError}");
+
+        return pdfBytes;
+    }
+
+    public async Task<byte[]> GenerateContractDocxAsync(Guid reservationId)
+    {
+        // Fetch the reservation with all related data
+        var reservation =
+            await _context
+                .Reservations.Include(r => r.Client)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lot)
+                .ThenInclude(l => l.Block)
+                .ThenInclude(b => b.Project)
+                .Include(r => r.Quotation)
+                .ThenInclude(q => q.Lead)
+                .ThenInclude(l => l.AssignedTo)
+                .FirstOrDefaultAsync(r => r.Id == reservationId && r.IsActive)
+            ?? throw new ArgumentException("Reserva no encontrada");
+
+        var client = reservation.Client;
+        var quotation = reservation.Quotation;
+        var project = quotation?.Lot?.Block?.Project;
+        var lot = quotation?.Lot;
+        var block = quotation?.Lot?.Block;
+
+        // Generate contract number
+        // FIXME: Generate from actual data
+        var contractNumber =
+            $"CNT-{reservation.ReservationDate:yyyyMMdd}-{reservationId.ToString()[..8].ToUpper()}";
+
+        // Format client title (honorific)
+        var clientTitle = client?.Type == ClientType.Natural ? "Sr./Sra." : "Empresa";
+
+        // Load template
+        var templatePath = "Templates/plantilla_contrato_gestion_hogar.docx";
+        using var inputFileStream = new FileStream(templatePath, FileMode.Open, FileAccess.Read);
 
         var placeholders = new Dictionary<string, string>()
         {
-            { "{numero_recibo}", "" },
-            { "{fecha_recibo}", "" },
-            { "{cliente_nombre}", "" },
-            { "{cliente_dni}", "" },
-            { "{cliente_direccion}", "" },
-            { "{proyecto_nombre}", "" },
-            { "{concepto_pago}", "" },
-            { "{monto_pagado}", "" },
-            { "{monto_pagado_letras}", "" },
-            { "{moneda}", "" },
-            { "{forma_pago}", "" },
-            { "{numero_operacion}", "" },
-            { "{fecha_operacion}", "" },
-            { "{banco}", "" },
-            { "{vendedor_nombre}", "" },
-            { "{vendedor_dni}", "" },
+            { "{nro_contrato}", contractNumber },
+            { "{honorifico_cliente}", clientTitle },
+            { "{nombre_cliente}", client?.Name ?? client?.CompanyName ?? "" },
+            { "{dni_cliente}", client?.Dni ?? client?.Ruc ?? "" },
+            { "{estado_civil_cliente}", "" }, // You might want to add this field to the Client model
+            { "{ocupacion_cliente}", "" }, // You might want to add this field to the Client model
+            { "{domicilio_cliente}", client?.Address ?? "" },
+            { "{distrito_cliente}", "" }, // You might want to add these address fields
+            { "{provincia_cliente}", "" },
+            { "{departamento_cliente}", client?.Country ?? "" },
+            { "{nombre_proyecto}", project?.Name ?? "" },
+            { "{precio_dolares_metro_cuadrado}", $"$ {quotation?.PricePerM2AtQuotation ?? 0:N2}" },
+            { "{area_terreno}", $"{quotation?.AreaAtQuotation ?? 0:N2}" },
+            { "{precio_departamento_dolares}", $"$ {quotation?.FinalPrice ?? 0:N2}" },
+            {
+                "{precio_departamento_dolares_letras}",
+                ConvertAmountToWords(quotation?.FinalPrice ?? 0, Currency.DOLARES)
+            },
+            { "{precio_cochera_dolares}", "" }, // Parking space price - you might need to add this
+            { "{precio_cochera_dolares_letras}", "" },
+            { "{area_cochera}", "" }, // Parking space area
+            { "{nro_signada_cochera}", "" }, // Parking space number
+            { "{precio_total_dolares}", $"$ {quotation?.FinalPrice ?? 0:N2}" },
+            {
+                "{precio_total_dolares_letras}",
+                ConvertAmountToWords(quotation?.FinalPrice ?? 0, Currency.DOLARES)
+            },
+            { "{precio_inicial_dolares}", $"$ {reservation.AmountPaid:N2}" },
+            {
+                "{precio_inicial_dolares_letras}",
+                ConvertAmountToWords(reservation.AmountPaid, Currency.DOLARES)
+            },
+            {
+                "{fecha_suscripcion_contrato_letras}",
+                ConvertDateToWords(reservation.ReservationDate)
+            },
         };
 
         // Fill template
-        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholders(
-            templateBytes,
+        var (filledBytes, fillError) = _wordTemplateService.ReplacePlaceholders(
+            inputFileStream,
             placeholders
         );
         if (fillError != null)
-            throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
+            throw new ArgumentException($"Error al procesar plantilla de contrato: {fillError}");
 
-        // Convert to PDF
-        var (pdfBytes, pdfError) = _sofficeConverterService.ConvertToPdf(filledBytes, "ods");
-        if (pdfError != null)
-            throw new ArgumentException($"Error al convertir ODS a PDF: {pdfError}");
+        return filledBytes;
+    }
 
-        return pdfBytes;
+    /// <summary>
+    /// Converts a DateOnly to words in Spanish
+    /// </summary>
+    private string ConvertDateToWords(DateOnly date)
+    {
+        var months = new[]
+        {
+            "",
+            "enero",
+            "febrero",
+            "marzo",
+            "abril",
+            "mayo",
+            "junio",
+            "julio",
+            "agosto",
+            "septiembre",
+            "octubre",
+            "noviembre",
+            "diciembre",
+        };
+
+        var dayWords = ConvertNumberToWords(date.Day).ToLower();
+        var monthWord = months[date.Month];
+        var yearWords = ConvertNumberToWords(date.Year).ToLower();
+
+        return $"{dayWords} de {monthWord} del año {yearWords}";
     }
 }
