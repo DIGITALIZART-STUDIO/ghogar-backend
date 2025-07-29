@@ -1151,4 +1151,99 @@ public class ReservationService : IReservationService
 
         return pdfBytes;
     }
+
+    public async Task<byte[]> GenerateProcessedPaymentsPdfAsync(Guid reservationId)
+    {
+        // Load the ODS template
+        var templatePath = "Templates/pagos_realizados.ods";
+        var templateBytes = await File.ReadAllBytesAsync(templatePath);
+
+        var placeholders = new Dictionary<string, string>()
+        {
+            { "{cliente_nombre}", "" },
+            { "{proyecto_nombre}", "" },
+            { "{fecha_separacion}", "" },
+            { "{monto_separacion}", "" },
+            { "{moneda}", "" },
+            { "{numero_pagos_realizados}", "" },
+            { "{monto_total_pagado}", "" },
+            { "{fecha_pago_1}", "" },
+            { "{monto_pago_1}", "" },
+            { "{fecha_pago_2}", "" },
+            { "{monto_pago_2}", "" },
+            { "{fecha_pago_3}", "" },
+            { "{monto_pago_3}", "" },
+            { "{fecha_pago_4}", "" },
+            { "{monto_pago_4}", "" },
+            { "{fecha_pago_5}", "" },
+            { "{monto_pago_5}", "" },
+            { "{fecha_pago_6}", "" },
+            { "{monto_pago_6}", "" },
+            { "{fecha_pago_7}", "" },
+            { "{monto_pago_7}", "" },
+            { "{fecha_pago_8}", "" },
+            { "{monto_pago_8}", "" },
+            { "{fecha_pago_9}", "" },
+            { "{monto_pago_9}", "" },
+            { "{fecha_pago_10}", "" },
+            { "{monto_pago_10}", "" },
+        };
+
+        // Fill template
+        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholders(
+            templateBytes,
+            placeholders
+        );
+        if (fillError != null)
+            throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
+
+        // Convert to PDF
+        var (pdfBytes, pdfError) = _sofficeConverterService.ConvertToPdf(filledBytes, "ods");
+        if (pdfError != null)
+            throw new ArgumentException($"Error al convertir ODS a PDF: {pdfError}");
+
+        return pdfBytes;
+    }
+
+    public async Task<byte[]> GenerateReceiptPdfAsync(Guid reservationId)
+    {
+        // Load the ODS template
+        var templatePath = "Templates/recibo.ods";
+        var templateBytes = await File.ReadAllBytesAsync(templatePath);
+
+        var placeholders = new Dictionary<string, string>()
+        {
+            { "{numero_recibo}", "" },
+            { "{fecha_recibo}", "" },
+            { "{cliente_nombre}", "" },
+            { "{cliente_dni}", "" },
+            { "{cliente_direccion}", "" },
+            { "{proyecto_nombre}", "" },
+            { "{concepto_pago}", "" },
+            { "{monto_pagado}", "" },
+            { "{monto_pagado_letras}", "" },
+            { "{moneda}", "" },
+            { "{forma_pago}", "" },
+            { "{numero_operacion}", "" },
+            { "{fecha_operacion}", "" },
+            { "{banco}", "" },
+            { "{vendedor_nombre}", "" },
+            { "{vendedor_dni}", "" },
+        };
+
+        // Fill template
+        var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholders(
+            templateBytes,
+            placeholders
+        );
+        if (fillError != null)
+            throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
+
+        // Convert to PDF
+        var (pdfBytes, pdfError) = _sofficeConverterService.ConvertToPdf(filledBytes, "ods");
+        if (pdfError != null)
+            throw new ArgumentException($"Error al convertir ODS a PDF: {pdfError}");
+
+        return pdfBytes;
+    }
 }

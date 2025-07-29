@@ -318,4 +318,42 @@ public class ReservationsController : ControllerBase
             return StatusCode(500, $"Error al generar PDF de cronograma: {ex.Message}");
         }
     }
+
+    // GET: api/reservations/{id}/processed-payments/pdf
+    [HttpGet("{id}/processed-payments/pdf")]
+    public async Task<ActionResult> GenerateProcessedPaymentsPdf(Guid id)
+    {
+        try
+        {
+            var pdfBytes = await _reservationService.GenerateProcessedPaymentsPdfAsync(id);
+            return File(pdfBytes, "application/pdf", $"pagos-realizados-{id}.pdf");
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al generar PDF de pagos realizados: {ex.Message}");
+        }
+    }
+
+    // GET: api/reservations/{id}/receipt/pdf
+    [HttpGet("{id}/receipt/pdf")]
+    public async Task<ActionResult> GenerateReceiptPdf(Guid id)
+    {
+        try
+        {
+            var pdfBytes = await _reservationService.GenerateReceiptPdfAsync(id);
+            return File(pdfBytes, "application/pdf", $"recibo-{id}.pdf");
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al generar PDF de recibo: {ex.Message}");
+        }
+    }
 }
