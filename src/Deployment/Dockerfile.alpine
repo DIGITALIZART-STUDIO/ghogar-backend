@@ -23,6 +23,7 @@ COPY Services ./Services
 COPY Templates ./Templates
 COPY Program.cs .
 COPY appsettings.json .
+COPY Fonts /usr/local/share/fonts/
 
 # Build and publish the application
 RUN HUSKY=0 dotnet publish GestionHogar.csproj -c Release -r linux-musl-x64 \
