@@ -20,10 +20,8 @@ COPY Model ./Model
 COPY Properties ./Properties
 COPY Utils ./Utils
 COPY Services ./Services
-COPY Templates ./Templates
 COPY Program.cs .
 COPY appsettings.json .
-COPY Fonts /usr/local/share/fonts/
 
 # Build and publish the application
 RUN HUSKY=0 dotnet publish GestionHogar.csproj -c Release -r linux-musl-x64 \
@@ -60,6 +58,8 @@ RUN adduser -D -s /bin/sh appuser
 
 # Copy published application and templates
 COPY --from=build-env /app/out ./
+COPY Templates ./Templates
+COPY Fonts /usr/local/share/fonts/
 COPY Deployment/docker-entrypoint.sh ./
 
 # Make scripts executable
