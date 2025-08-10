@@ -41,4 +41,5 @@ public interface ILeadService
     Task<Lead?> RecycleLeadAsync(Guid id, Guid userId);
     Task<IEnumerable<Lead>> GetExpiredLeadsAsync();
     Task<int> CheckAndUpdateExpiredLeadsAsync();
+    Task<byte[]> ExportLeadsToExcelAsync(IExcelExportService excelExportService);
 }

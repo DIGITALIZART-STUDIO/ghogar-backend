@@ -346,4 +346,17 @@ public class LeadsController : ControllerBase
             return StatusCode(500, "Error interno del servidor");
         }
     }
+
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportLeadsToExcel(
+        [FromServices] IExcelExportService excelExportService
+    )
+    {
+        var fileBytes = await _leadService.ExportLeadsToExcelAsync(excelExportService);
+        return File(
+            fileBytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "leads.xlsx"
+        );
+    }
 }
