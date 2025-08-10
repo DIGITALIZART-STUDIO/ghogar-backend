@@ -293,10 +293,6 @@ public class ExcelExportService : IExcelExportService
 
         var totalColumns = simpleFieldsCount + maxComplexProperties;
 
-        Console.WriteLine(
-            $"[DEBUG] Cálculo columnas: Simples={simpleFieldsCount}, Complejas={maxComplexProperties}, Total={totalColumns}"
-        );
-
         return totalColumns; // NO usar Math.Max, usar el cálculo real
     }
 
@@ -342,10 +338,6 @@ public class ExcelExportService : IExcelExportService
             }
         }
 
-        Console.WriteLine(
-            $"[DEBUG] Encabezados dinámicos generados: {string.Join(", ", dynamicHeaders)}"
-        );
-
         return dynamicHeaders;
     }
 
@@ -366,20 +358,12 @@ public class ExcelExportService : IExcelExportService
         uint mainStyleIndex = ((originalRowIndex + 1) % 2 == 0) ? 4U : 5U;
         var currentColumn = 1;
 
-        Console.WriteLine(
-            $"[DEBUG] Procesando fila {originalRowIndex + 1}, datos: {rowData.Count}"
-        );
-
         // Procesar campos simples primero
         for (int i = 0; i < rowData.Count && i < headers.Count; i++)
         {
             if (!complexDataColumnIndexes.Contains(i))
             {
                 var value = rowData[i];
-
-                Console.WriteLine(
-                    $"[DEBUG] Campo simple {i}: {headers[i]} = {value?.GetType().Name} en columna {currentColumn}"
-                );
 
                 if (currentColumn <= totalColumns)
                 {
@@ -405,13 +389,7 @@ public class ExcelExportService : IExcelExportService
                 var headerName =
                     complexIndex < headers.Count ? headers[complexIndex] : $"Campo{complexIndex}";
 
-                Console.WriteLine(
-                    $"[DEBUG] Campo complejo {complexIndex}: {headerName} = {value?.GetType().Name}, Valor = {value}"
-                );
-
                 var properties = GetComplexDataProperties(value ?? "");
-
-                Console.WriteLine($"[DEBUG] Propiedades encontradas: {properties.Count}");
 
                 if (properties.Count > 0)
                 {
@@ -425,10 +403,6 @@ public class ExcelExportService : IExcelExportService
                 {
                     if (currentColumn <= totalColumns)
                     {
-                        Console.WriteLine(
-                            $"[DEBUG] Añadiendo propiedad: {property.Key} = {property.Value} en columna {currentColumn}"
-                        );
-
                         var cell = new Cell
                         {
                             CellReference = GetColumnName(currentColumn) + startRowIndex,
@@ -1132,13 +1106,16 @@ public class ExcelExportService : IExcelExportService
         if (allRows.Count == 0)
             return;
 
-        // LÓGICA CON PALETA CORRECTA DEL FRONTEND
+        // LÓGICA MEJORADA CON DETECCIÓN GENÉRICA DE FILAS EXPANDIDAS
         foreach (var row in allRows)
         {
             if (row.RowIndex == null)
                 continue;
             var rowIndex = (int)row.RowIndex.Value;
             var cells = row.Elements<Cell>().ToList();
+
+            // Determinar si TODA la fila es expandida/compleja
+            bool isExpandedRow = IsEntireRowExpanded(row, allRows, rowIndex);
 
             foreach (var cell in cells)
             {
@@ -1159,14 +1136,10 @@ public class ExcelExportService : IExcelExportService
                 }
                 else // DATOS - con paleta del frontend
                 {
-                    // Verificar si es fila expandida/compleja
-                    if (
-                        IsExpandedRow(cell, cells, allRows, rowIndex)
-                        || IsSectionTitle(cell)
-                        || HasComplexDataIndicator(cell)
-                    )
+                    // Si TODA la fila es expandida, aplicar estilo de datos complejos a TODAS las celdas
+                    if (isExpandedRow)
                     {
-                        styleIndex = 6u; // NUEVO: Estilo muted para datos complejos
+                        styleIndex = 6u; // Estilo muted para datos complejos (TODA la fila)
                     }
                     else
                     {
@@ -1182,198 +1155,95 @@ public class ExcelExportService : IExcelExportService
         }
     }
 
-    // Métodos auxiliares GENÉRICOS para mejor detección de tipos de filas
-    private bool IsExpandedRow(
-        Cell cell,
-        List<Cell> rowCells,
-        List<Row> allRows,
-        int currentRowIndex
-    )
+    // NUEVO: Método mejorado para detectar si TODA la fila es expandida/compleja
+    private bool IsEntireRowExpanded(Row row, List<Row> allRows, int currentRowIndex)
     {
-        // Una fila expandida típicamente:
-        // 1. Tiene contenido indentado o marcado especialmente
-        // 2. Sigue inmediatamente a una fila principal
-        // 3. Tiene menos columnas llenas que una fila principal
+        var cells = row.Elements<Cell>().ToList();
+        if (cells.Count == 0)
+            return false;
 
-        var cellValue = GetCellValue(cell);
-
-        // Buscar indicadores GENÉRICOS de filas expandidas
-        if (!string.IsNullOrEmpty(cellValue))
+        // 1. Verificar si cualquier celda de la fila tiene indicadores EXPLÍCITOS de fila expandida
+        foreach (var cell in cells)
         {
-            // Indicadores universales de filas expandidas (símbolos y patrones comunes)
-            string[] genericExpandedIndicators =
-            {
-                "→",
-                "•",
-                "-",
-                "▪",
-                "◦",
-                "≫",
-                "►",
-                "▶",
-                "⮚", // Símbolos de lista/indentación
-                "├",
-                "└",
-                "│",
-                "┌",
-                "┐", // Símbolos de árbol
-                "○",
-                "●",
-                "◆",
-                "■",
-                "□", // Bullets alternativos
-            };
+            var cellValue = GetCellValue(cell);
+            if (string.IsNullOrEmpty(cellValue))
+                continue;
 
-            // Verificar símbolos de indentación
-            if (
-                genericExpandedIndicators.Any(symbol =>
-                    cellValue.StartsWith(symbol) || cellValue.Contains($" {symbol} ")
-                )
-            )
-            {
-                return true;
-            }
-
-            // Verificar patrones de datos expandidos (cualquier campo con ":")
-            if (cellValue.Contains(":") && cellValue.Length < 100) // Evitar texto largo que casualmente tenga ":"
-            {
-                // Patrón típico: "Campo: Valor" o "Propiedad: Dato"
-                var colonIndex = cellValue.IndexOf(':');
-                if (colonIndex > 0 && colonIndex < cellValue.Length - 1)
-                {
-                    var beforeColon = cellValue.Substring(0, colonIndex).Trim();
-                    // Si antes de los dos puntos hay una palabra corta (nombre de campo), probablemente es fila expandida
-                    if (
-                        beforeColon.Length > 0
-                        && beforeColon.Length <= 30
-                        && !beforeColon.Contains(' ')
-                    )
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            // Verificar si empieza con indentación (espacios al inicio)
-            if (cellValue.StartsWith("  ") || cellValue.StartsWith("\t"))
-            {
-                return true;
-            }
-
-            // Verificar patrones de listas numeradas o con corchetes [1], [2], etc.
-            if (
-                System.Text.RegularExpressions.Regex.IsMatch(cellValue, @"^\[\d+\]")
-                || System.Text.RegularExpressions.Regex.IsMatch(cellValue, @"^\d+\.")
-                || System.Text.RegularExpressions.Regex.IsMatch(cellValue, @"^\d+\)")
-            )
+            // Indicadores explícitos y específicos de filas expandidas
+            if (HasExpandedRowIndicators(cellValue))
             {
                 return true;
             }
         }
 
-        // Verificar si esta fila tiene significativamente menos celdas llenas que la anterior
-        if (currentRowIndex > 3) // Después de los encabezados
+        // 2. CRITERIO ESTRUCTURAL: Verificar si los datos empiezan en columna B o posterior
+        // Y la primera celda no vacía contiene un símbolo explícito de expansión
+        var firstNonEmptyCell = cells.FirstOrDefault(c => !string.IsNullOrEmpty(GetCellValue(c)));
+        if (firstNonEmptyCell?.CellReference?.Value != null)
         {
-            var previousRow = allRows.FirstOrDefault(r => r.RowIndex.Value == currentRowIndex - 1);
-            if (previousRow != null)
-            {
-                var currentRowFilledCells = rowCells.Count(c =>
-                    !string.IsNullOrEmpty(GetCellValue(c))
-                );
-                var previousRowCells = previousRow.Elements<Cell>().ToList();
-                var previousRowFilledCells = previousRowCells.Count(c =>
-                    !string.IsNullOrEmpty(GetCellValue(c))
-                );
+            var columnIndex = GetColumnIndex(firstNonEmptyCell.CellReference.Value);
+            var firstValue = GetCellValue(firstNonEmptyCell);
 
-                // Si la fila actual tiene menos de la mitad de celdas llenas que la anterior,
-                // probablemente es una fila expandida
-                if (
-                    currentRowFilledCells > 0
-                    && currentRowFilledCells < previousRowFilledCells * 0.6
-                )
+            // Solo si empieza en columna B+ Y tiene símbolo de flecha o patrón de campo expandido
+            if (columnIndex > 1 && HasExpandedRowIndicators(firstValue))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    } // NUEVO: Método auxiliar para detectar indicadores específicos de filas expandidas
+
+    private bool HasExpandedRowIndicators(string cellValue)
+    {
+        // 1. Verificar SÍMBOLOS EXPLÍCITOS de filas expandidas (más restrictivo)
+        string[] expandedSymbols = { "→", "•", "▪", "►", "▶", "⮚" };
+        if (expandedSymbols.Any(symbol => cellValue.StartsWith(symbol)))
+        {
+            return true;
+        }
+
+        // 2. Verificar TÍTULOS DE SECCIÓN específicos (terminan en ":")
+        if (cellValue.EndsWith(":") && cellValue.Length <= 50)
+        {
+            // Debe empezar con símbolo de expansión para ser título de sección
+            if (expandedSymbols.Any(symbol => cellValue.StartsWith(symbol)))
+            {
+                return true;
+            }
+        }
+
+        // 3. Verificar PATRONES DE CAMPOS EXPANDIDOS genéricos (campo: valor)
+        // Solo si el valor tiene el patrón "Palabra: Valor" y la palabra es corta
+        if (cellValue.Contains(": "))
+        {
+            var colonIndex = cellValue.IndexOf(": ");
+            if (colonIndex > 0 && colonIndex <= 25) // Campo corto
+            {
+                var fieldName = cellValue.Substring(0, colonIndex).Trim();
+
+                // Debe ser una palabra sola (campo típico de expansión)
+                if (!string.IsNullOrEmpty(fieldName) && !fieldName.Contains(" "))
+                {
+                    return true;
+                }
+
+                // O palabras compuestas típicas de campos expandidos (máximo 3 palabras)
+                var wordCount = fieldName.Split(' ').Length;
+                if (wordCount <= 3 && fieldName.Length <= 25)
                 {
                     return true;
                 }
             }
         }
 
-        return false;
-    }
-
-    private bool IsSectionTitle(Cell cell)
-    {
-        var cellValue = GetCellValue(cell);
-        if (string.IsNullOrEmpty(cellValue))
-            return false;
-
-        // Patrones GENÉRICOS para títulos de sección (no específicos de clientes)
-
-        // 1. Termina en dos puntos (patrón universal de título)
-        if (cellValue.EndsWith(":"))
+        // 4. Verificar listas numeradas explícitas
+        if (System.Text.RegularExpressions.Regex.IsMatch(cellValue, @"^\[\d+\]"))
         {
             return true;
-        }
-
-        // 2. Empieza con símbolo de flecha o similar
-        string[] sectionSymbols = { "→", "►", "▶", "⮚", "■", "●", "◆" };
-        if (sectionSymbols.Any(symbol => cellValue.StartsWith(symbol)))
-        {
-            return true;
-        }
-
-        // 3. Patrones típicos de títulos de sección
-        if (
-            cellValue.ToLower().StartsWith("lista de")
-            || cellValue.ToLower().StartsWith("datos de")
-            || cellValue.ToLower().StartsWith("detalles de")
-            || cellValue.ToLower().StartsWith("información de")
-            || cellValue.ToLower().Contains("adicionales")
-            || cellValue.ToLower().Contains("expandida")
-            || cellValue.ToLower().Contains("expandidos")
-        )
-        {
-            return true;
-        }
-
-        // 4. Texto corto seguido de dos puntos (máximo 50 caracteres para evitar falsos positivos)
-        if (cellValue.Length <= 50 && cellValue.Contains(":"))
-        {
-            var parts = cellValue.Split(':');
-            if (
-                parts.Length == 2
-                && !string.IsNullOrWhiteSpace(parts[0])
-                && string.IsNullOrWhiteSpace(parts[1])
-            )
-            {
-                // Formato "Título:" (sin contenido después de los dos puntos)
-                return true;
-            }
         }
 
         return false;
-    }
-
-    private bool HasComplexDataIndicator(Cell cell)
-    {
-        var cellValue = GetCellValue(cell);
-        if (string.IsNullOrEmpty(cellValue))
-            return false;
-
-        // Buscar indicadores GENÉRICOS amigables para datos complejos
-        // Estos son los mensajes que generamos en FormatMainRowValue()
-        return cellValue.Contains("✓ Ver lista abajo")
-            || cellValue.Contains("✓ Ver detalles abajo")
-            || cellValue.Contains("Ver lista")
-            || cellValue.Contains("Ver detalles")
-            || cellValue.Contains("Sin elementos")
-            || cellValue.Contains("Sin información")
-            // También detectar otros patrones genéricos
-            || cellValue.Equals("[]")
-            || cellValue.Equals("{}")
-            || cellValue.StartsWith("Array con ")
-            || cellValue.StartsWith("Objeto con ")
-            || cellValue.Contains(" elementos")
-            || cellValue.Contains(" propiedades");
     }
 
     // Método auxiliar para obtener el valor de una celda
