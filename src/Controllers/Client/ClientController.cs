@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
@@ -27,16 +28,19 @@ public class ClientsController : ControllerBase
     private readonly ILeadService _leadService;
 
     private readonly DatabaseContext _context;
+    private readonly IExcelExportService _excelExportService;
 
     public ClientsController(
         IClientService clientService,
         ILeadService leadService,
-        DatabaseContext context
+        DatabaseContext context,
+        IExcelExportService excelExportService
     )
     {
         _clientService = clientService;
         _leadService = leadService;
         _context = context;
+        _excelExportService = excelExportService;
     }
 
     // GET: api/clients
@@ -304,6 +308,103 @@ public class ClientsController : ControllerBase
     {
         var clientsSummary = await _clientService.GetClientsSummaryAsync();
         return Ok(clientsSummary);
+    }
+
+    [HttpGet("excel")]
+    public async Task<IActionResult> DownloadClientsExcel()
+    {
+        var clients = await _clientService.GetAllClientsAsync();
+
+        // Encabezados incluyendo los campos complejos con nombres descriptivos
+        var headers = new List<string>
+        {
+            "Nombre",
+            "DNI",
+            "RUC",
+            "Empresa",
+            "Teléfono",
+            "Email",
+            "Dirección",
+            "País",
+            "Tipo",
+            "Activo",
+            "CoPropietarios", // Campo complejo - índice 10
+            "Propiedad Separada", // Campo complejo - índice 11
+        };
+
+        var data = clients
+            .Select(c => new List<object>
+            {
+                c.Name ?? string.Empty,
+                c.Dni ?? string.Empty,
+                c.Ruc ?? string.Empty,
+                c.CompanyName ?? string.Empty,
+                c.PhoneNumber ?? string.Empty,
+                c.Email ?? string.Empty,
+                c.Address ?? string.Empty,
+                c.Country ?? string.Empty,
+                c.Type != null ? (c.Type ?? ClientType.Juridico).ToString() : string.Empty,
+                c.IsActive ? "Sí" : "No",
+                ParseJsonArrayOrObject(c.CoOwners ?? string.Empty) ?? string.Empty, // Datos complejos - índice 10
+                ParseJsonObject(c.SeparatePropertyData ?? string.Empty) ?? string.Empty, // Datos complejos - índice 11
+            })
+            .ToList();
+
+        // Especifica qué columnas contienen datos complejos - NO necesario para expansión vertical
+        var complexDataColumnIndexes = new List<int>(); // Lista vacía porque usaremos expansión vertical
+
+        var fileBytes = _excelExportService.GenerateExcel(
+            "Reporte de Clientes",
+            headers,
+            data,
+            false, // Desactiva la expansión horizontal - usa expansión vertical (filas)
+            complexDataColumnIndexes // Lista vacía
+        );
+
+        return File(
+            fileBytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "clientes.xlsx"
+        );
+    }
+
+    // Métodos auxiliares para procesar JSON
+    private object ParseJsonArrayOrObject(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return "";
+
+        try
+        {
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                return doc.RootElement;
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                return doc.RootElement;
+            return json;
+        }
+        catch
+        {
+            return json;
+        }
+    }
+
+    private object ParseJsonObject(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return "";
+
+        try
+        {
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                return doc.RootElement;
+            return json;
+        }
+        catch
+        {
+            return json;
+        }
     }
 
     // POST: api/clients/import
