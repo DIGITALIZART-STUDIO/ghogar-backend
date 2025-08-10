@@ -350,6 +350,7 @@ public class ClientsController : ControllerBase
             })
             .ToList();
 
+
         // Especifica qué columnas contienen datos complejos - NO necesario para expansión vertical
         var complexDataColumnIndexes = new List<int>(); // Lista vacía porque usaremos expansión vertical
 
@@ -377,16 +378,23 @@ public class ClientsController : ControllerBase
         try
         {
             var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind == JsonValueKind.Array)
-                return doc.RootElement;
-            if (doc.RootElement.ValueKind == JsonValueKind.Object)
-                return doc.RootElement;
-            return json;
+            // Si es un array u objeto, lo traducimos y devolvemos como JsonElement para que el Excel lo expanda
+            if (
+                doc.RootElement.ValueKind == JsonValueKind.Array
+                || doc.RootElement.ValueKind == JsonValueKind.Object
+            )
+            {
+                // Traducir las claves del JSON y devolver el JsonElement traducido
+                return TranslateJsonElement(doc.RootElement, GetCoOwnersMapping());
+            }
         }
         catch
         {
-            return json;
+            // Si no es JSON, convertimos el string plano a un objeto JSON traducido
+            return ConvertPlainTextToTranslatedJson(json, GetCoOwnersMapping());
         }
+
+        return json;
     }
 
     private object ParseJsonObject(string json)
@@ -398,13 +406,181 @@ public class ClientsController : ControllerBase
         {
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.ValueKind == JsonValueKind.Object)
-                return doc.RootElement;
-            return json;
+            {
+                // Traducir las claves del objeto JSON y devolver el JsonElement traducido
+                return TranslateJsonElement(doc.RootElement, GetSeparatePropertyMapping());
+            }
         }
         catch
         {
-            return json;
+            // Si no es JSON, convertimos el string plano a un objeto JSON traducido
+            return ConvertPlainTextToTranslatedJson(json, GetSeparatePropertyMapping());
         }
+
+        return json;
+    }
+
+    // NUEVA: Función para convertir texto plano a JSON traducido
+    private JsonElement ConvertPlainTextToTranslatedJson(
+        string plainText,
+        Dictionary<string, string> mapping
+    )
+    {
+        if (string.IsNullOrWhiteSpace(plainText))
+            return JsonDocument.Parse("{}").RootElement;
+
+        var jsonObject = new Dictionary<string, object>();
+
+        // Separar por tabuladores o saltos de línea
+        var partes = plainText.Split(
+            new[] { '\t', '\n', '\r' },
+            StringSplitOptions.RemoveEmptyEntries
+        );
+
+        foreach (var parte in partes)
+        {
+            var kv = parte.Split(new[] { ':' }, 2);
+            if (kv.Length == 2)
+            {
+                var clave = kv[0].Trim();
+                var valor = kv[1].Trim();
+
+                // Usar la clave traducida si existe, sino usar la original
+                var claveTraducida = mapping.ContainsKey(clave) ? mapping[clave] : clave;
+                jsonObject[claveTraducida] = valor;
+            }
+        }
+
+        // Convertir a JSON y devolver como JsonElement
+        var jsonString = System.Text.Json.JsonSerializer.Serialize(jsonObject);
+        return JsonDocument.Parse(jsonString).RootElement;
+    }
+
+    // NUEVA: Función para traducir JsonElement (JSON válido) con claves en español
+    private JsonElement TranslateJsonElement(
+        JsonElement element,
+        Dictionary<string, string> mapping
+    )
+    {
+        try
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                var translatedObject = new Dictionary<string, object>();
+
+                foreach (var property in element.EnumerateObject())
+                {
+                    var originalKey = property.Name;
+                    var translatedKey = mapping.ContainsKey(originalKey)
+                        ? mapping[originalKey]
+                        : originalKey;
+
+                    // Traducir recursivamente el valor si también es un objeto
+                    if (property.Value.ValueKind == JsonValueKind.Object)
+                    {
+                        translatedObject[translatedKey] = TranslateJsonElement(
+                            property.Value,
+                            mapping
+                        );
+                    }
+                    else if (property.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        var translatedArray = new List<object>();
+                        foreach (var item in property.Value.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.Object)
+                            {
+                                translatedArray.Add(TranslateJsonElement(item, mapping));
+                            }
+                            else
+                            {
+                                var value = GetJsonElementValue(item);
+                                if (value != null)
+                                    translatedArray.Add(value);
+                            }
+                        }
+                        translatedObject[translatedKey] = translatedArray;
+                    }
+                    else
+                    {
+                        var value = GetJsonElementValue(property.Value);
+                        if (value != null)
+                            translatedObject[translatedKey] = value;
+                    }
+                }
+
+                var jsonString = System.Text.Json.JsonSerializer.Serialize(translatedObject);
+                return JsonDocument.Parse(jsonString).RootElement;
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                var translatedArray = new List<object>();
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.Object)
+                    {
+                        translatedArray.Add(TranslateJsonElement(item, mapping));
+                    }
+                    else
+                    {
+                        var value = GetJsonElementValue(item);
+                        if (value != null)
+                            translatedArray.Add(value);
+                    }
+                }
+
+                var jsonString = System.Text.Json.JsonSerializer.Serialize(translatedArray);
+                return JsonDocument.Parse(jsonString).RootElement;
+            }
+        }
+        catch
+        {
+            // Si hay algún error, devolver el elemento original
+            return element;
+        }
+
+        return element;
+    }
+
+    // NUEVA: Función auxiliar para obtener el valor de un JsonElement
+    private object? GetJsonElementValue(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString() ?? "",
+            JsonValueKind.Number => element.GetDecimal(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            _ => element.ToString(),
+        };
+    }
+
+    // NUEVA: Mapeo para co-propietarios
+    private Dictionary<string, string> GetCoOwnersMapping()
+    {
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "dni", "DNI" },
+            { "name", "Nombre" },
+            { "email", "Email" },
+            { "phone", "Teléfono" },
+            { "address", "Dirección" },
+        };
+    }
+
+    // NUEVA: Mapeo para propiedad separada
+    private Dictionary<string, string> GetSeparatePropertyMapping()
+    {
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "email", "Email" },
+            { "phone", "Teléfono" },
+            { "address", "Dirección" },
+            { "spouseDni", "DNI Cónyuge" },
+            { "spouseName", "Nombre Cónyuge" },
+            { "maritalStatus", "Estado Civil" },
+        };
     }
 
     // POST: api/clients/import
