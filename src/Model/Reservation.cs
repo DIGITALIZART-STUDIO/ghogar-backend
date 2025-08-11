@@ -41,6 +41,11 @@ public class Reservation : BaseModel
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PaymentMethod PaymentMethod { get; set; }
 
+    // Estado adicional de validación de contrato
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public ContractValidationStatus ContractValidationStatus { get; set; } =
+        ContractValidationStatus.None;
+
     // Nombre del banco si es depósito/transferencia (opcional)
     public string? BankName { get; set; }
 
@@ -95,4 +100,13 @@ public enum PaymentMethod
     CASH, // Efectivo
     BANK_DEPOSIT, // Depósito bancario
     BANK_TRANSFER, // Transferencia bancaria
+}
+
+// Nuevo enum para estados de validación de contrato
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ContractValidationStatus
+{
+    None, // Sin validación
+    PendingValidation, // Pendiente de validación de contrato
+    Validated, // Contrato validado
 }

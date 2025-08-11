@@ -130,6 +130,184 @@ public class DashboardService
             );
         }
 
+        // Selecciona solo el top 10 por eficiencia
+        teamData = teamData
+            .OrderByDescending(t => t.Efficiency)
+            .ThenByDescending(t => t.Reservations)
+            .Take(10)
+            .ToList();
+
+        // --- Análisis de clientes ---
+        var clients = await _db.Clients.ToListAsync();
+        var clientAnalysis = new ClientAnalysisDto
+        {
+            TotalClients = clients.Count,
+            NaturalPersons = clients.Count(c => c.Type == ClientType.Natural),
+            LegalEntities = clients.Count(c => c.Type == ClientType.Juridico),
+            WithEmail = clients.Count(c => !string.IsNullOrWhiteSpace(c.Email)),
+            WithCompleteData = clients.Count(c =>
+                !string.IsNullOrWhiteSpace(c.Name)
+                && !string.IsNullOrWhiteSpace(c.PhoneNumber)
+                && !string.IsNullOrWhiteSpace(c.Email)
+                && !string.IsNullOrWhiteSpace(c.Address)
+            ),
+            SeparateProperty = clients.Count(c => c.SeparateProperty),
+            CoOwners = clients.Count(c => !string.IsNullOrWhiteSpace(c.CoOwners)),
+        };
+
+        // --- Métricas por proyecto ---
+        var projects = await _db.Projects.Include(p => p.Blocks).ToListAsync();
+        var blocks = await _db.Blocks.ToListAsync();
+        var lots = await _db.Lots.ToListAsync();
+
+        var projectMetrics = new List<ProjectMetricDto>();
+        foreach (var project in projects)
+        {
+            var projectBlocks = blocks.Where(b => b.ProjectId == project.Id).ToList();
+            var projectLots = lots.Where(l => projectBlocks.Any(b => b.Id == l.BlockId)).ToList();
+
+            int available = projectLots.Count(l => l.Status == LotStatus.Available);
+            int quoted = projectLots.Count(l => l.Status == LotStatus.Quoted);
+            int reserved = projectLots.Count(l => l.Status == LotStatus.Reserved);
+            int sold = projectLots.Count(l => l.Status == LotStatus.Sold);
+
+            decimal revenue = projectLots.Where(l => l.Status == LotStatus.Sold).Sum(l => l.Price);
+            decimal avgPrice = projectLots.Any()
+                ? Math.Round(projectLots.Average(l => l.Price), 2)
+                : 0;
+
+            double efficiency =
+                projectLots.Count > 0 ? Math.Round((sold / (double)projectLots.Count) * 100, 1) : 0;
+
+            projectMetrics.Add(
+                new ProjectMetricDto
+                {
+                    Name = project.Name,
+                    Location = project.Location,
+                    Blocks = projectBlocks.Count,
+                    TotalLots = projectLots.Count,
+                    Available = available,
+                    Quoted = quoted,
+                    Reserved = reserved,
+                    Sold = sold,
+                    Revenue = revenue,
+                    AvgPrice = avgPrice,
+                    Efficiency = efficiency,
+                }
+            );
+        }
+
+        // --- Métricas de pagos ---
+        var totalScheduled = await _db.Payments.SumAsync(p => (decimal?)p.AmountDue) ?? 0;
+        var totalPaid = await _db.PaymentTransactions.SumAsync(pt => (decimal?)pt.AmountPaid) ?? 0;
+        var pending =
+            await _db.Payments.Where(p => !p.Paid).SumAsync(p => (decimal?)p.AmountDue) ?? 0;
+        var overdue =
+            await _db
+                .Payments.Where(p => !p.Paid && p.DueDate < DateTime.UtcNow)
+                .SumAsync(p => (decimal?)p.AmountDue) ?? 0;
+
+        var cashPayments =
+            await _db
+                .PaymentTransactions.Where(pt => pt.PaymentMethod == PaymentMethod.CASH)
+                .SumAsync(pt => (decimal?)pt.AmountPaid) ?? 0;
+        var bankTransfers =
+            await _db
+                .PaymentTransactions.Where(pt => pt.PaymentMethod == PaymentMethod.BANK_TRANSFER)
+                .SumAsync(pt => (decimal?)pt.AmountPaid) ?? 0;
+        var deposits =
+            await _db
+                .PaymentTransactions.Where(pt => pt.PaymentMethod == PaymentMethod.BANK_DEPOSIT)
+                .SumAsync(pt => (decimal?)pt.AmountPaid) ?? 0;
+
+        var paymentMetrics = new PaymentMetricsDto
+        {
+            TotalScheduled = totalScheduled,
+            TotalPaid = totalPaid,
+            Pending = pending,
+            Overdue = overdue,
+            CashPayments = cashPayments,
+            BankTransfers = bankTransfers,
+            Deposits = deposits,
+        };
+
+        // --- Rendimiento mensual ---
+        var months = new[]
+        {
+            "Ene",
+            "Feb",
+            "Mar",
+            "Abr",
+            "May",
+            "Jun",
+            "Jul",
+            "Ago",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dic",
+        };
+        var monthlyPerformance = new List<MonthlyPerformanceDto>();
+
+        for (int m = 1; m <= 12; m++)
+        {
+            var monthStartDate = new DateTime(yearToUse, m, 1, 0, 0, 0, DateTimeKind.Utc);
+            var monthEndDate = monthStartDate.AddMonths(1);
+
+            // Leads por mes
+            var leadsCount1 = await _db.Leads.CountAsync(l =>
+                l.EntryDate >= monthStartDate && l.EntryDate < monthEndDate
+            );
+
+            // Cotizaciones por mes
+            var quotationsInMonth = await _db
+                .Quotations.Where(q => !string.IsNullOrEmpty(q.QuotationDate))
+                .ToListAsync();
+
+            var quotationsCount = quotationsInMonth.Count(q =>
+            {
+                DateTime date;
+                if (DateTime.TryParse(q.QuotationDate, out date))
+                {
+                    return date >= monthStartDate && date < monthEndDate;
+                }
+                return false;
+            });
+
+            // Reservas por mes
+            var reservationsCount1 = await _db.Reservations.CountAsync(r =>
+                r.ReservationDate >= DateOnly.FromDateTime(monthStartDate)
+                && r.ReservationDate < DateOnly.FromDateTime(monthEndDate)
+            );
+
+            // Ventas por mes (reservas con estado CANCELED)
+            var salesCount = await _db.Reservations.CountAsync(r =>
+                r.Status == ReservationStatus.CANCELED
+                && r.ReservationDate >= DateOnly.FromDateTime(monthStartDate)
+                && r.ReservationDate < DateOnly.FromDateTime(monthEndDate)
+            );
+
+            // Revenue por mes (pagos realizados en ese mes)
+            var revenue =
+                await _db
+                    .PaymentTransactions.Where(pt =>
+                        pt.PaymentDate >= monthStartDate && pt.PaymentDate < monthEndDate
+                    )
+                    .SumAsync(pt => (decimal?)pt.AmountPaid) ?? 0;
+
+            monthlyPerformance.Add(
+                new MonthlyPerformanceDto
+                {
+                    Month = months[m - 1],
+                    Leads = leadsCount1,
+                    Quotations = quotationsCount,
+                    Reservations = reservationsCount1,
+                    Sales = salesCount,
+                    Revenue = revenue,
+                }
+            );
+        }
+
         var dto = new DashboardAdminDto
         {
             TotalProjects = await _db.Projects.CountAsync(),
@@ -161,6 +339,10 @@ public class DashboardService
             LeadsByStatus = leadsByStatus,
             LeadSources = leadSources,
             TeamData = teamData,
+            ClientAnalysis = clientAnalysis,
+            ProjectMetrics = projectMetrics,
+            PaymentMetrics = paymentMetrics,
+            MonthlyPerformance = monthlyPerformance,
         };
 
         return dto;

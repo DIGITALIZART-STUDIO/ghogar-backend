@@ -44,6 +44,7 @@ public class ReservationService : IReservationService
                 AmountPaid = r.AmountPaid,
                 Currency = r.Currency,
                 Status = r.Status,
+                ContractValidationStatus = r.ContractValidationStatus,
                 PaymentMethod = r.PaymentMethod,
                 BankName = r.BankName,
                 ExchangeRate = r.ExchangeRate,
@@ -54,6 +55,47 @@ public class ReservationService : IReservationService
                 ModifiedAt = r.ModifiedAt,
             })
             .ToListAsync();
+    }
+
+    public async Task<
+        PaginatedResponseV2<ReservationDto>
+    > GetAllCanceledPendingValidationReservationsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService
+    )
+    {
+        var query = _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .Where(r =>
+                r.IsActive
+                && r.Status == ReservationStatus.CANCELED
+                && r.ContractValidationStatus == ContractValidationStatus.PendingValidation
+            )
+            .Select(r => new ReservationDto
+            {
+                Id = r.Id,
+                ClientId = r.ClientId,
+                ClientName = r.Client.DisplayName,
+                QuotationId = r.QuotationId,
+                QuotationCode = r.Quotation.Code,
+                ReservationDate = r.ReservationDate,
+                AmountPaid = r.AmountPaid,
+                Currency = r.Currency,
+                Status = r.Status,
+                ContractValidationStatus = r.ContractValidationStatus,
+                PaymentMethod = r.PaymentMethod,
+                BankName = r.BankName,
+                ExchangeRate = r.ExchangeRate,
+                ExpiresAt = r.ExpiresAt,
+                Notified = r.Notified,
+                Schedule = r.Schedule,
+                CreatedAt = r.CreatedAt,
+                ModifiedAt = r.ModifiedAt,
+            });
+
+        return await paginationService.PaginateAsync(query, page, pageSize);
     }
 
     public async Task<IEnumerable<ReservationWithPaymentsDto>> GetAllCanceledReservationsAsync()
@@ -100,7 +142,11 @@ public class ReservationService : IReservationService
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
             .Include(r => r.Payments)
-            .Where(r => r.IsActive && r.Status == ReservationStatus.CANCELED)
+            .Where(r =>
+                r.IsActive
+                && r.Status == ReservationStatus.CANCELED
+                && r.ContractValidationStatus == ContractValidationStatus.Validated
+            )
             .Select(r => new ReservationWithPaymentsDto
             {
                 Id = r.Id,
@@ -363,17 +409,21 @@ public class ReservationService : IReservationService
         reservation.Status = statusEnum;
         reservation.ModifiedAt = DateTime.UtcNow;
 
-        // Handle custom logic when status changes to CANCELED (which means "paid")
-        if (
-            statusEnum == ReservationStatus.CANCELED
-            && previousStatus != ReservationStatus.CANCELED
-        )
+        // Actualiza el estado de validación de contrato según el nuevo estado
+        if (statusEnum == ReservationStatus.CANCELED)
         {
-            await GeneratePaymentScheduleAsync(reservation);
+            reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
+            // Si tienes lógica para pagos, la mantienes aquí
+            if (previousStatus != ReservationStatus.CANCELED)
+            {
+                await GeneratePaymentScheduleAsync(reservation);
+            }
         }
-
-        // TODO: Implement logic for when status goes from CANCELED to any other
-        // This should handle cleanup/reversal of payment generation if needed
+        else
+        {
+            reservation.ContractValidationStatus = ContractValidationStatus.None;
+            // Aquí podrías limpiar pagos si lo necesitas
+        }
 
         await _context.SaveChangesAsync();
 
