@@ -285,33 +285,33 @@ public class ApiPeruService
 
         public class RucData
         {
-            public string ruc { get; set; }
-            public string nombre_o_razon_social { get; set; }
-            public string direccion { get; set; }
-            public string direccion_completa { get; set; }
-            public string estado { get; set; }
-            public string condicion { get; set; }
-            public string departamento { get; set; }
-            public string provincia { get; set; }
-            public string distrito { get; set; }
-            public string ubigeo_sunat { get; set; }
-            public string[] ubigeo { get; set; }
-            public string es_agente_de_retencion { get; set; }
-            public string es_buen_contribuyente { get; set; }
+            public required string ruc { get; set; }
+            public required string nombre_o_razon_social { get; set; }
+            public required string direccion { get; set; }
+            public required string direccion_completa { get; set; }
+            public required string estado { get; set; }
+            public required string condicion { get; set; }
+            public required string departamento { get; set; }
+            public required string provincia { get; set; }
+            public required string distrito { get; set; }
+            public required string ubigeo_sunat { get; set; }
+            public required string[] ubigeo { get; set; }
+            public required string es_agente_de_retencion { get; set; }
+            public required string es_buen_contribuyente { get; set; }
         }
     }
 
     private class ApiPeruRucRepresentantesResponse
     {
-        public List<RucRepresentanteData> data { get; set; }
+        public required List<RucRepresentanteData> data { get; set; }
 
         public class RucRepresentanteData
         {
-            public string tipo_de_documento { get; set; }
-            public string numero_de_documento { get; set; }
-            public string nombre { get; set; }
-            public string cargo { get; set; }
-            public string fecha_desde { get; set; }
+            public required string tipo_de_documento { get; set; }
+            public required string numero_de_documento { get; set; }
+            public required string nombre { get; set; }
+            public required string cargo { get; set; }
+            public required string fecha_desde { get; set; }
         }
     }
 
@@ -348,12 +348,12 @@ public class ApiPeruService
     // Clase interna para deserializar la respuesta del DNI
     private class ApiPeruDniResponse
     {
-        public DniData data { get; set; }
+        public required DniData data { get; set; }
 
         public class DniData
         {
-            public string numero { get; set; }
-            public string nombre_completo { get; set; }
+            public required string numero { get; set; }
+            public required string nombre_completo { get; set; }
         }
     }
 }

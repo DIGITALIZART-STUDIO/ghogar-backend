@@ -28,5 +28,9 @@ public interface IReservationService
     Task<ReservationDto?> ChangeStatusAsync(Guid id, string status);
     Task<byte[]> GenerateReservationPdfAsync(Guid reservationId);
     Task<byte[]> GenerateSchedulePdfAsync(Guid reservationId);
+    Task<byte[]> GenerateProcessedPaymentsPdfAsync(Guid reservationId);
+    Task<byte[]> GenerateReceiptPdfAsync(Guid reservationId);
+    Task<byte[]> GenerateContractPdfAsync(Guid reservationId);
+    Task<byte[]> GenerateContractDocxAsync(Guid reservationId);
     Task<bool> ToggleContractValidationStatusAsync(Guid reservationId);
 }
