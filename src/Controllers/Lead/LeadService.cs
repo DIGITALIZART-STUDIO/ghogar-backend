@@ -331,26 +331,121 @@ public class LeadService : ILeadService
             )
             .ToListAsync();
 
-        Console.WriteLine($"[CheckAndUpdateExpiredLeadsAsync] Fecha actual: {now}");
-        Console.WriteLine(
-            $"[CheckAndUpdateExpiredLeadsAsync] Leads encontrados para expirar: {expiredLeads.Count}"
-        );
-
         foreach (var lead in expiredLeads)
         {
-            Console.WriteLine(
-                $"Expirando Lead: Id={lead.Id}, ExpirationDate={lead.ExpirationDate}, Status={lead.Status}, IsActive={lead.IsActive}"
-            );
             lead.Status = LeadStatus.Expired;
             lead.ModifiedAt = now;
         }
 
         await _context.SaveChangesAsync();
 
-        Console.WriteLine(
-            $"[CheckAndUpdateExpiredLeadsAsync] Leads expirados actualizados: {expiredLeads.Count}"
-        );
-
         return expiredLeads.Count;
+    }
+
+    public async Task<byte[]> ExportLeadsToExcelAsync(IExcelExportService excelExportService)
+    {
+        var leads = await GetAllLeadsAsync();
+
+        // Diccionarios para traducción
+        var statusLabels = new Dictionary<string, string>
+        {
+            { "Registered", "Registrado" },
+            { "Attended", "Atendido" },
+            { "InFollowUp", "En seguimiento" },
+            { "Completed", "Completado" },
+            { "Canceled", "Cancelado" },
+            { "Expired", "Expirado" },
+        };
+        var captureSourceLabels = new Dictionary<string, string>
+        {
+            { "Company", "Empresa" },
+            { "PersonalFacebook", "Facebook personal" },
+            { "RealEstateFair", "Feria inmobiliaria" },
+            { "Institutional", "Institucional" },
+            { "Loyalty", "Fidelización" },
+        };
+        var completionReasonLabels = new Dictionary<string, string>
+        {
+            { "NotInterested", "No interesado" },
+            { "InFollowUp", "En seguimiento" },
+            { "Sale", "Venta concretada" },
+        };
+
+        // Define los encabezados visibles
+        var headers = new List<string>
+        {
+            "Código",
+            "Cliente",
+            "DNI",
+            "Teléfono",
+            "Email",
+            "Dirección",
+            "País",
+            "Tipo",
+            "CoPropietarios",
+            "Propiedad Separada",
+            "Asesor",
+            "Estado",
+            "Medio de Captación",
+            "Proyecto",
+            "Motivo de finalización",
+        };
+
+        var data = new List<List<object>>();
+
+        foreach (var lead in leads)
+        {
+            var client = lead.Client;
+            var coOwners = client?.CoOwners ?? "";
+            var separatePropertyData = client?.SeparatePropertyData ?? "";
+
+            // Traducción de estado, medio de captación y motivo de finalización
+            var estado = statusLabels.ContainsKey(lead.Status.ToString())
+                ? statusLabels[lead.Status.ToString()]
+                : lead.Status.ToString();
+            var medioCaptacion = captureSourceLabels.ContainsKey(lead.CaptureSource.ToString())
+                ? captureSourceLabels[lead.CaptureSource.ToString()]
+                : lead.CaptureSource.ToString();
+            string motivoFinalizacion = "";
+            if (lead.CompletionReason != null)
+            {
+                var reasonStr = lead.CompletionReason.ToString();
+                motivoFinalizacion = completionReasonLabels.ContainsKey(reasonStr)
+                    ? completionReasonLabels[reasonStr]
+                    : reasonStr;
+            }
+
+            data.Add(
+                new List<object>
+                {
+                    lead.Code,
+                    client?.Name!,
+                    client?.Dni!,
+                    client?.PhoneNumber!,
+                    client?.Email!,
+                    client?.Address!,
+                    client?.Country!,
+                    client?.Type!,
+                    coOwners,
+                    separatePropertyData,
+                    lead.AssignedTo?.Name!,
+                    estado,
+                    medioCaptacion,
+                    lead.Project?.Name!,
+                    motivoFinalizacion,
+                }
+            );
+        }
+
+        // Indica qué columnas son datos complejos (coOwners y separatePropertyData)
+        var complexIndexes = new List<int> { 8, 9 };
+
+        return excelExportService.GenerateExcel(
+            "Reporte de Leads",
+            headers,
+            data,
+            true,
+            complexIndexes
+        );
     }
 }

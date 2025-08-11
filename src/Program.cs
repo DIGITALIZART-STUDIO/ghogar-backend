@@ -2,6 +2,7 @@ using System.Text;
 using GestionHogar.Configuration;
 using GestionHogar.Controllers;
 using GestionHogar.Controllers.ApiPeru;
+using GestionHogar.Controllers.ExcelExport;
 using GestionHogar.Model;
 using GestionHogar.Services;
 using GestionHogar.Utils;
@@ -181,6 +182,7 @@ var modules = new IModule[]
     new PaymentTransactionModule(),
     new PaginationModule(),
     new DashboardModule(),
+    new ExcelExportModule(),
 };
 foreach (var module in modules)
 {

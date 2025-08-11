@@ -20,6 +20,7 @@ public static class DatabaseSeeder
             "Supervisor",
             "SalesAdvisor",
             "Manager",
+            "FinanceManager",
         };
         foreach (var role in roles)
         {

@@ -43,6 +43,24 @@ public class ReservationsController : ControllerBase
         return Ok(reservations);
     }
 
+    [HttpGet("canceled/pending-validation/paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<ReservationDto>>
+    > GetAllCanceledPendingValidationReservationsPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10
+    )
+    {
+        var result =
+            await _reservationService.GetAllCanceledPendingValidationReservationsPaginatedAsync(
+                page,
+                pageSize,
+                paginationService
+            );
+        return Ok(result);
+    }
+
     [HttpGet("canceled/paginated")]
     public async Task<
         ActionResult<PaginatedResponseV2<ReservationWithPaymentsDto>>
@@ -93,6 +111,16 @@ public class ReservationsController : ControllerBase
         {
             return BadRequest(ex.Message);
         }
+    }
+
+    [HttpPut("{id}/toggle-validation-status")]
+    public async Task<ActionResult> ToggleContractValidationStatus(Guid id)
+    {
+        var success = await _reservationService.ToggleContractValidationStatusAsync(id);
+        if (!success)
+            return NotFound();
+
+        return NoContent();
     }
 
     // PATCH: api/reservations/{id}

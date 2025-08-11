@@ -14,6 +14,7 @@ public class ReservationDto
     public decimal AmountPaid { get; set; }
     public Currency Currency { get; set; }
     public ReservationStatus Status { get; set; }
+    public ContractValidationStatus ContractValidationStatus { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public string? BankName { get; set; }
     public decimal ExchangeRate { get; set; }
