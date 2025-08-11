@@ -113,6 +113,16 @@ public class ReservationsController : ControllerBase
         }
     }
 
+    [HttpPut("{id}/toggle-validation-status")]
+    public async Task<ActionResult> ToggleContractValidationStatus(Guid id)
+    {
+        var success = await _reservationService.ToggleContractValidationStatusAsync(id);
+        if (!success)
+            return NotFound();
+
+        return NoContent();
+    }
+
     // PATCH: api/reservations/{id}
     [HttpPatch("{id}")]
     public async Task<ActionResult<ReservationDto>> UpdateReservation(

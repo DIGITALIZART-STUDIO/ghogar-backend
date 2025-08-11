@@ -263,6 +263,26 @@ public class ReservationService : IReservationService
         return reservation;
     }
 
+    public async Task<bool> ToggleContractValidationStatusAsync(Guid reservationId)
+    {
+        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
+            r.Id == reservationId && r.IsActive
+        );
+        if (reservation == null)
+            return false;
+
+        if (reservation.ContractValidationStatus == ContractValidationStatus.PendingValidation)
+            reservation.ContractValidationStatus = ContractValidationStatus.Validated;
+        else if (reservation.ContractValidationStatus == ContractValidationStatus.Validated)
+            reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
+        else
+            reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
+
+        reservation.ModifiedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<ReservationDto?> UpdateReservationAsync(
         Guid id,
         ReservationUpdateDto reservationDto
