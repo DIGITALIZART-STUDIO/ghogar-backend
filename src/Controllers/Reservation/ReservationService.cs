@@ -71,7 +71,10 @@ public class ReservationService : IReservationService
             .Where(r =>
                 r.IsActive
                 && r.Status == ReservationStatus.CANCELED
-                && r.ContractValidationStatus == ContractValidationStatus.PendingValidation
+                && (
+                    r.ContractValidationStatus == ContractValidationStatus.PendingValidation
+                    || r.ContractValidationStatus == ContractValidationStatus.Validated
+                )
             )
             .Select(r => new ReservationDto
             {
