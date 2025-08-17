@@ -16,6 +16,7 @@ public interface IEmailService
         string content,
         Dictionary<string, object>? context = null
     );
+    Task<string> GenerateEmailHtmlAsync(string content, Dictionary<string, object>? context = null);
 }
 
 public class EmailRequest
@@ -32,15 +33,18 @@ public class EmailService : IEmailService
     private readonly EmailConfiguration _emailConfig;
     private readonly BusinessInfo _businessInfo;
     private readonly ILogger<EmailService> _logger;
+    private readonly IEmailUrlService _emailUrlService;
 
     public EmailService(
         IOptions<EmailConfiguration> emailConfig,
         IOptions<BusinessInfo> businessInfo,
-        ILogger<EmailService> logger
+        ILogger<EmailService> logger,
+        IEmailUrlService emailUrlService
     )
     {
         _emailConfig = emailConfig.Value;
         _businessInfo = businessInfo.Value;
+        _emailUrlService = emailUrlService;
         _logger = logger;
     }
 
@@ -100,6 +104,14 @@ public class EmailService : IEmailService
         return await SendEmailAsync(request);
     }
 
+    public async Task<string> GenerateEmailHtmlAsync(
+        string content,
+        Dictionary<string, object>? context = null
+    )
+    {
+        return await GenerateEmailContentAsync(content, context);
+    }
+
     private async Task<string> GenerateEmailContentAsync(
         string content,
         Dictionary<string, object>? context = null
@@ -113,6 +125,7 @@ public class EmailService : IEmailService
             ["phone"] = _businessInfo.Phone,
             ["address"] = _businessInfo.Address,
             ["contact"] = _businessInfo.Contact,
+            ["logoUrl"] = _emailUrlService.GetLogoUrl(),
             ["year"] = DateTime.Now.Year,
         };
 
@@ -129,28 +142,40 @@ public class EmailService : IEmailService
         return template;
     }
 
-    private async Task<string> GenerateEmailTemplateAsync(
+    private Task<string> GenerateEmailTemplateAsync(
         string content,
         Dictionary<string, object> context
     )
     {
+        // Reemplazar variables en el contenido primero
+        var processedContent = ReplaceTemplateVariables(content, context);
+
+        // Generar header y footer
         var header = GenerateEmailHeader();
         var footer = GenerateEmailFooter(context);
 
-        // Reemplazar variables en el contenido
-        var processedContent = ReplaceTemplateVariables(content, context);
-
-        return $@"
+        // Crear el template HTML completo con variables ya procesadas
+        var template =
+            $@"
 <!DOCTYPE html>
 <html lang=""es"">
 {header}
 <body>
-    <div style=""max-width: 600px; margin: 0 auto; background-color: #ffffff; font-family: 'Arial', sans-serif;"">
-        {processedContent}
+    <div class=""email-container"">
+        <div class=""email-header"">
+            <div class=""logo-container"">
+                <img src=""{context.GetValueOrDefault("logoUrl", "")}"" alt=""{context.GetValueOrDefault("business", "")}"" class=""logo"">
+            </div>
+        </div>
+        <div class=""email-content"">
+            {processedContent}
+        </div>
+        {footer}
     </div>
-    {footer}
 </body>
 </html>";
+
+        return Task.FromResult(template);
     }
 
     private string GenerateEmailHeader()
@@ -163,50 +188,118 @@ public class EmailService : IEmailService
     <meta name=""color-scheme"" content=""light dark"" />
     <meta name=""supported-color-schemes"" content=""light dark"" />
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap');
+        
         body {
-            font-family: 'Arial', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-optical-sizing: auto;
-            background-color: #f9f9ff;
+            background-color: #fafafa;
             margin: 0;
             padding: 0;
             -webkit-font-smoothing: antialiased;
-            color: #0a0a0a;
+            color: #1a1a1a;
+            line-height: 1.6;
         }
         .email-container {
             max-width: 600px;
             margin: 0 auto;
             background-color: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             overflow: hidden;
         }
         .email-header {
-            background: linear-gradient(135deg, #034a5b 0%, #05668b 100%);
+            background-color: #000000;
             color: white;
-            padding: 30px 20px;
+            padding: 40px 20px 30px;
             text-align: center;
+            position: relative;
+        }
+        .logo-container {
+            margin-bottom: 20px;
+        }
+        .logo {
+            max-width: 200px;
+            height: auto;
+            margin: 0 auto;
+            display: block;
         }
         .email-content {
-            padding: 30px 20px;
-            line-height: 1.6;
+            padding: 40px 30px;
+            line-height: 1.7;
+            color: #1a1a1a;
+        }
+        .email-content h1 {
+            color: #1a1a1a;
+            font-weight: 700;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .email-content h2 {
+            color: #1a1a1a;
+            font-weight: 600;
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+        .email-content h3 {
+            color: #1a1a1a;
+            font-weight: 500;
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+        .email-content p {
+            margin-bottom: 15px;
+            color: #333333;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #ffd700;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
         }
         .email-footer {
-            background-color: #f8f9fa;
-            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            padding: 30px 20px;
             text-align: center;
             border-top: 1px solid #e9ecef;
         }
+        .footer-content {
+            color: #cccccc;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .footer-content p {
+            margin: 5px 0;
+            color: #cccccc;
+        }
         .btn {
             display: inline-block;
-            padding: 12px 24px;
-            background-color: #034a5b;
-            color: white;
+            padding: 14px 28px;
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            color: #1a1a1a;
             text-decoration: none;
-            border-radius: 5px;
-            margin: 10px 0;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
         }
         .btn:hover {
-            background-color: #05668b;
+            background: linear-gradient(135deg, #ffed4e 0%, #ffd700 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
+        }
+        .highlight {
+            color: #ffd700;
+            font-weight: 600;
+        }
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #ffd700, transparent);
+            margin: 25px 0;
         }
         @media only screen and (max-width: 600px) {
             .email-container {
@@ -214,7 +307,13 @@ public class EmailService : IEmailService
                 border-radius: 0;
             }
             .email-content {
-                padding: 20px 15px;
+                padding: 30px 20px;
+            }
+            .email-header {
+                padding: 30px 15px 25px;
+            }
+            .logo {
+                max-width: 150px;
             }
         }
     </style>
@@ -231,8 +330,8 @@ public class EmailService : IEmailService
 
         return $@"
         <div class=""email-footer"">
-            <div style=""color: #034a5b; font-size: 12px;"">
-                <p>© {year} {business}. Todos los derechos reservados.</p>
+            <div class=""footer-content"">
+                <p>© {year} <span class=""highlight"">{business}</span>. Todos los derechos reservados.</p>
                 <p>{address} | {phone} | {contact}</p>
             </div>
         </div>";

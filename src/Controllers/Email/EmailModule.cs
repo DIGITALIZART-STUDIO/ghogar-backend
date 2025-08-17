@@ -14,6 +14,8 @@ public class EmailModule : IModule
         // Registrar los servicios de email
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IEmailTemplateService, EmailTemplateService>();
+        services.AddScoped<IEmailUrlService, EmailUrlService>();
+        services.AddHttpContextAccessor();
 
         return services;
     }

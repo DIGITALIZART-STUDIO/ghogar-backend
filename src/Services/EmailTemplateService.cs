@@ -37,16 +37,13 @@ public class EmailTemplateService : IEmailTemplateService
     public string GetWelcomeTemplate(string name, string email, string password, string webAdminUrl)
     {
         return $@"
-<div class=""email-content"">
-    <div class=""email-header"">
-        <h1>¡Bienvenido a {{business}}!</h1>
-    </div>
+    <h1>¡Bienvenido a <span class=""highlight"">{{business}}</span>!</h1>
     
     <h2>¡Hola {name}!</h2>
     
-    <p>Te damos la bienvenida a <strong>{{business}}</strong>. Tu cuenta ha sido creada exitosamente.</p>
+    <p>Te damos la bienvenida a <strong class=""highlight"">{{business}}</strong>. Tu cuenta ha sido creada exitosamente.</p>
     
-    <div style=""background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;"">
+    <div class=""info-box"">
         <h3>Información de tu cuenta:</h3>
         <p><strong>Email:</strong> {email}</p>
         <p><strong>Contraseña temporal:</strong> {password}</p>
@@ -59,10 +56,11 @@ public class EmailTemplateService : IEmailTemplateService
         <a href=""{webAdminUrl}"" class=""btn"">Acceder al Panel de Administración</a>
     </div>
     
+    <div class=""divider""></div>
+    
     <p>Si tienes alguna pregunta, no dudes en contactarnos.</p>
     
-    <p>Saludos,<br>El equipo de {{business}}</p>
-</div>";
+    <p>Saludos,<br><strong>El equipo de {{business}}</strong></p>";
     }
 
     public string GetPasswordResetTemplate(
@@ -73,12 +71,11 @@ public class EmailTemplateService : IEmailTemplateService
     )
     {
         return $@"
-<div class=""email-content"">
-    <h2>Hola de nuevo, {name}!</h2>
+    <h1>Hola de nuevo, <span class=""highlight"">{name}</span>!</h1>
     
-    <p>Hemos recibido una solicitud para restablecer tu contraseña en <strong>{{business}}</strong>.</p>
+    <p>Hemos recibido una solicitud para restablecer tu contraseña en <strong class=""highlight"">{{business}}</strong>.</p>
     
-    <div style=""background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;"">
+    <div class=""info-box"">
         <h3>Tu nueva contraseña:</h3>
         <p><strong>{newPassword}</strong></p>
     </div>
@@ -89,10 +86,11 @@ public class EmailTemplateService : IEmailTemplateService
         <a href=""{webAdminUrl}"" class=""btn"">Iniciar Sesión</a>
     </div>
     
+    <div class=""divider""></div>
+    
     <p>Si no solicitaste este cambio, por favor contacta con nuestro equipo de soporte inmediatamente.</p>
     
-    <p>Saludos,<br>El equipo de {{business}}</p>
-</div>";
+    <p>Saludos,<br><strong>El equipo de {{business}}</strong></p>";
     }
 
     public string GetQuotationTemplate(
@@ -103,16 +101,15 @@ public class EmailTemplateService : IEmailTemplateService
     )
     {
         return $@"
-<div class=""email-content"">
-    <h2>¡Hola {clientName}!</h2>
+    <h1>¡Hola <span class=""highlight"">{clientName}</span>!</h1>
     
-    <p>Hemos preparado una cotización especial para ti en <strong>{{business}}</strong>.</p>
+    <p>Hemos preparado una cotización especial para ti en <strong class=""highlight"">{{business}}</strong>.</p>
     
-    <div style=""background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;"">
+    <div class=""info-box"">
         <h3>Detalles de la Cotización:</h3>
         <p><strong>Número de Cotización:</strong> {quotationNumber}</p>
         <p><strong>Proyecto:</strong> {projectName}</p>
-        <p><strong>Monto Total:</strong> S/ {amount:N2}</p>
+        <p><strong>Monto Total:</strong> <span class=""highlight"">S/ {amount:N2}</span></p>
     </div>
     
     <p>Esta cotización es válida por 30 días. Para más información o para proceder con la reserva, contáctanos.</p>
@@ -121,10 +118,11 @@ public class EmailTemplateService : IEmailTemplateService
         <a href=""{{url}}"" class=""btn"">Ver Detalles</a>
     </div>
     
-    <p>¡Gracias por confiar en {{business}}!</p>
+    <div class=""divider""></div>
     
-    <p>Saludos,<br>El equipo de {{business}}</p>
-</div>";
+    <p>¡Gracias por confiar en <strong class=""highlight"">{{business}}</strong>!</p>
+    
+    <p>Saludos,<br><strong>El equipo de {{business}}</strong></p>";
     }
 
     public string GetReservationTemplate(
@@ -135,16 +133,15 @@ public class EmailTemplateService : IEmailTemplateService
     )
     {
         return $@"
-<div class=""email-content"">
-    <h2>¡Felicidades {clientName}!</h2>
+    <h1>¡Felicidades <span class=""highlight"">{clientName}</span>!</h1>
     
-    <p>Tu reserva ha sido confirmada exitosamente en <strong>{{business}}</strong>.</p>
+    <p>Tu reserva ha sido confirmada exitosamente en <strong class=""highlight"">{{business}}</strong>.</p>
     
-    <div style=""background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;"">
+    <div class=""info-box"">
         <h3>Detalles de tu Reserva:</h3>
         <p><strong>Lote:</strong> {lotNumber}</p>
         <p><strong>Proyecto:</strong> {projectName}</p>
-        <p><strong>Monto de Reserva:</strong> S/ {amount:N2}</p>
+        <p><strong>Monto de Reserva:</strong> <span class=""highlight"">S/ {amount:N2}</span></p>
     </div>
     
     <p>En los próximos días recibirás información adicional sobre los siguientes pasos del proceso.</p>
@@ -153,10 +150,11 @@ public class EmailTemplateService : IEmailTemplateService
         <a href=""{{url}}"" class=""btn"">Ver Mi Reserva</a>
     </div>
     
-    <p>¡Bienvenido a la familia {{business}}!</p>
+    <div class=""divider""></div>
     
-    <p>Saludos,<br>El equipo de {{business}}</p>
-</div>";
+    <p>¡Bienvenido a la familia <strong class=""highlight"">{{business}}</strong>!</p>
+    
+    <p>Saludos,<br><strong>El equipo de {{business}}</strong></p>";
     }
 
     public string GetPaymentReminderTemplate(
@@ -167,15 +165,14 @@ public class EmailTemplateService : IEmailTemplateService
     )
     {
         return $@"
-<div class=""email-content"">
-    <h2>Recordatorio de Pago - {clientName}</h2>
+    <h1>Recordatorio de Pago - <span class=""highlight"">{clientName}</span></h1>
     
-    <p>Este es un recordatorio amigable sobre tu próximo pago en <strong>{{business}}</strong>.</p>
+    <p>Este es un recordatorio amigable sobre tu próximo pago en <strong class=""highlight"">{{business}}</strong>.</p>
     
-    <div style=""background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;"">
+    <div class=""info-box"">
         <h3>Detalles del Pago:</h3>
         <p><strong>Número de Pago:</strong> {paymentNumber}</p>
-        <p><strong>Monto:</strong> S/ {amount:N2}</p>
+        <p><strong>Monto:</strong> <span class=""highlight"">S/ {amount:N2}</span></p>
         <p><strong>Fecha de Vencimiento:</strong> {dueDate:dd/MM/yyyy}</p>
     </div>
     
@@ -185,10 +182,11 @@ public class EmailTemplateService : IEmailTemplateService
         <a href=""{{url}}"" class=""btn"">Realizar Pago</a>
     </div>
     
+    <div class=""divider""></div>
+    
     <p>Si ya realizaste el pago, puedes ignorar este mensaje.</p>
     
-    <p>Saludos,<br>El equipo de {{business}}</p>
-</div>";
+    <p>Saludos,<br><strong>El equipo de {{business}}</strong></p>";
     }
 
     public string GetCustomTemplate(string templateName, Dictionary<string, object> context)

@@ -11,16 +11,19 @@ public class EmailController : ControllerBase
 {
     private readonly IEmailService _emailService;
     private readonly IEmailTemplateService _emailTemplateService;
+    private readonly IEmailUrlService _emailUrlService;
     private readonly ILogger<EmailController> _logger;
 
     public EmailController(
         IEmailService emailService,
         IEmailTemplateService emailTemplateService,
+        IEmailUrlService emailUrlService,
         ILogger<EmailController> logger
     )
     {
         _emailService = emailService;
         _emailTemplateService = emailTemplateService;
+        _emailUrlService = emailUrlService;
         _logger = logger;
     }
 
@@ -59,19 +62,28 @@ public class EmailController : ControllerBase
         {
             var content =
                 @"
-<div class=""email-content"">
-    <h2>¡Hola {{name}}!</h2>
-    <p>Este es un correo de prueba desde <strong>{{business}}</strong>.</p>
-    <p>Puedes usar variables dinámicas como:</p>
-    <ul>
-        <li>Tu nombre: {{name}}</li>
-        <li>Tu email: {{email}}</li>
-        <li>Fecha actual: {{currentDate}}</li>
-    </ul>
-    <p>También puedes incluir botones:</p>
-    <a href=""{{url}}"" class=""btn"">Visitar nuestro sitio web</a>
-    <p>¡Gracias por usar nuestro servicio!</p>
-</div>";
+    <h1>¡Hola <span class=""highlight"">{{name}}</span>!</h1>
+    <p>Este es un correo de prueba desde <strong class=""highlight"">{{business}}</strong>.</p>
+    
+    <div class=""info-box"">
+        <h3>Variables disponibles:</h3>
+        <ul>
+            <li><strong>Tu nombre:</strong> {{name}}</li>
+            <li><strong>Tu email:</strong> {{email}}</li>
+            <li><strong>Fecha actual:</strong> {{currentDate}}</li>
+            <li><strong>Teléfono:</strong> {{phone}}</li>
+            <li><strong>Dirección:</strong> {{address}}</li>
+        </ul>
+    </div>
+    
+    <p>También puedes incluir botones estilizados:</p>
+    <div style=""text-align: center; margin: 30px 0;"">
+        <a href=""{{url}}"" class=""btn"">Visitar nuestro sitio web</a>
+    </div>
+    
+    <div class=""divider""></div>
+    
+    <p>¡Gracias por usar nuestro servicio!</p>";
 
             var context = new Dictionary<string, object>
             {
@@ -240,6 +252,33 @@ public class EmailController : ControllerBase
         {
             _logger.LogError(ex, "Error sending payment reminder email");
             return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpGet("test")]
+    public async Task<IActionResult> Test()
+    {
+        try
+        {
+            // Contenido simple para probar
+            var content =
+                @"
+    <h1>¡Hola {{name}}!</h1>
+    <p>Bienvenido a <strong>{{business}}</strong></p>
+    <p>Tu logo está en: {{logoUrl}}</p>
+    <p>Tu teléfono es: {{phone}}</p>";
+
+            var context = new Dictionary<string, object> { ["name"] = "Juan Pérez" };
+
+            // Generar el HTML del correo
+            var emailHtml = await _emailService.GenerateEmailHtmlAsync(content, context);
+
+            return Content(emailHtml, "text/html");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in test");
+            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
         }
     }
 }
