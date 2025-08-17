@@ -197,6 +197,7 @@ builder.Services.AddScoped<SofficeConverterService>();
 var app = builder.Build();
 
 app.UseCors("AllowOrigins");
+app.UseStaticFiles();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
