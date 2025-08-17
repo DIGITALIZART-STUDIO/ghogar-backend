@@ -183,6 +183,7 @@ var modules = new IModule[]
     new PaginationModule(),
     new DashboardModule(),
     new ExcelExportModule(),
+    new EmailModule(),
 };
 foreach (var module in modules)
 {
