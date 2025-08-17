@@ -42,6 +42,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
 
+    public DbSet<OtpCode> OtpCodes { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -50,6 +52,31 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
         BaseModel.SetUp<Payment>(builder);
         BaseModel.SetUp<PaymentTransaction>(builder);
         PaymentTransaction.SetUp<PaymentTransaction>(builder);
+
+        // Configuración de OtpCode
+        builder.Entity<OtpCode>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Code).IsRequired().HasMaxLength(6);
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.ExpiresAt).IsRequired();
+
+            // Relación con User
+            entity
+                .HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Índices para optimizar consultas
+            entity.HasIndex(e => new
+            {
+                e.UserId,
+                e.Code,
+                e.IsActive,
+            });
+            entity.HasIndex(e => e.ExpiresAt);
+        });
     }
 
     public override int SaveChanges()
