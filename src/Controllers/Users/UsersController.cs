@@ -1,10 +1,13 @@
 using System.Security.Claims;
+using GestionHogar.Configuration;
 using GestionHogar.Model;
 using GestionHogar.Services;
+using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace GestionHogar.Controllers;
 
@@ -14,6 +17,8 @@ public class UsersController(
     DatabaseContext db,
     UserManager<User> userManager,
     RoleManager<IdentityRole<Guid>> roleManager,
+    IEmailService emailService,
+    IOptions<BusinessInfo> businessInfo,
     ILogger<UsersController> logger
 ) : ControllerBase
 {
@@ -23,29 +28,28 @@ public class UsersController(
     [HttpGet]
     public async Task<ActionResult<UserGetDTO>> CurrentUser()
     {
-        var idClaim = ClaimTypes.NameIdentifier;
-        var userId = User.FindFirstValue(idClaim);
-        if (userId == null)
-            return Unauthorized();
-        Guid userGuid;
         try
         {
-            userGuid = Guid.Parse(userId);
+            var userId = User.GetCurrentUserIdOrThrow();
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                return Unauthorized("Usuario no encontrado");
+
+            var userRoles = await userManager.GetRolesAsync(user);
+            if (userRoles == null)
+                return Unauthorized("No se pudieron obtener los roles del usuario");
+
+            return Ok(new UserGetDTO() { User = user, Roles = userRoles });
         }
-        catch
+        catch (UnauthorizedAccessException)
         {
-            return Unauthorized();
+            return Unauthorized("No se pudo identificar al usuario actual");
         }
-
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userGuid);
-        if (user == null)
-            return Unauthorized();
-
-        var userRoles = await userManager.GetRolesAsync(user);
-        if (userRoles == null)
-            return Unauthorized();
-
-        return Ok(new UserGetDTO() { User = user, Roles = userRoles });
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al obtener información del usuario actual");
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     [EndpointSummary("Get all users")]
@@ -121,6 +125,31 @@ public class UsersController(
             return StatusCode(500, "Error adding user to role.");
         }
 
+        // Enviar email de bienvenida
+        try
+        {
+            var welcomeEmailContent = GenerateWelcomeEmailContent(
+                newUser.Name,
+                dto.Email,
+                dto.Password,
+                dto.Role
+            );
+            var emailRequest = new EmailRequest
+            {
+                To = dto.Email,
+                Subject = "Bienvenido a Gestion Hogar",
+                Content = welcomeEmailContent,
+            };
+
+            await emailService.SendEmailAsync(emailRequest);
+            logger.LogInformation("Email de bienvenida enviado a {Email}", dto.Email);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al enviar email de bienvenida a {Email}", dto.Email);
+            // No fallamos la creación del usuario si el email falla
+        }
+
         return Ok();
     }
 
@@ -178,6 +207,33 @@ public class UsersController(
         if (!result.Succeeded)
             return BadRequest(result.Errors.Select(e => e.Description));
 
+        // Enviar email de confirmación de cambio de contraseña
+        try
+        {
+            var passwordChangeEmailContent = GeneratePasswordChangeEmailContent(
+                user.Name,
+                user.Email!
+            );
+            var emailRequest = new EmailRequest
+            {
+                To = user.Email!,
+                Subject = "Contraseña Actualizada - Gestion Hogar",
+                Content = passwordChangeEmailContent,
+            };
+
+            await emailService.SendEmailAsync(emailRequest);
+            logger.LogInformation("Email de cambio de contraseña enviado a {Email}", user.Email);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Error al enviar email de cambio de contraseña a {Email}",
+                user.Email
+            );
+            // No fallamos la actualización si el email falla
+        }
+
         return Ok();
     }
 
@@ -213,6 +269,26 @@ public class UsersController(
 
         user.IsActive = true;
         await userManager.UpdateAsync(user);
+
+        // Enviar email de notificación de reactivación
+        try
+        {
+            var reactivationEmailContent = GenerateReactivationEmailContent(user.Name, user.Email!);
+            var emailRequest = new EmailRequest
+            {
+                To = user.Email!,
+                Subject = "Cuenta Reactivada - Gestion Hogar",
+                Content = reactivationEmailContent,
+            };
+
+            await emailService.SendEmailAsync(emailRequest);
+            logger.LogInformation("Email de reactivación enviado a {Email}", user.Email);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al enviar email de reactivación a {Email}", user.Email);
+            // No fallamos la reactivación si el email falla
+        }
 
         return Ok();
     }
@@ -256,6 +332,206 @@ public class UsersController(
         if (!result.Succeeded)
             return BadRequest(result.Errors.Select(e => e.Description));
 
+        // Enviar email de confirmación de cambio de contraseña
+        try
+        {
+            var passwordChangeEmailContent = GeneratePasswordChangeEmailContent(
+                user.Name,
+                user.Email!
+            );
+            var emailRequest = new EmailRequest
+            {
+                To = user.Email!,
+                Subject = "Contraseña Actualizada - Gestion Hogar",
+                Content = passwordChangeEmailContent,
+            };
+
+            await emailService.SendEmailAsync(emailRequest);
+            logger.LogInformation("Email de cambio de contraseña enviado a {Email}", user.Email);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Error al enviar email de cambio de contraseña a {Email}",
+                user.Email
+            );
+            // No fallamos la actualización si el email falla
+        }
+
         return Ok(new { message = "Contraseña actualizada correctamente." });
+    }
+
+    /// <summary>
+    /// Genera el contenido HTML del email de bienvenida
+    /// </summary>
+    private string GenerateWelcomeEmailContent(
+        string userName,
+        string email,
+        string password,
+        string role
+    )
+    {
+        var businessName = businessInfo.Value.Business;
+        var businessUrl = businessInfo.Value.Url;
+
+        return $@"
+        <h1 style=""color: #1a1a1a; font-weight: 700; font-size: 28px; margin-bottom: 25px; text-align: center;"">
+            ¡Bienvenido a {businessName}!
+        </h1>
+        
+        <p style=""font-size: 16px; color: #1a1a1a; margin-bottom: 20px;"">
+            Estimado(a) <span class=""highlight"">{userName}</span>,
+        </p>
+        
+        <div class=""info-box"">
+            <p style=""font-size: 15px; color: #1a1a1a; margin-bottom: 15px;"">
+                Su cuenta ha sido creada exitosamente en la plataforma <span class=""highlight"">{businessName}</span> con el rol de <span class=""highlight"">{role}</span>.
+            </p>
+        </div>
+        
+        <div class=""info-box"">
+            <h3 style=""color: #1a1a1a; font-weight: 600; margin-bottom: 15px;"">
+                Sus credenciales de acceso:
+            </h3>
+            <ul style=""color: #333333; font-size: 14px; margin: 0; padding-left: 20px;"">
+                <li style=""margin-bottom: 8px;""><strong>Email:</strong> <span class=""highlight"">{email}</span></li>
+                <li style=""margin-bottom: 8px;""><strong>Contraseña:</strong> <span class=""highlight"">{password}</span></li>
+                <li style=""margin-bottom: 8px;""><strong>Rol:</strong> <span class=""highlight"">{role}</span></li>
+            </ul>
+        </div>
+        
+        <div class=""info-box"">
+            <h3 style=""color: #1a1a1a; font-weight: 600; margin-bottom: 15px;"">
+                Información Importante:
+            </h3>
+            <ul style=""color: #333333; font-size: 14px; margin: 0; padding-left: 20px;"">
+                <li style=""margin-bottom: 8px;"">Guarde sus credenciales en un lugar seguro.</li>
+                <li style=""margin-bottom: 8px;"">Puede cambiar su contraseña desde su perfil una vez que inicie sesión.</li>
+                <li style=""margin-bottom: 8px;"">Si tiene alguna pregunta, contacte al administrador del sistema.</li>
+            </ul>
+        </div>
+        
+        <div class=""divider""></div>
+        
+        <p style=""font-size: 14px; color: #666666; text-align: center; margin-top: 25px;"">
+            ¡Esperamos que disfrute usando nuestra plataforma!
+        </p>
+        
+        <div style=""text-align: center; margin: 30px 0;"">
+            <a href=""{businessUrl}"" class=""btn"">Acceder a la Plataforma</a>
+        </div>";
+    }
+
+    /// <summary>
+    /// Genera el contenido HTML del email de cambio de contraseña
+    /// </summary>
+    private string GeneratePasswordChangeEmailContent(string userName, string email)
+    {
+        var businessName = businessInfo.Value.Business;
+        var businessUrl = businessInfo.Value.Url;
+
+        return $@"
+        <h1 style=""color: #1a1a1a; font-weight: 700; font-size: 28px; margin-bottom: 25px; text-align: center;"">
+            Contraseña Actualizada
+        </h1>
+        
+        <p style=""font-size: 16px; color: #1a1a1a; margin-bottom: 20px;"">
+            Estimado(a) <span class=""highlight"">{userName}</span>,
+        </p>
+        
+        <div class=""info-box"">
+            <p style=""font-size: 15px; color: #1a1a1a; margin-bottom: 15px;"">
+                Su contraseña ha sido actualizada exitosamente en la plataforma <span class=""highlight"">{businessName}</span>.
+            </p>
+        </div>
+        
+        <div class=""info-box"">
+            <h3 style=""color: #1a1a1a; font-weight: 600; margin-bottom: 15px;"">
+                Información de la actualización:
+            </h3>
+            <ul style=""color: #333333; font-size: 14px; margin: 0; padding-left: 20px;"">
+                <li style=""margin-bottom: 8px;""><strong>Email:</strong> <span class=""highlight"">{email}</span></li>
+                <li style=""margin-bottom: 8px;""><strong>Fecha de actualización:</strong> <span class=""highlight"">{DateTime.Now:dd/MM/yyyy HH:mm}</span></li>
+                <li style=""margin-bottom: 8px;""><strong>Estado:</strong> <span class=""highlight"">Actualizada exitosamente</span></li>
+            </ul>
+        </div>
+        
+        <div class=""info-box"">
+            <h3 style=""color: #1a1a1a; font-weight: 600; margin-bottom: 15px;"">
+                Información de Seguridad:
+            </h3>
+            <ul style=""color: #333333; font-size: 14px; margin: 0; padding-left: 20px;"">
+                <li style=""margin-bottom: 8px;"">Si usted no realizó este cambio, contacte inmediatamente al administrador.</li>
+                <li style=""margin-bottom: 8px;"">Su nueva contraseña ya está activa y puede usarla para iniciar sesión.</li>
+                <li style=""margin-bottom: 8px;"">Recuerde mantener sus credenciales seguras.</li>
+            </ul>
+        </div>
+        
+        <div class=""divider""></div>
+        
+        <p style=""font-size: 14px; color: #666666; text-align: center; margin-top: 25px;"">
+            Si tiene alguna consulta, comuníquese con el equipo de soporte de <span class=""highlight"">{businessName}</span>.
+        </p>
+        
+        <div style=""text-align: center; margin: 30px 0;"">
+            <a href=""{businessUrl}"" class=""btn"">Acceder a la Plataforma</a>
+        </div>";
+    }
+
+    /// <summary>
+    /// Genera el contenido HTML del email de reactivación de cuenta
+    /// </summary>
+    private string GenerateReactivationEmailContent(string userName, string email)
+    {
+        var businessName = businessInfo.Value.Business;
+        var businessUrl = businessInfo.Value.Url;
+
+        return $@"
+        <h1 style=""color: #1a1a1a; font-weight: 700; font-size: 28px; margin-bottom: 25px; text-align: center;"">
+            Cuenta Reactivada
+        </h1>
+        
+        <p style=""font-size: 16px; color: #1a1a1a; margin-bottom: 20px;"">
+            Estimado(a) <span class=""highlight"">{userName}</span>,
+        </p>
+        
+        <div class=""info-box"">
+            <p style=""font-size: 15px; color: #1a1a1a; margin-bottom: 15px;"">
+                Su cuenta ha sido reactivada exitosamente en la plataforma <span class=""highlight"">{businessName}</span>.
+            </p>
+        </div>
+        
+        <div class=""info-box"">
+            <h3 style=""color: #1a1a1a; font-weight: 600; margin-bottom: 15px;"">
+                Información de la reactivación:
+            </h3>
+            <ul style=""color: #333333; font-size: 14px; margin: 0; padding-left: 20px;"">
+                <li style=""margin-bottom: 8px;""><strong>Email:</strong> <span class=""highlight"">{email}</span></li>
+                <li style=""margin-bottom: 8px;""><strong>Fecha de reactivación:</strong> <span class=""highlight"">{DateTime.Now:dd/MM/yyyy HH:mm}</span></li>
+                <li style=""margin-bottom: 8px;""><strong>Estado:</strong> <span class=""highlight"">Cuenta activa</span></li>
+            </ul>
+        </div>
+        
+        <div class=""info-box"">
+            <h3 style=""color: #1a1a1a; font-weight: 600; margin-bottom: 15px;"">
+                ¿Qué significa esto?
+            </h3>
+            <ul style=""color: #333333; font-size: 14px; margin: 0; padding-left: 20px;"">
+                <li style=""margin-bottom: 8px;"">Su cuenta ahora está activa y puede acceder normalmente.</li>
+                <li style=""margin-bottom: 8px;"">Puede usar sus credenciales existentes para iniciar sesión.</li>
+                <li style=""margin-bottom: 8px;"">Si olvidó su contraseña, puede solicitar un restablecimiento.</li>
+            </ul>
+        </div>
+        
+        <div class=""divider""></div>
+        
+        <p style=""font-size: 14px; color: #666666; text-align: center; margin-top: 25px;"">
+            ¡Bienvenido de vuelta a {businessName}!
+        </p>
+        
+        <div style=""text-align: center; margin: 30px 0;"">
+            <a href=""{businessUrl}"" class=""btn"">Acceder a la Plataforma</a>
+        </div>";
     }
 }
