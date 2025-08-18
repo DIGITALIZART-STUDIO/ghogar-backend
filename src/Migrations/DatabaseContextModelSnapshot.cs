@@ -307,6 +307,9 @@ namespace GestionHogar.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(6)
@@ -327,12 +330,24 @@ namespace GestionHogar.Migrations
                     b.Property<DateTime>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ApprovedByUserId");
+
                     b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("RequestedByUserId");
 
                     b.HasIndex("UserId", "Code", "IsActive");
 
@@ -894,11 +909,25 @@ namespace GestionHogar.Migrations
 
             modelBuilder.Entity("GestionHogar.Model.OtpCode", b =>
                 {
+                    b.HasOne("GestionHogar.Model.User", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId");
+
+                    b.HasOne("GestionHogar.Model.User", "RequestedByUser")
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("GestionHogar.Model.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ApprovedByUser");
+
+                    b.Navigation("RequestedByUser");
 
                     b.Navigation("User");
                 });
