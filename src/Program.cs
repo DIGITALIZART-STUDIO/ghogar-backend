@@ -233,6 +233,7 @@ app.UseGlobalExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseSecurityStampValidator();
+app.UseAuthenticationMiddleware();
 app.MapControllers();
 
 // Libraries startup
