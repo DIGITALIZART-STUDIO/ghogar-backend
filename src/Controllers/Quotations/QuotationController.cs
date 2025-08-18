@@ -1,6 +1,7 @@
 using GestionHogar.Dtos;
 using GestionHogar.Model;
 using GestionHogar.Services;
+using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -251,6 +252,84 @@ public class QuotationsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al generar PDF de cotización");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    // POST: api/quotations/{userId}/send-otp
+    [HttpPost("{userId}/send-otp")]
+    public async Task<ActionResult> SendOtp(Guid userId)
+    {
+        try
+        {
+            // Obtiene el ID del usuario actual usando el extension method
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
+            var response = await _quotationService.SendOtpToUserAsync(userId, currentUserId);
+            if (!response.Success)
+                return BadRequest(response.Message);
+
+            return Ok(new { message = response.Message, expiresAt = response.ExpiresAt });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar OTP");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    // POST: api/quotations/{userId}/validate-otp
+    [HttpPost("{userId}/validate-otp")]
+    public async Task<ActionResult> ValidateOtp(Guid userId, [FromBody] VerifyOtpRequestDto otpDto)
+    {
+        try
+        {
+            var response = await _quotationService.VerifyOtpAsync(userId, otpDto.OtpCode);
+            if (!response.Success)
+                return BadRequest(response.Message);
+
+            return Ok(new { message = response.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al validar OTP");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    // Ejemplo de método que requiere rol específico
+    [HttpGet("admin/summary")]
+    [RequireRole("Admin")]
+    public async Task<ActionResult<object>> GetAdminSummary()
+    {
+        try
+        {
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserEmail = User.GetCurrentUserEmail();
+            var currentUserRoles = User.GetCurrentUserRoles();
+
+            return Ok(
+                new
+                {
+                    message = "Acceso autorizado como administrador",
+                    currentUserId,
+                    currentUserEmail,
+                    currentUserRoles,
+                    timestamp = DateTime.UtcNow,
+                }
+            );
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener resumen de administrador");
             return StatusCode(500, "Error interno del servidor");
         }
     }

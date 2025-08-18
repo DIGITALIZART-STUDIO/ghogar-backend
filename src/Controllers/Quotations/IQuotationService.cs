@@ -23,4 +23,8 @@ public interface IQuotationService
     Task<QuotationDTO?> ChangeStatusAsync(Guid id, string status);
     Task<string> GenerateQuotationCodeAsync();
     Task<byte[]> GenerateQuotationPdfAsync(Guid quotationId);
+
+    // Métodos OTP
+    Task<SendOtpResponseDto> SendOtpToUserAsync(Guid userId, Guid requestedByUserId);
+    Task<VerifyOtpResponseDto> VerifyOtpAsync(Guid userId, string otpCode);
 }

@@ -1,13 +1,20 @@
+using System.Collections.Generic;
+using GestionHogar.Configuration;
 using GestionHogar.Dtos;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 
 namespace GestionHogar.Services;
 
-public class QuotationService(DatabaseContext _context) : IQuotationService
+public class QuotationService(
+    DatabaseContext _context,
+    IEmailService _emailService,
+    IOptions<BusinessInfo> _businessInfo
+) : IQuotationService
 {
     public async Task<IEnumerable<QuotationDTO>> GetAllQuotationsAsync()
     {
@@ -915,5 +922,272 @@ public class QuotationService(DatabaseContext _context) : IQuotationService
         });
 
         return document.GeneratePdf();
+    }
+
+    // Métodos OTP Implementation
+
+    /// <summary>
+    /// Envía un código OTP por email al usuario especificado.
+    /// Invalida cualquier código OTP previo del usuario.
+    /// </summary>
+    public async Task<SendOtpResponseDto> SendOtpToUserAsync(Guid supervisorId, Guid asesorId)
+    {
+        const string purpose = "Desbloquear Descuento";
+
+        // Verifica que el supervisor existe y está activo
+        var supervisor = await _context.Users.FirstOrDefaultAsync(u =>
+            u.Id == supervisorId && u.IsActive
+        );
+        if (supervisor == null)
+            return new SendOtpResponseDto
+            {
+                Success = false,
+                Message = "Supervisor/Admin no encontrado o inactivo",
+            };
+
+        // Verifica que el supervisor tenga el rol adecuado
+        var supervisorRoles = await _context
+            .UserRoles.Where(ur => ur.UserId == supervisorId)
+            .Join(_context.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
+            .ToListAsync();
+
+        if (
+            !supervisorRoles.Any(r =>
+                r == "Admin"
+                || r == "Supervisor"
+                || r == "Manager"
+                || r == "FinanceManager"
+                || r == "SuperAdmin"
+            )
+        )
+            return new SendOtpResponseDto
+            {
+                Success = false,
+                Message = "Solo un Admin, Supervisor o Gerente puede recibir el OTP",
+            };
+
+        // Verifica que el asesor existe y está activo
+        var asesor = await _context.Users.FirstOrDefaultAsync(u => u.Id == asesorId && u.IsActive);
+        if (asesor == null)
+            return new SendOtpResponseDto
+            {
+                Success = false,
+                Message = "Asesor no encontrado o inactivo",
+            };
+
+        if (string.IsNullOrEmpty(supervisor.Email))
+            return new SendOtpResponseDto
+            {
+                Success = false,
+                Message = "El supervisor no tiene email configurado",
+            };
+
+        // Invalida OTPs previos para ese supervisor, asesor y propósito
+        var existingOtps = await _context
+            .OtpCodes.Where(o =>
+                o.UserId == supervisorId
+                && o.RequestedByUserId == asesorId
+                && o.Purpose == purpose
+                && o.IsActive
+            )
+            .ToListAsync();
+
+        foreach (var otp in existingOtps)
+            otp.Invalidate();
+
+        // Genera nuevo OTP
+        var otpCode = OtpCode.GenerateOtpCode();
+        var expirationTime = DateTime.UtcNow.AddMinutes(5);
+
+        var newOtp = new OtpCode
+        {
+            UserId = supervisorId,
+            RequestedByUserId = asesorId,
+            Purpose = purpose,
+            Code = otpCode,
+            ExpiresAt = expirationTime,
+        };
+
+        _context.OtpCodes.Add(newOtp);
+        await _context.SaveChangesAsync();
+
+        // Envía el email al supervisor/admin
+        var emailContent = GenerateOtpEmailContent(supervisor.Name, otpCode, asesor.Name);
+
+        var emailRequest = new EmailRequest
+        {
+            To = supervisor.Email,
+            Subject = "Código de autorización OTP - Gestión Hogar",
+            Content = emailContent,
+        };
+
+        var emailSent = await _emailService.SendEmailAsync(emailRequest);
+
+        if (!emailSent)
+            return new SendOtpResponseDto
+            {
+                Success = false,
+                Message = "Error al enviar el email con el código OTP",
+            };
+
+        return new SendOtpResponseDto
+        {
+            Success = true,
+            Message = "Código OTP enviado correctamente al supervisor/admin",
+            ExpiresAt = expirationTime,
+        };
+    }
+
+    /// <summary>
+    /// Verifica un código OTP para un usuario específico
+    /// </summary>
+    public async Task<VerifyOtpResponseDto> VerifyOtpAsync(Guid userId, string otpCode)
+    {
+        try
+        {
+            // Verificar que el usuario existe y está activo
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+            if (user == null)
+            {
+                return new VerifyOtpResponseDto
+                {
+                    Success = false,
+                    Message =
+                        "El usuario que intenta validar el código OTP no existe o está inactivo.",
+                };
+            }
+
+            // Buscar el código OTP más reciente y activo para el usuario y propósito fijo
+            const string purpose = "Desbloquear Descuento";
+            var otpRecord = await _context
+                .OtpCodes.Where(o =>
+                    o.UserId == userId && o.Code == otpCode && o.Purpose == purpose
+                )
+                .OrderByDescending(o => o.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (otpRecord == null)
+            {
+                return new VerifyOtpResponseDto
+                {
+                    Success = false,
+                    Message =
+                        "El código OTP ingresado no es válido o no corresponde a una solicitud activa.",
+                };
+            }
+
+            // Validaciones robustas
+            if (!otpRecord.IsActive)
+            {
+                return new VerifyOtpResponseDto
+                {
+                    Success = false,
+                    Message =
+                        "Este código OTP ya no está activo. Solicite uno nuevo si es necesario.",
+                };
+            }
+
+            if (otpRecord.IsUsed)
+            {
+                return new VerifyOtpResponseDto
+                {
+                    Success = false,
+                    Message =
+                        "Este código OTP ya ha sido utilizado. Solicite uno nuevo si requiere autorización.",
+                };
+            }
+
+            if (DateTime.UtcNow > otpRecord.ExpiresAt)
+            {
+                otpRecord.Invalidate();
+                await _context.SaveChangesAsync();
+                return new VerifyOtpResponseDto
+                {
+                    Success = false,
+                    Message = "El código OTP ha expirado. Solicite uno nuevo para continuar.",
+                };
+            }
+
+            // Marcar el código como usado y registrar quién lo aprobó
+            otpRecord.MarkAsUsed(userId);
+            await _context.SaveChangesAsync();
+
+            return new VerifyOtpResponseDto
+            {
+                Success = true,
+                Message =
+                    "Código OTP verificado correctamente. La autorización ha sido registrada.",
+            };
+        }
+        catch (Exception ex)
+        {
+            return new VerifyOtpResponseDto
+            {
+                Success = false,
+                Message = $"Error interno del servidor: {ex.Message}",
+            };
+        }
+    }
+
+    /// <summary>
+    /// Genera el contenido HTML del email para el código OTP
+    /// </summary>
+    private string GenerateOtpEmailContent(
+        string supervisorName,
+        string otpCode,
+        string requesterName
+    )
+    {
+        // Formatea el OTP como "XXX-XXX"
+        string formattedOtp =
+            otpCode.Length == 6 ? $"{otpCode.Substring(0, 3)}-{otpCode.Substring(3, 3)}" : otpCode;
+
+        var businessName = _businessInfo.Value.Business;
+        var businessUrl = _businessInfo.Value.Url;
+
+        return $@"
+        <h1 style=""color: #1a1a1a; font-weight: 700; font-size: 28px; margin-bottom: 25px; text-align: center;"">
+            Código de Autorización
+        </h1>
+        
+        <p style=""font-size: 16px; color: #1a1a1a; margin-bottom: 20px;"">
+            Estimado(a) <span class=""highlight"">{supervisorName}</span>,
+        </p>
+        
+        <div class=""info-box"">
+            <p style=""font-size: 15px; color: #1a1a1a; margin-bottom: 15px;"">
+                El usuario <span class=""highlight"">{requesterName}</span> ha solicitado autorización para desbloquear un descuento especial en la plataforma <span class=""highlight"">{businessName}</span>.
+            </p>
+        </div>
+        
+        <div style=""text-align: center; margin: 40px 0;"">
+            <div style=""display: inline-block; background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%); border: 3px solid #ffd700; border-radius: 12px; padding: 30px 50px; box-shadow: 0 8px 25px rgba(255, 215, 0, 0.3);"">
+                <div style=""font-size: 42px; font-weight: 800; letter-spacing: 8px; color: #ffd700; font-family: 'Montserrat', 'Segoe UI Mono', monospace; text-shadow: 0 2px 4px rgba(0,0,0,0.3);"">
+                    {formattedOtp}
+                </div>
+            </div>
+        </div>
+        
+        <div class=""info-box"">
+            <h3 style=""color: #1a1a1a; font-weight: 600; margin-bottom: 15px;"">
+                Información Importante:
+            </h3>
+            <ul style=""color: #333333; font-size: 14px; margin: 0; padding-left: 20px;"">
+                <li style=""margin-bottom: 8px;"">Este código es válido por <span class=""highlight"">5 minutos</span>.</li>
+                <li style=""margin-bottom: 8px;"">Solo puede ser utilizado <strong>una vez</strong>.</li>
+                <li style=""margin-bottom: 8px;"">No comparta este código con terceros.</li>
+                <li style=""margin-bottom: 8px;"">Si usted no solicitó este código, por favor ignore este mensaje.</li>
+            </ul>
+        </div>
+        
+        <div class=""divider""></div>
+        
+        <p style=""font-size: 14px; color: #666666; text-align: center; margin-top: 25px;"">
+            Si tiene alguna consulta, comuníquese con el equipo de soporte de <span class=""highlight"">{businessName}</span>.
+        </p>
+        
+        <div style=""text-align: center; margin: 30px 0;"">
+            <a href=""{businessUrl}"" class=""btn"">Acceder a la Plataforma</a>
+        </div>";
     }
 }
