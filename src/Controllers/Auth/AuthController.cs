@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using GestionHogar.Configuration;
 using GestionHogar.Model;
+using GestionHogar.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -14,6 +15,7 @@ public class AuthController(
     JwtService jwt,
     UserManager<User> userManager,
     IOptions<CorsConfiguration> corsConfig,
+    IEmailService emailService,
     ILogger<AuthController> logger
 ) : ControllerBase
 {
@@ -61,6 +63,12 @@ public class AuthController(
         var user = await userManager.FindByEmailAsync(request.Email);
         if (user == null)
             return NotFound("Usuario no encontrado");
+
+        // Validar que el usuario esté activo
+        if (!user.IsActive)
+            return BadRequest(
+                "Usuario inactivo. Contacte al administrador para reactivar su cuenta."
+            );
 
         var isValid = await userManager.CheckPasswordAsync(user, request.Password);
         if (!isValid)
