@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using GestionHogar.Dtos;
 using GestionHogar.Model;
+using GestionHogar.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace GestionHogar.Services;
@@ -11,10 +13,12 @@ namespace GestionHogar.Services;
 public class ProjectService : IProjectService
 {
     private readonly DatabaseContext _context;
+    private readonly ICloudflareService _cloudflareService;
 
-    public ProjectService(DatabaseContext context)
+    public ProjectService(DatabaseContext context, ICloudflareService cloudflareService)
     {
         _context = context;
+        _cloudflareService = cloudflareService;
     }
 
     public async Task<IEnumerable<ProjectDTO>> GetAllProjectsAsync()
@@ -50,7 +54,10 @@ public class ProjectService : IProjectService
         return project != null ? ProjectDTO.FromEntity(project) : null;
     }
 
-    public async Task<ProjectDTO> CreateProjectAsync(ProjectCreateDTO dto)
+    public async Task<ProjectDTO> CreateProjectAsync(
+        ProjectCreateDTO dto,
+        IFormFile? projectImage = null
+    )
     {
         // Verificar que no existe un proyecto con el mismo nombre
         var existingProject = await _context.Projects.FirstOrDefaultAsync(p =>
@@ -62,14 +69,36 @@ public class ProjectService : IProjectService
                 $"Ya existe un proyecto con el nombre '{dto.Name}'"
             );
 
-        var project = dto.ToEntity();
+        string? projectUrlImage = null;
+
+        // Subir imagen si se proporciona
+        if (projectImage != null)
+        {
+            try
+            {
+                projectUrlImage = await _cloudflareService.UploadProjectImageAsync(
+                    projectImage,
+                    dto.Name
+                );
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Error al subir la imagen: {ex.Message}");
+            }
+        }
+
+        var project = dto.ToEntity(projectUrlImage);
         _context.Projects.Add(project);
         await _context.SaveChangesAsync();
 
         return ProjectDTO.FromEntity(project);
     }
 
-    public async Task<ProjectDTO?> UpdateProjectAsync(Guid id, ProjectUpdateDTO dto)
+    public async Task<ProjectDTO?> UpdateProjectAsync(
+        Guid id,
+        ProjectUpdateDTO dto,
+        IFormFile? projectImage = null
+    )
     {
         var project = await _context.Projects.FindAsync(id);
         if (project == null)
@@ -86,6 +115,24 @@ public class ProjectService : IProjectService
                 throw new InvalidOperationException(
                     $"Ya existe un proyecto con el nombre '{dto.Name}'"
                 );
+        }
+
+        // Manejar la actualización de la imagen si se proporciona
+        if (projectImage != null)
+        {
+            try
+            {
+                var projectName = dto.Name ?? project.Name;
+                project.ProjectUrlImage = await _cloudflareService.UpdateProjectImageAsync(
+                    projectImage,
+                    projectName,
+                    project.ProjectUrlImage
+                );
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Error al actualizar la imagen: {ex.Message}");
+            }
         }
 
         dto.ApplyTo(project);
