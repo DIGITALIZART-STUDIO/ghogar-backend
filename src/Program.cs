@@ -26,11 +26,22 @@ builder
         );
     });
 
+// Configure file upload limits
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.ValueLengthLimit = int.MaxValue;
+    options.MultipartBodyLengthLimit = 50 * 1024 * 1024; // 50MB limit
+    options.MultipartHeadersLengthLimit = int.MaxValue;
+});
+
 //
 // Configuration setup
 //
 builder.Services.Configure<CorsConfiguration>(builder.Configuration.GetSection("Cors"));
 builder.Services.Configure<ApiPeruConfiguration>(builder.Configuration.GetSection("ApiPeru"));
+builder.Services.Configure<CloudflareR2Configuration>(
+    builder.Configuration.GetSection("CloudflareR2")
+);
 
 // Database setup
 builder.Services.AddDbContext<DatabaseContext>(options =>
@@ -193,11 +204,27 @@ foreach (var module in modules)
 // Extra services
 builder.Services.AddScoped<WordTemplateService>();
 builder.Services.AddScoped<SofficeConverterService>();
+builder.Services.AddScoped<ICloudflareService, CloudflareService>();
+
+// Register controllers explicitly to avoid constructor conflicts
+builder.Services.AddScoped<UsersController>();
+builder.Services.AddScoped<AuthController>();
 
 var app = builder.Build();
 
 app.UseCors("AllowOrigins");
 app.UseStaticFiles();
+
+// Configure request size limits for file uploads
+app.Use(
+    async (context, next) =>
+    {
+        context
+            .Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>()!
+            .MaxRequestBodySize = 50 * 1024 * 1024; // 50MB
+        await next();
+    }
+);
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
