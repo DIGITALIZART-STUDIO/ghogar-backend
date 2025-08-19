@@ -22,5 +22,6 @@
     <PackageReference Include="MailKit" Version="4.1.0" />
     <PackageReference Include="MimeKit" Version="4.1.0" />
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.305.12" />
   </ItemGroup>
 </Project>
