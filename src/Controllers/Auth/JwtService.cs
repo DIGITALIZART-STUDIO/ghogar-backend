@@ -86,6 +86,48 @@ public class JwtService
         return (new JwtSecurityTokenHandler().WriteToken(token), expiration);
     }
 
+    public string? ValidateToken(string jwtString)
+    {
+        var tokenHandler = new JwtSecurityTokenHandler();
+
+        try
+        {
+            tokenHandler.ValidateToken(
+                jwtString,
+                new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = _jwtSettings.Issuer,
+                    ValidAudience = _jwtSettings.Audience,
+                    IssuerSigningKey = _signingKey,
+                    ClockSkew = TimeSpan.Zero,
+                },
+                out SecurityToken validatedToken
+            );
+
+            var jwtToken = (JwtSecurityToken)validatedToken;
+
+            // Verificar que no sea un refresh token
+            var refreshTokenClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "RefreshToken");
+            if (refreshTokenClaim != null && refreshTokenClaim.Value == "true")
+            {
+                return null; // Es un refresh token, no un access token
+            }
+
+            return jwtToken.Claims.First(c => c.Type == "sub").Value;
+        }
+        catch (Exception e)
+        {
+            _logger.LogDebug("Access token: exception thrown");
+            _logger.LogDebug(e.Message);
+            _logger.LogDebug(e.StackTrace);
+            return null;
+        }
+    }
+
     public string? ValidateRefreshToken(string jwtRefreshString)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
