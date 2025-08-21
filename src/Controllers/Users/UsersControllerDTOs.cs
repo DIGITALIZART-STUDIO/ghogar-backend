@@ -9,6 +9,17 @@ public class UserGetDTO
     public required IList<string> Roles { get; set; }
 }
 
+public class UserHigherRankDTO
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public IList<string> Roles { get; set; } = new List<string>();
+}
+
 public class UserCreateDTO
 {
     [MinLength(1)]

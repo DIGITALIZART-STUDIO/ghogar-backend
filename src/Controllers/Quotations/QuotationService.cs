@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using GestionHogar.Configuration;
 using GestionHogar.Dtos;
 using GestionHogar.Model;
+using GestionHogar.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using QuestPDF.Fluent;
@@ -13,7 +14,8 @@ namespace GestionHogar.Services;
 public class QuotationService(
     DatabaseContext _context,
     IEmailService _emailService,
-    IOptions<BusinessInfo> _businessInfo
+    IOptions<BusinessInfo> _businessInfo,
+    ILeadService _leadService
 ) : IQuotationService
 {
     public async Task<IEnumerable<QuotationDTO>> GetAllQuotationsAsync()
@@ -185,17 +187,69 @@ public class QuotationService(
         };
     }
 
-    public async Task<QuotationDTO> CreateQuotationAsync(QuotationCreateDTO dto)
+    public async Task<QuotationDTO> CreateQuotationAsync(
+        QuotationCreateDTO dto,
+        Guid currentUserId,
+        IEnumerable<string> currentUserRoles
+    )
     {
-        // Verificar que el lead existe
+        // Verificar si el usuario tiene roles mayores a SalesAdvisor
+        var hasHigherRole = currentUserRoles.Any(role =>
+            role != "SalesAdvisor"
+            && (
+                role == "SuperAdmin"
+                || role == "Admin"
+                || role == "Supervisor"
+                || role == "Manager"
+                || role == "FinanceManager"
+            )
+        );
+
+        if (hasHigherRole)
+        {
+            // Para usuarios con roles mayores, verificar si LeadId es Lead o Client
+            var leadExists = await LeadExistsAsync(dto.LeadId);
+
+            if (!leadExists)
+            {
+                // Verificar si existe como Cliente
+                var clientExists = await ClientExistsAsync(dto.LeadId);
+
+                if (clientExists)
+                {
+                    // Crear un nuevo Lead con el cliente y asignarlo al usuario actual
+                    var newLeadId = await CreateLeadFromClientAsync(dto.LeadId, currentUserId);
+
+                    // Actualizar el DTO con el nuevo LeadId
+                    dto.LeadId = newLeadId;
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"No se encontró un Lead con ID {dto.LeadId}"
+                    );
+                }
+            }
+        }
+        else
+        {
+            // Para SalesAdvisor, validar que el Lead existe
+            var leadExists = await LeadExistsAsync(dto.LeadId);
+            if (!leadExists)
+            {
+                throw new InvalidOperationException($"Lead con ID {dto.LeadId} no encontrado");
+            }
+        }
+
+        // Verificar que el lead existe (después de la validación/creación)
         var lead = await _context.Leads.FindAsync(dto.LeadId);
         if (lead == null)
             throw new InvalidOperationException($"Lead con ID {dto.LeadId} no encontrado");
 
-        // Verificar que el asesor existe
-        var advisor = await _context.Users.FindAsync(dto.AdvisorId);
+        // Verificar que el asesor (usuario actual) existe
+        var advisor = await _context.Users.FindAsync(currentUserId);
         if (advisor == null)
-            throw new InvalidOperationException($"Asesor con ID {dto.AdvisorId} no encontrado");
+            throw new InvalidOperationException($"Usuario con ID {currentUserId} no encontrado");
 
         // **NUEVO: Validar que el lote existe y está disponible**
         var lot = await _context
@@ -225,8 +279,9 @@ public class QuotationService(
         // Generar código automáticamente
         var code = await GenerateQuotationCodeAsync();
 
-        // **NUEVO: Crear cotización con datos del lote**
+        // **NUEVO: Crear cotización con datos del lote y usuario actual como asesor**
         var quotation = dto.ToEntity(code, lot);
+        quotation.AdvisorId = currentUserId; // Usar el usuario actual como asesor
         _context.Quotations.Add(quotation);
 
         // **NUEVO: Cambiar estado del lote a Quoted**
@@ -1127,6 +1182,43 @@ public class QuotationService(
                 Message = $"Error interno del servidor: {ex.Message}",
             };
         }
+    }
+
+    // Nuevos métodos para validación de leads y clientes
+    public async Task<bool> LeadExistsAsync(Guid leadId)
+    {
+        return await _context.Leads.AnyAsync(l => l.Id == leadId && l.IsActive);
+    }
+
+    public async Task<bool> ClientExistsAsync(Guid clientId)
+    {
+        return await _context.Clients.AnyAsync(c => c.Id == clientId && c.IsActive);
+    }
+
+    public async Task<Guid> CreateLeadFromClientAsync(Guid clientId, Guid assignedToUserId)
+    {
+        // Obtener el cliente
+        var client = await _context.Clients.FindAsync(clientId);
+        if (client == null)
+            throw new InvalidOperationException($"Cliente con ID {clientId} no encontrado");
+
+        // Crear el nuevo lead con datos por defecto usando LeadService
+        var newLead = new Lead
+        {
+            Code = "TEMP", // Valor temporal, será reemplazado por LeadService
+            ClientId = clientId,
+            AssignedToId = assignedToUserId,
+            Status = LeadStatus.Registered,
+            CaptureSource = LeadCaptureSource.Company, // Por defecto
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow,
+        };
+
+        // Usar LeadService para crear el lead (esto generará el código automáticamente)
+        var createdLead = await _leadService.CreateLeadAsync(newLead);
+
+        return createdLead.Id;
     }
 
     /// <summary>

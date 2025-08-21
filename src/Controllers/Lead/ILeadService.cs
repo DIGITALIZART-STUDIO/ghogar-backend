@@ -28,8 +28,9 @@ public interface ILeadService
     Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status);
     Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId);
     Task<IEnumerable<LeadSummaryDto>> GetAvailableLeadsForQuotationByUserAsync(
-        Guid assignedToId,
-        Guid? excludeQuotationId = null
+        Guid currentUserId,
+        Guid? excludeQuotationId = null,
+        IList<string>? currentUserRoles = null
     );
     Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();
     Task<Lead?> ChangeLeadStatusAsync(Guid id, LeadStatus status, LeadCompletionReason? reason);

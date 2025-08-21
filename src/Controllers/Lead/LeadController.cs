@@ -338,21 +338,51 @@ public class LeadsController : ControllerBase
         return Ok(leads);
     }
 
-    [HttpGet("assigned/{assignedToId:guid}/available-for-quotation/{excludeQuotationId:guid?}")]
-    public async Task<
-        ActionResult<IEnumerable<LeadSummaryDto>>
-    > GetAvailableLeadsForQuotationByUser(Guid assignedToId, Guid? excludeQuotationId)
+    [HttpGet("available-for-quotation/{excludeQuotationId:guid?}")]
+    public async Task<ActionResult<IEnumerable<LeadSummaryDto>>> GetAvailableLeadsForQuotation(
+        Guid? excludeQuotationId
+    )
     {
         try
         {
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            _logger.LogInformation(
+                "Obteniendo leads disponibles para cotización para usuario: {UserId} con roles: {Roles}",
+                currentUserId,
+                string.Join(", ", currentUserRoles)
+            );
+
+            // Verificar si el usuario tiene roles mayores a SalesAdvisor
+            var hasHigherRole = currentUserRoles.Any(role =>
+                role != "SalesAdvisor"
+                && (
+                    role == "SuperAdmin"
+                    || role == "Admin"
+                    || role == "Supervisor"
+                    || role == "Manager"
+                    || role == "FinanceManager"
+                )
+            );
+
+            // Permitir acceso a todos los usuarios (SalesAdvisor y roles mayores)
+            // La lógica de filtrado se maneja en el servicio según el rol
             var leads = await _leadService.GetAvailableLeadsForQuotationByUserAsync(
-                assignedToId,
-                excludeQuotationId
+                currentUserId,
+                excludeQuotationId,
+                currentUserRoles
             );
             return Ok(leads);
         }
-        catch
+        catch (UnauthorizedAccessException)
         {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener leads disponibles para cotización");
             return StatusCode(500, "Error interno del servidor");
         }
     }

@@ -158,7 +158,21 @@ public class QuotationsController : ControllerBase
     {
         try
         {
-            var quotation = await _quotationService.CreateQuotationAsync(dto);
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            _logger.LogInformation(
+                "Creando cotización para usuario: {UserId} con roles: {Roles}",
+                currentUserId,
+                string.Join(", ", currentUserRoles)
+            );
+
+            var quotation = await _quotationService.CreateQuotationAsync(
+                dto,
+                currentUserId,
+                currentUserRoles
+            );
             return CreatedAtAction(nameof(GetQuotationById), new { id = quotation.Id }, quotation);
         }
         catch (Exception ex)

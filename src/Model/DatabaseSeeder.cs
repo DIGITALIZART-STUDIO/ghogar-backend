@@ -55,6 +55,7 @@ public static class DatabaseSeeder
                 Email = adminEmail,
                 EmailConfirmed = true,
                 MustChangePassword = false,
+                IsActive = true, // Asegurar que el admin esté activo
             };
 
             // Create the admin user with a password

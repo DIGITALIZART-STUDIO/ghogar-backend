@@ -172,12 +172,19 @@ public class AuthController(
     [EndpointSummary("Refresh session")]
     [EndpointDescription("Refreshes the session, returning 2 new JWT tokens.")]
     [HttpPost("refresh")]
-    public async Task<ActionResult<LoginResponse>> refresh([FromBody] RefreshRequest req)
+    public async Task<ActionResult<LoginResponse>> refresh()
     {
         try
         {
+            // Obtener refresh token de las cookies
+            var refreshToken = Request.Cookies[$"{_corsConfig.CookieName}_refresh"];
+            if (string.IsNullOrEmpty(refreshToken))
+            {
+                return Unauthorized("Refresh token no encontrado en cookies");
+            }
+
             // Validar refresh token
-            var userId = jwt.ValidateRefreshToken(req.RefreshToken);
+            var userId = jwt.ValidateRefreshToken(refreshToken);
             if (userId == null)
             {
                 return Unauthorized("Refresh token inválido");
@@ -205,17 +212,17 @@ public class AuthController(
                 roles: userRoles,
                 user.SecurityStamp ?? ""
             );
-            var (refreshToken, refreshExpiration) = jwt.GenerateRefreshToken(
+            var (newRefreshToken, refreshExpiration) = jwt.GenerateRefreshToken(
                 user.Id.ToString(),
                 user.Email!
             );
 
             // Set authentication cookies
-            SetAuthCookies(token, refreshToken);
+            SetAuthCookies(token, newRefreshToken);
 
             return new LoginResponse(
                 AccessToken: token,
-                RefreshToken: refreshToken,
+                RefreshToken: newRefreshToken,
                 AccessExpiresIn: accessExpiration,
                 RefreshExpiresIn: refreshExpiration
             );
@@ -251,12 +258,6 @@ public class LoginRequest
     [MaxLength(100)]
     [DefaultValue("Acide2025/1")]
     public required string Password { get; set; }
-}
-
-public class RefreshRequest
-{
-    [MinLength(1)]
-    public required string RefreshToken { get; set; }
 }
 
 public record LoginResponse(

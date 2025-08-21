@@ -19,6 +19,7 @@ public class UsersController(
     RoleManager<IdentityRole<Guid>> roleManager,
     IEmailService emailService,
     IOptions<BusinessInfo> businessInfo,
+    IUserHigherRankService userHigherRankService,
     ILogger<UsersController> logger
 ) : ControllerBase
 {
@@ -360,6 +361,82 @@ public class UsersController(
         }
 
         return Ok(new { message = "Contraseña actualizada correctamente." });
+    }
+
+    [EndpointSummary("Get users with higher rank")]
+    [EndpointDescription(
+        "Gets all users with higher rank (all roles except SaleAdvisor) excluding current user with optional name filter for autocomplete and configurable limit"
+    )]
+    [Authorize]
+    [HttpGet("higher-rank")]
+    public async Task<ActionResult<IEnumerable<UserHigherRankDTO>>> GetUsersWithHigherRank(
+        [FromQuery] string? name = null,
+        [FromQuery] int limit = 10
+    )
+    {
+        try
+        {
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var users = await userHigherRankService.GetUsersWithHigherRankAsync(
+                currentUserId,
+                name,
+                limit
+            );
+
+            logger.LogInformation(
+                "Usuarios con mayor rango obtenidos exitosamente para usuario: {CurrentUserId}, filtro: {Name}, límite: {Limit}",
+                currentUserId,
+                name ?? "sin filtro",
+                limit
+            );
+            return Ok(users);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al obtener usuarios con mayor rango");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    [EndpointSummary("Get users with higher rank paginated")]
+    [EndpointDescription(
+        "Gets users with higher rank (all roles except SaleAdvisor) excluding current user with pagination"
+    )]
+    [Authorize]
+    [HttpGet("higher-rank/paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<UserHigherRankDTO>>
+    > GetUsersWithHigherRankPaginated([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    {
+        try
+        {
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var result = await userHigherRankService.GetUsersWithHigherRankPaginatedAsync(
+                currentUserId,
+                page,
+                pageSize
+            );
+
+            logger.LogInformation(
+                "Usuarios con mayor rango paginados obtenidos exitosamente para usuario: {CurrentUserId}, página: {Page}",
+                currentUserId,
+                page
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al obtener usuarios con mayor rango paginados");
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     /// <summary>

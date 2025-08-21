@@ -195,6 +195,7 @@ var modules = new IModule[]
     new DashboardModule(),
     new ExcelExportModule(),
     new EmailModule(),
+    new UserHigherRankModule(),
 };
 foreach (var module in modules)
 {
