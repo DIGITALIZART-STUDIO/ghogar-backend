@@ -74,6 +74,76 @@ public class MonthlyPerformanceDto
     public decimal Revenue { get; set; }
 }
 
+// --- Nuevos DTOs para clientes ---
+public class ClientRegistrationDto
+{
+    public string Month { get; set; } = "";
+    public int Natural { get; set; }
+    public int Juridico { get; set; }
+}
+
+public class GeographicClientDto
+{
+    public string Country { get; set; } = "";
+    public int Count { get; set; }
+    public double Percentage { get; set; }
+}
+
+public class RecentClientDto
+{
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = ""; // "Natural" | "Juridico"
+    public string Phone { get; set; } = "";
+    public string? Email { get; set; }
+    public string Country { get; set; } = "";
+    public int Completeness { get; set; } // porcentaje
+    public int DaysAgo { get; set; }
+    public bool HasCoOwners { get; set; }
+    public bool SeparateProperty { get; set; }
+}
+
+// DTOs financieros y de flujo de pagos
+public class PaymentPipelineStageDto
+{
+    public string Stage { get; set; } = "";
+    public int Count { get; set; }
+    public decimal Amount { get; set; }
+}
+
+public class ReservationStatusDto
+{
+    public string Status { get; set; } = "";
+    public int Count { get; set; }
+    public decimal Amount { get; set; }
+    public double Percentage { get; set; }
+}
+
+public class PaymentMethodDto
+{
+    public string Method { get; set; } = "";
+    public int Count { get; set; }
+    public decimal Amount { get; set; }
+    public double Percentage { get; set; }
+}
+
+public class UpcomingPaymentDto
+{
+    public Guid ReservationId { get; set; }
+    public string ClientName { get; set; } = "";
+    public DateTime DueDate { get; set; }
+    public decimal AmountDue { get; set; }
+    public int DaysLeft { get; set; }
+    public string Status { get; set; } = "";
+}
+
+public class CashFlowDto
+{
+    public string Month { get; set; } = "";
+    public decimal Programado { get; set; }
+    public decimal Realizado { get; set; }
+    public decimal Separaciones { get; set; }
+}
+
 public class DashboardAdminDto
 {
     public int TotalProjects { get; set; }
@@ -87,7 +157,7 @@ public class DashboardAdminDto
     public int CompletedSales { get; set; }
 
     // Métricas financieras
-    public decimal MonthlyRevenue { get; set; }
+    public decimal AnnualRevenue { get; set; }
     public decimal PendingPayments { get; set; }
     public decimal AverageTicket { get; set; }
     public double ConversionRate { get; set; }
@@ -101,4 +171,15 @@ public class DashboardAdminDto
     public List<ProjectMetricDto> ProjectMetrics { get; set; } = new();
     public PaymentMetricsDto PaymentMetrics { get; set; } = new();
     public List<MonthlyPerformanceDto> MonthlyPerformance { get; set; } = new();
+
+    // --- Nuevas propiedades relacionadas a clientes ---
+    public List<ClientRegistrationDto> ClientRegistrations { get; set; } = new();
+    public List<GeographicClientDto> GeographicData { get; set; } = new();
+    public List<RecentClientDto> RecentClients { get; set; } = new();
+
+    public List<PaymentPipelineStageDto> PaymentPipeline { get; set; } = new();
+    public List<ReservationStatusDto> ReservationStatusData { get; set; } = new();
+    public List<PaymentMethodDto> PaymentMethodsData { get; set; } = new();
+    public List<UpcomingPaymentDto> UpcomingPayments { get; set; } = new();
+    public List<CashFlowDto> CashFlowData { get; set; } = new();
 }

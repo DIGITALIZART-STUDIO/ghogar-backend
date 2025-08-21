@@ -26,7 +26,7 @@ public class ProjectCreateDTO
     [Range(0, 100)]
     public decimal? MaxDiscountPercentage { get; set; } // Nuevo campo
 
-    public Project ToEntity()
+    public Project ToEntity(string? projectUrlImage = null)
     {
         return new Project
         {
@@ -37,6 +37,7 @@ public class ProjectCreateDTO
             DefaultDownPayment = DefaultDownPayment,
             DefaultFinancingMonths = DefaultFinancingMonths,
             MaxDiscountPercentage = MaxDiscountPercentage, // Nuevo campo
+            ProjectUrlImage = projectUrlImage, // URL de la imagen si se subió
             CreatedAt = DateTime.UtcNow,
             ModifiedAt = DateTime.UtcNow,
         };

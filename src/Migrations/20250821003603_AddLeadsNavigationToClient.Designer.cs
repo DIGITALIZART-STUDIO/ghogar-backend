@@ -3,6 +3,7 @@ using System;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestionHogar.Migrations
 {
     [DbContext(typeof(DatabaseContext))]
-    partial class DatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20250821003603_AddLeadsNavigationToClient")]
+    partial class AddLeadsNavigationToClient
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -860,7 +863,7 @@ namespace GestionHogar.Migrations
                         .HasForeignKey("AssignedToId");
 
                     b.HasOne("GestionHogar.Model.Client", "Client")
-                        .WithMany()
+                        .WithMany("Leads")
                         .HasForeignKey("ClientId");
 
                     b.HasOne("GestionHogar.Model.User", "LastRecycledBy")
@@ -1059,6 +1062,11 @@ namespace GestionHogar.Migrations
             modelBuilder.Entity("GestionHogar.Model.Block", b =>
                 {
                     b.Navigation("Lots");
+                });
+
+            modelBuilder.Entity("GestionHogar.Model.Client", b =>
+                {
+                    b.Navigation("Leads");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.PaymentTransaction", b =>

@@ -123,7 +123,7 @@ public class LeadTaskService : ILeadTaskService
                     AssignedTo = new UserBasicDTO
                     {
                         Id = t.AssignedTo!.Id,
-                        UserName = t.AssignedTo.UserName,
+                        UserName = t.AssignedTo.UserName ?? string.Empty,
                         Name = t.AssignedTo.Name,
                         IsActive = t.AssignedTo.IsActive,
                     },

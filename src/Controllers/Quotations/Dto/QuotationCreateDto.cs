@@ -12,9 +12,6 @@ public class QuotationCreateDTO
     [Required]
     public Guid LotId { get; set; } // **NUEVO: Ahora referenciamos directamente el lote**
 
-    [Required]
-    public Guid AdvisorId { get; set; }
-
     // Datos financieros opcionales (si no se especifican, se usan los del proyecto)
     public decimal? Discount { get; set; } = 0;
     public decimal? DownPayment { get; set; } // Si no se especifica, usa DefaultDownPayment del proyecto
@@ -54,7 +51,7 @@ public class QuotationCreateDTO
             Code = code,
             LeadId = LeadId,
             LotId = LotId,
-            AdvisorId = AdvisorId,
+            AdvisorId = Guid.Empty, // Se establecerá después con el usuario actual
             Status = QuotationStatus.ISSUED,
 
             // Precios (históricos al momento de la cotización)

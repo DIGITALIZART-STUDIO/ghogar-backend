@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using GestionHogar.Dtos;
 using GestionHogar.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -24,6 +25,8 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpGet]
+    [EndpointSummary("Get all projects")]
+    [EndpointDescription("Retrieves all projects in the system")]
     public async Task<ActionResult<IEnumerable<ProjectDTO>>> GetAllProjects()
     {
         try
@@ -39,6 +42,8 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpGet("active")]
+    [EndpointSummary("Get active projects")]
+    [EndpointDescription("Retrieves only active projects in the system")]
     public async Task<ActionResult<IEnumerable<ProjectDTO>>> GetActiveProjects()
     {
         try
@@ -54,6 +59,11 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [EndpointSummary("Get project by ID")]
+    [EndpointDescription("Retrieves a specific project by its ID")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<ProjectDTO>> GetProjectById(Guid id)
     {
         try
@@ -72,11 +82,21 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<ProjectDTO>> CreateProject(ProjectCreateDTO dto)
+    [EndpointSummary("Create project")]
+    [EndpointDescription(
+        "Creates a new project with the provided information. Optionally accepts an image file."
+    )]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ProjectDTO>> CreateProject(
+        [FromForm] ProjectCreateDTO dto,
+        [FromForm] IFormFile? projectImage = null
+    )
     {
         try
         {
-            var project = await _projectService.CreateProjectAsync(dto);
+            var project = await _projectService.CreateProjectAsync(dto, projectImage);
             return CreatedAtAction(nameof(GetProjectById), new { id = project.Id }, project);
         }
         catch (InvalidOperationException ex)
@@ -91,11 +111,23 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<ProjectDTO>> UpdateProject(Guid id, ProjectUpdateDTO dto)
+    [EndpointSummary("Update project")]
+    [EndpointDescription(
+        "Updates an existing project with the provided information. Optionally accepts an image file."
+    )]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ProjectDTO>> UpdateProject(
+        Guid id,
+        [FromForm] ProjectUpdateDTO dto,
+        [FromForm] IFormFile? projectImage = null
+    )
     {
         try
         {
-            var project = await _projectService.UpdateProjectAsync(id, dto);
+            var project = await _projectService.UpdateProjectAsync(id, dto, projectImage);
             if (project == null)
                 return NotFound($"Proyecto con ID {id} no encontrado");
 

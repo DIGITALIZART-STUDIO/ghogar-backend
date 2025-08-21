@@ -48,6 +48,9 @@ public class ProjectUpdateDTO
         if (MaxDiscountPercentage.HasValue)
             project.MaxDiscountPercentage = MaxDiscountPercentage.Value; // Nuevo campo
 
+        // La URL de la imagen se maneja externamente en el servicio
+        // ya que requiere subir el archivo a Cloudflare R2
+
         project.ModifiedAt = DateTime.UtcNow;
     }
 }

@@ -1,16 +1,19 @@
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace GestionHogar.Services;
 
 public class LeadService : ILeadService
 {
     private readonly DatabaseContext _context;
+    private readonly ILogger<LeadService> _logger;
 
-    public LeadService(DatabaseContext context)
+    public LeadService(DatabaseContext context, ILogger<LeadService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<string> GenerateLeadCodeAsync()
@@ -258,32 +261,109 @@ public class LeadService : ILeadService
     }
 
     /**
-     * Método para obtener leads disponibles para cotización de un usuario específico.
-     * Excluye leads cancelados, expirados, completados o que ya tengan una cotización aceptada.
+     * Método para obtener clientes disponibles para cotización (solo para roles mayores a SalesAdvisor).
+     * Muestra todos los clientes excepto los que ya tienen leads asignados.
      */
     public async Task<IEnumerable<LeadSummaryDto>> GetAvailableLeadsForQuotationByUserAsync(
-        Guid assignedToId,
-        Guid? excludeQuotationId = null
+        Guid currentUserId,
+        Guid? excludeQuotationId = null,
+        IList<string>? currentUserRoles = null
     )
     {
-        var leads = await _context
-            .Leads.Where(l =>
-                l.IsActive
-                && l.AssignedToId == assignedToId
-                && l.Status != LeadStatus.Canceled
-                && l.Status != LeadStatus.Expired
-                && l.Status != LeadStatus.Completed
-                && !_context.Quotations.Any(q =>
-                    q.LeadId == l.Id
-                    && q.Status == QuotationStatus.ACCEPTED
-                    && (!excludeQuotationId.HasValue || q.Id != excludeQuotationId.Value)
+        // Verificar si el usuario tiene roles mayores a SalesAdvisor
+        var hasHigherRole =
+            currentUserRoles?.Any(role =>
+                role != "SalesAdvisor"
+                && (
+                    role == "SuperAdmin"
+                    || role == "Admin"
+                    || role == "Supervisor"
+                    || role == "Manager"
+                    || role == "FinanceManager"
                 )
-            )
-            .Include(l => l.Client)
-            .Include(l => l.Project)
-            .ToListAsync();
+            ) ?? false;
 
-        return leads.Select(LeadSummaryDto.FromEntity);
+        if (hasHigherRole)
+        {
+            // Para roles mayores a SalesAdvisor: mostrar leads asignados + clientes sin leads
+            var allClients = await _context.Clients.Where(c => c.IsActive).ToListAsync();
+
+            // Obtener todos los leads del usuario actual con sus clientes incluidos
+            var userLeads = await _context
+                .Leads.Where(l =>
+                    l.AssignedToId == currentUserId
+                    && l.IsActive
+                    && l.Status != LeadStatus.Canceled
+                    && l.Status != LeadStatus.Expired
+                    && l.Status != LeadStatus.Completed
+                )
+                .Include(l => l.Client) // Incluir explícitamente el cliente
+                .ToListAsync();
+
+            // Crear un set de clientes que ya tienen leads asignados al usuario
+            var clientsWithUserLeads = userLeads.Select(l => l.ClientId).ToHashSet();
+
+            var result = new List<LeadSummaryDto>();
+
+            // Agregar los leads reales del usuario
+            foreach (var lead in userLeads)
+            {
+                result.Add(LeadSummaryDto.FromEntity(lead));
+            }
+
+            // Agregar clientes que NO tienen leads asignados al usuario actual
+            foreach (var client in allClients)
+            {
+                if (!clientsWithUserLeads.Contains(client.Id))
+                {
+                    // Crear un LeadSummaryDto virtual para este cliente
+                    var virtualLead = new LeadSummaryDto
+                    {
+                        Id = client.Id, // ID temporal para el lead virtual
+                        Code = $"CLI-{client.Id}", // Código especial para identificar que es un cliente
+                        Client = new ClientSummaryDto
+                        {
+                            Id = client.Id,
+                            Name = client.Name ?? string.Empty,
+                            Dni = client.Dni,
+                            Ruc = client.Ruc,
+                        },
+                        Status = LeadStatus.Registered, // Estado por defecto
+                        ExpirationDate = DateTime.UtcNow.AddDays(7), // Fecha de expiración por defecto
+                        ProjectName = null, // Sin proyecto asignado
+                        RecycleCount = 0, // Sin reciclajes
+                    };
+
+                    result.Add(virtualLead);
+                }
+            }
+
+            return result;
+        }
+        else
+        {
+            // Para SalesAdvisor: mostrar solo sus leads asignados
+            var userLeads = await _context
+                .Leads.Where(l =>
+                    l.AssignedToId == currentUserId
+                    && l.IsActive
+                    && l.Status != LeadStatus.Canceled
+                    && l.Status != LeadStatus.Expired
+                    && l.Status != LeadStatus.Completed
+                )
+                .Include(l => l.Client) // Incluir explícitamente el cliente
+                .ToListAsync();
+
+            var result = new List<LeadSummaryDto>();
+
+            // Agregar solo los leads reales del usuario
+            foreach (var lead in userLeads)
+            {
+                result.Add(LeadSummaryDto.FromEntity(lead));
+            }
+
+            return result;
+        }
     }
 
     // Nuevos métodos para manejar reciclaje y expiración

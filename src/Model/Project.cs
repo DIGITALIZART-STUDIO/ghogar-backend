@@ -29,6 +29,9 @@ public class Project : IEntity
     [Range(0, 100)]
     public decimal? MaxDiscountPercentage { get; set; }
 
+    // URL de la imagen del proyecto
+    public string? ProjectUrlImage { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime ModifiedAt { get; set; } = DateTime.UtcNow;
 

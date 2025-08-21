@@ -1,6 +1,7 @@
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using GestionHogar.Services;
+using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,10 +13,12 @@ namespace GestionHogar.Controllers;
 public class LeadsController : ControllerBase
 {
     private readonly ILeadService _leadService;
+    private readonly ILogger<LeadsController> _logger;
 
-    public LeadsController(ILeadService leadService)
+    public LeadsController(ILeadService leadService, ILogger<LeadsController> logger)
     {
         _leadService = leadService;
+        _logger = logger;
     }
 
     // GET: api/leads
@@ -226,20 +229,27 @@ public class LeadsController : ControllerBase
     [HttpPost("{id}/recycle")]
     public async Task<ActionResult<Lead>> RecycleLead(Guid id)
     {
-        // Obtenemos el ID del usuario actual desde el token JWT
-        var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "id" || c.Type == "sub");
-        if (userIdClaim == null)
-            return BadRequest("No se pudo identificar al usuario actual");
+        try
+        {
+            // Obtenemos el ID del usuario actual usando el extension method
+            var userId = User.GetCurrentUserIdOrThrow();
 
-        if (!Guid.TryParse(userIdClaim.Value, out var userId))
-            return BadRequest("ID de usuario inválido");
+            var lead = await _leadService.RecycleLeadAsync(id, userId);
 
-        var lead = await _leadService.RecycleLeadAsync(id, userId);
+            if (lead == null)
+                return NotFound("No se encontró un lead expirado o cancelado con ese ID");
 
-        if (lead == null)
-            return NotFound("No se encontró un lead expirado o cancelado con ese ID");
-
-        return Ok(lead);
+            return Ok(lead);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al reciclar lead");
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     // GET: api/leads/expired
@@ -328,21 +338,51 @@ public class LeadsController : ControllerBase
         return Ok(leads);
     }
 
-    [HttpGet("assigned/{assignedToId:guid}/available-for-quotation/{excludeQuotationId:guid?}")]
-    public async Task<
-        ActionResult<IEnumerable<LeadSummaryDto>>
-    > GetAvailableLeadsForQuotationByUser(Guid assignedToId, Guid? excludeQuotationId)
+    [HttpGet("available-for-quotation/{excludeQuotationId:guid?}")]
+    public async Task<ActionResult<IEnumerable<LeadSummaryDto>>> GetAvailableLeadsForQuotation(
+        Guid? excludeQuotationId
+    )
     {
         try
         {
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            _logger.LogInformation(
+                "Obteniendo leads disponibles para cotización para usuario: {UserId} con roles: {Roles}",
+                currentUserId,
+                string.Join(", ", currentUserRoles)
+            );
+
+            // Verificar si el usuario tiene roles mayores a SalesAdvisor
+            var hasHigherRole = currentUserRoles.Any(role =>
+                role != "SalesAdvisor"
+                && (
+                    role == "SuperAdmin"
+                    || role == "Admin"
+                    || role == "Supervisor"
+                    || role == "Manager"
+                    || role == "FinanceManager"
+                )
+            );
+
+            // Permitir acceso a todos los usuarios (SalesAdvisor y roles mayores)
+            // La lógica de filtrado se maneja en el servicio según el rol
             var leads = await _leadService.GetAvailableLeadsForQuotationByUserAsync(
-                assignedToId,
-                excludeQuotationId
+                currentUserId,
+                excludeQuotationId,
+                currentUserRoles
             );
             return Ok(leads);
         }
-        catch
+        catch (UnauthorizedAccessException)
         {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener leads disponibles para cotización");
             return StatusCode(500, "Error interno del servidor");
         }
     }

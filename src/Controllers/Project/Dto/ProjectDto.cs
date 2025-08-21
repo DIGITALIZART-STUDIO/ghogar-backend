@@ -12,6 +12,7 @@ public class ProjectDTO
     public decimal? DefaultDownPayment { get; set; }
     public int? DefaultFinancingMonths { get; set; }
     public decimal? MaxDiscountPercentage { get; set; } // Nuevo campo
+    public string? ProjectUrlImage { get; set; } // URL de la imagen del proyecto
     public DateTime CreatedAt { get; set; }
     public DateTime ModifiedAt { get; set; }
 
@@ -35,6 +36,7 @@ public class ProjectDTO
             DefaultDownPayment = project.DefaultDownPayment,
             DefaultFinancingMonths = project.DefaultFinancingMonths,
             MaxDiscountPercentage = project.MaxDiscountPercentage, // Nuevo campo
+            ProjectUrlImage = project.ProjectUrlImage, // URL de la imagen
             CreatedAt = project.CreatedAt,
             ModifiedAt = project.ModifiedAt,
             TotalBlocks = project.Blocks?.Count ?? 0,
