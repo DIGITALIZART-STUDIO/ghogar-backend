@@ -93,11 +93,14 @@ public class PaymentTransactionController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<PaymentTransactionDTO>> Create(PaymentTransactionCreateDTO dto)
+    public async Task<ActionResult<PaymentTransactionDTO>> Create(
+        [FromForm] PaymentTransactionCreateDTO dto,
+        [FromForm] IFormFile? comprobanteFile = null
+    )
     {
         try
         {
-            var result = await _service.CreateAsync(dto);
+            var result = await _service.CreateAsync(dto, comprobanteFile);
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
         catch (Exception ex)
@@ -110,12 +113,13 @@ public class PaymentTransactionController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<PaymentTransactionDTO>> Update(
         Guid id,
-        PaymentTransactionUpdateDTO dto
+        [FromForm] PaymentTransactionUpdateDTO dto,
+        [FromForm] IFormFile? comprobanteFile = null
     )
     {
         try
         {
-            var result = await _service.UpdateAsync(id, dto);
+            var result = await _service.UpdateAsync(id, dto, comprobanteFile);
             if (result == null)
                 return NotFound($"Transacción con ID {id} no encontrada");
             return Ok(result);

@@ -391,14 +391,6 @@ public class ExcelExportService : IExcelExportService
 
                 var properties = GetComplexDataProperties(value ?? "");
 
-                if (properties.Count > 0)
-                {
-                    foreach (var property in properties)
-                    {
-                        Console.WriteLine($"[DEBUG] Propiedad: {property.Key} = {property.Value}");
-                    }
-                }
-
                 foreach (var property in properties)
                 {
                     if (currentColumn <= totalColumns)

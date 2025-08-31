@@ -67,23 +67,6 @@ public class GetDashboardAdminDataUseCase
             })
             .ToListAsync();
 
-        // Log detallado con JSON
-        Console.WriteLine("=== DEBUG PAYMENT TRANSACTIONS ===");
-        Console.WriteLine(
-            JsonSerializer.Serialize(
-                paymentTransactionsDebug,
-                new JsonSerializerOptions { WriteIndented = true }
-            )
-        );
-
-        Console.WriteLine("=== DEBUG RESERVATIONS ===");
-        Console.WriteLine(
-            JsonSerializer.Serialize(
-                reservationsDebug,
-                new JsonSerializerOptions { WriteIndented = true }
-            )
-        );
-
         // Cálculo directo usando los datos ya consultados
         var paymentTransactionsSum = paymentTransactionsDebug.Sum(pt => pt.AmountPaid);
         var reservationsSum = reservationsDebug.Sum(r => r.AmountPaid);
@@ -94,14 +77,6 @@ public class GetDashboardAdminDataUseCase
         var reservationCount = reservationsDebug.Count;
         var transactionSum = paymentTransactionsSum;
         var reservationSum = reservationsSum;
-
-        // Log para debugging (puedes remover esto después)
-        Console.WriteLine(
-            $"Debug Revenue - Year: {yearToUse}, StartDate: {startDate}, EndDate: {endDate}"
-        );
-        Console.WriteLine($"Transactions: {transactionCount} items, Total: {transactionSum}");
-        Console.WriteLine($"Reservations: {reservationCount} items, Total: {reservationSum}");
-        Console.WriteLine($"Total Revenue: {annualRevenue}");
 
         var pendingPayments =
             await _db.Payments.Where(p => !p.Paid).SumAsync(p => (decimal?)p.AmountDue) ?? 0;

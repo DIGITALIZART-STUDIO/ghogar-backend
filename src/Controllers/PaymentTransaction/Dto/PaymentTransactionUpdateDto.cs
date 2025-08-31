@@ -20,6 +20,9 @@ public class PaymentTransactionUpdateDTO
     [StringLength(100)]
     public string? ReferenceNumber { get; set; }
 
+    [StringLength(500)]
+    public string? ComprobanteUrl { get; set; }
+
     [Required]
     public List<Guid> PaymentIds { get; set; } = new();
 }

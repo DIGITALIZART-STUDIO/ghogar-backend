@@ -10,6 +10,7 @@ public class PaymentTransactionDTO
     public Guid? ReservationId { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public string? ReferenceNumber { get; set; }
+    public string? ComprobanteUrl { get; set; }
     public List<PaymentDTO> Payments { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime ModifiedAt { get; set; }
@@ -24,6 +25,7 @@ public class PaymentTransactionDTO
             ReservationId = transaction.ReservationId,
             PaymentMethod = transaction.PaymentMethod,
             ReferenceNumber = transaction.ReferenceNumber,
+            ComprobanteUrl = transaction.ComprobanteUrl,
             Payments = transaction
                 .Payments.Select(p => new PaymentDTO
                 {
