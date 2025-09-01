@@ -30,6 +30,10 @@ public class PaymentTransaction : BaseModel
     // Número de operación, referencia, voucher, etc.
     public string? ReferenceNumber { get; set; }
 
+    // URL de la imagen del comprobante de pago
+    [StringLength(500)]
+    public string? ComprobanteUrl { get; set; }
+
     public static void SetUp<A>(ModelBuilder modelBuilder)
     {
         var dateTimeOffsetToUtcConverter = new ValueConverter<DateTimeOffset, DateTimeOffset>(

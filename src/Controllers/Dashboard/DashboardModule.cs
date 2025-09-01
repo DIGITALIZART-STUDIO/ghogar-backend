@@ -1,12 +1,15 @@
-using GestionHogar.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace GestionHogar.Controllers;
 
-public class DashboardModule : IModule
+public static class DashboardModule
 {
-    public IServiceCollection SetupModule(IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddDashboardServices(this IServiceCollection services)
     {
-        services.AddScoped<DashboardService>();
+        services.AddScoped<GetDashboardAdminDataUseCase>();
+        services.AddScoped<GetAdvisorDashboardDataUseCase>();
+        services.AddScoped<DashboardController>();
+
         return services;
     }
 }

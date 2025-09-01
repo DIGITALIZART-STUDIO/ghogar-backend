@@ -1,4 +1,5 @@
 using GestionHogar.Dtos;
+using Microsoft.AspNetCore.Http;
 
 namespace GestionHogar.Services;
 
@@ -12,7 +13,14 @@ public interface IPaymentTransactionService
         Guid reservationId,
         Guid? excludeTransactionId = null
     );
-    Task<PaymentTransactionDTO> CreateAsync(PaymentTransactionCreateDTO dto);
-    Task<PaymentTransactionDTO?> UpdateAsync(Guid id, PaymentTransactionUpdateDTO dto);
+    Task<PaymentTransactionDTO> CreateAsync(
+        PaymentTransactionCreateDTO dto,
+        IFormFile? comprobanteImage = null
+    );
+    Task<PaymentTransactionDTO?> UpdateAsync(
+        Guid id,
+        PaymentTransactionUpdateDTO dto,
+        IFormFile? comprobanteImage = null
+    );
     Task<bool> DeleteAsync(Guid id);
 }

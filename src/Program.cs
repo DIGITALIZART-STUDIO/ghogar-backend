@@ -192,11 +192,13 @@ var modules = new IModule[]
     new ApiPeruModule(),
     new PaymentTransactionModule(),
     new PaginationModule(),
-    new DashboardModule(),
     new ExcelExportModule(),
     new EmailModule(),
     new UserHigherRankModule(),
 };
+
+// Register dashboard services
+builder.Services.AddDashboardServices();
 foreach (var module in modules)
 {
     module.SetupModule(builder.Services, builder.Configuration);

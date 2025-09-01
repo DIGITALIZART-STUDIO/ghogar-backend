@@ -53,6 +53,20 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
         BaseModel.SetUp<PaymentTransaction>(builder);
         PaymentTransaction.SetUp<PaymentTransaction>(builder);
 
+        // Configuración de la relación PaymentTransaction - Payment
+        builder
+            .Entity<PaymentTransaction>()
+            .HasMany(pt => pt.Payments)
+            .WithMany()
+            .UsingEntity(
+                "PaymentTransactionPayments",
+                l => l.HasOne(typeof(Payment)).WithMany().HasForeignKey("PaymentId"),
+                r =>
+                    r.HasOne(typeof(PaymentTransaction))
+                        .WithMany()
+                        .HasForeignKey("PaymentTransactionId")
+            );
+
         // Configuración de OtpCode
         builder.Entity<OtpCode>(entity =>
         {

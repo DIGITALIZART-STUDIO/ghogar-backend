@@ -16,6 +16,13 @@ public interface ICloudflareService
         string projectName,
         string? existingImageUrl
     );
+    Task<string> UploadPaymentReceiptImageAsync(IFormFile file, string transactionId);
+    Task<string> UpdatePaymentReceiptImageAsync(
+        IFormFile file,
+        string transactionId,
+        string? existingImageUrl
+    );
+    Task<bool> DeletePaymentTransactionFolderAsync(string transactionId);
     Task<(bool Success, string Message, string? ErrorDetails)> TestConnectionAsync();
 }
 
@@ -63,14 +70,6 @@ public class CloudflareService : ICloudflareService
 
         // Crear el cliente S3 con configuración específica para Cloudflare R2
         _s3Client = new AmazonS3Client(accessKeyId, secretAccessKey, s3Config);
-
-        // Log de configuración para debugging (sin mostrar la clave secreta completa)
-        Console.WriteLine($"Cloudflare R2 Config:");
-        Console.WriteLine($"  AccessKeyId: {accessKeyId}");
-        Console.WriteLine($"  SecretAccessKey Length: {secretAccessKey?.Length ?? 0}");
-        Console.WriteLine($"  ApiS3: {serviceUrl}");
-        Console.WriteLine($"  BucketName: {_bucketName}");
-        Console.WriteLine($"  PublicUrlImage: {_publicUrl}");
     }
 
     /// <summary>
@@ -336,6 +335,213 @@ public class CloudflareService : ICloudflareService
         {
             throw new InvalidOperationException(
                 $"Error al actualizar archivo de proyecto en Cloudflare R2: {ex.Message}"
+            );
+        }
+    }
+
+    /// <summary>
+    /// Subir una imagen de recibo de pago a Cloudflare R2
+    /// </summary>
+    /// <param name="file">Archivo del recibo de pago</param>
+    /// <param name="transactionId">ID de la transacción</param>
+    /// <returns>URL pública del archivo subido</returns>
+    public async Task<string> UploadPaymentReceiptImageAsync(IFormFile file, string transactionId)
+    {
+        if (file == null || file.Length == 0)
+            throw new ArgumentException("El archivo del recibo de pago no puede estar vacío");
+
+        if (string.IsNullOrWhiteSpace(transactionId))
+            throw new ArgumentException("El ID de la transacción no puede estar vacío");
+
+        // Validar el tipo de archivo
+        if (!IsValidImageFile(file))
+            throw new ArgumentException(
+                "El archivo del recibo de pago debe ser una imagen válida (JPG, PNG, WEBP)"
+            );
+
+        // Obtener la extensión del archivo
+        var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var fileName = $"{Guid.NewGuid()}{fileExtension}";
+
+        // Crear la ruta en la carpeta payments/id-de-transaccion
+        var key = $"payments/{transactionId}/{fileName}";
+
+        // Leer el archivo completo en memoria como bytes
+        byte[] fileBytes;
+        using (var memoryStream = new MemoryStream())
+        {
+            await file.CopyToAsync(memoryStream);
+            fileBytes = memoryStream.ToArray();
+        }
+
+        try
+        {
+            using var inputStream = new MemoryStream(fileBytes);
+            var putRequest = new PutObjectRequest
+            {
+                BucketName = _bucketName,
+                Key = key,
+                InputStream = inputStream,
+                ContentType = GetContentType(fileExtension),
+                CannedACL = S3CannedACL.PublicRead,
+                DisablePayloadSigning = true, // clave para R2: evita streaming-signed payload
+            };
+            // Forzar Content-Length para evitar chunked
+            putRequest.Headers.ContentLength = fileBytes.Length;
+
+            await _s3Client.PutObjectAsync(putRequest);
+
+            // Retornar la URL pública
+            return $"{_publicUrl}/{key}";
+        }
+        catch (AmazonS3Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Error al subir recibo de pago a Cloudflare R2: {ex.Message}"
+            );
+        }
+    }
+
+    /// <summary>
+    /// Actualizar una imagen de recibo de pago en Cloudflare R2
+    /// </summary>
+    /// <param name="file">Archivo del recibo de pago a actualizar</param>
+    /// <param name="transactionId">ID de la transacción</param>
+    /// <param name="existingImageUrl">URL de la imagen existente</param>
+    /// <returns>URL pública del archivo actualizado</returns>
+    public async Task<string> UpdatePaymentReceiptImageAsync(
+        IFormFile file,
+        string transactionId,
+        string? existingImageUrl
+    )
+    {
+        if (file == null || file.Length == 0)
+            throw new ArgumentException("El archivo del recibo de pago no puede estar vacío");
+
+        if (string.IsNullOrWhiteSpace(transactionId))
+            throw new ArgumentException("El ID de la transacción no puede estar vacío");
+
+        // Extraer la extensión del nuevo archivo
+        var newExtension = Path.GetExtension(file.FileName);
+        var fileName = $"{Guid.NewGuid()}{newExtension}";
+
+        // Crear la ruta en la carpeta payments/id-de-transaccion
+        var key = $"payments/{transactionId}/{fileName}";
+
+        // Eliminar el archivo existente si existe
+        if (!string.IsNullOrEmpty(existingImageUrl))
+        {
+            try
+            {
+                // Extraer la clave del archivo existente de la URL
+                var existingKey = ExtractKeyFromUrl(existingImageUrl);
+                if (!string.IsNullOrEmpty(existingKey))
+                {
+                    var deleteRequest = new DeleteObjectRequest
+                    {
+                        BucketName = _bucketName,
+                        Key = existingKey,
+                    };
+                    await _s3Client.DeleteObjectAsync(deleteRequest);
+                }
+            }
+            catch (AmazonS3Exception ex) when (ex.ErrorCode == "NoSuchKey")
+            {
+                // El archivo no existe, continuar
+            }
+        }
+
+        // Leer el archivo completo en memoria como bytes
+        byte[] fileBytes;
+        using (var memoryStream = new MemoryStream())
+        {
+            await file.CopyToAsync(memoryStream);
+            fileBytes = memoryStream.ToArray();
+        }
+
+        try
+        {
+            using var inputStream = new MemoryStream(fileBytes);
+            var putRequest = new PutObjectRequest
+            {
+                BucketName = _bucketName,
+                Key = key,
+                InputStream = inputStream,
+                ContentType = GetContentType(Path.GetExtension(file.FileName).ToLowerInvariant()),
+                CannedACL = S3CannedACL.PublicRead,
+                DisablePayloadSigning = true, // clave para R2: evita streaming-signed payload
+            };
+            // Forzar Content-Length para evitar chunked
+            putRequest.Headers.ContentLength = fileBytes.Length;
+
+            await _s3Client.PutObjectAsync(putRequest);
+
+            // Retornar la URL pública del archivo actualizado
+            return $"{_publicUrl}/{key}";
+        }
+        catch (AmazonS3Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Error al actualizar recibo de pago en Cloudflare R2: {ex.Message}"
+            );
+        }
+    }
+
+    /// <summary>
+    /// Elimina todos los archivos dentro de una carpeta de transacción de pagos
+    /// </summary>
+    /// <param name="transactionId">ID de la transacción</param>
+    /// <returns>True si la carpeta se eliminó, false si no existe o hubo un error</returns>
+    public async Task<bool> DeletePaymentTransactionFolderAsync(string transactionId)
+    {
+        if (string.IsNullOrWhiteSpace(transactionId))
+        {
+            throw new ArgumentException("El ID de la transacción no puede estar vacío");
+        }
+
+        var prefix = $"payments/{transactionId}/";
+
+        try
+        {
+            var listRequest = new ListObjectsV2Request
+            {
+                BucketName = _bucketName,
+                Prefix = prefix,
+                MaxKeys = 1000, // Obtener todos los objetos en la carpeta
+            };
+
+            var response = await _s3Client.ListObjectsV2Async(listRequest);
+
+            var objectsToDelete = response
+                .S3Objects.Select(obj => new KeyVersion { Key = obj.Key })
+                .ToList();
+
+            if (objectsToDelete.Count > 0)
+            {
+                var deleteRequest = new DeleteObjectsRequest
+                {
+                    BucketName = _bucketName,
+                    Objects = objectsToDelete,
+                };
+                await _s3Client.DeleteObjectsAsync(deleteRequest);
+                return true;
+            }
+            return false; // No hay objetos para eliminar
+        }
+        catch (AmazonS3Exception ex)
+        {
+            if (ex.ErrorCode == "NoSuchBucket")
+            {
+                return false; // El bucket no existe
+            }
+            throw new InvalidOperationException(
+                $"Error al eliminar archivos de la carpeta de transacción {transactionId}: {ex.Message}"
+            );
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Error inesperado al eliminar archivos de la carpeta de transacción {transactionId}: {ex.Message}"
             );
         }
     }

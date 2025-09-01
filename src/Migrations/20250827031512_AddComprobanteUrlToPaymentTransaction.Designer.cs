@@ -3,6 +3,7 @@ using System;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestionHogar.Migrations
 {
     [DbContext(typeof(DatabaseContext))]
-    partial class DatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20250827031512_AddComprobanteUrlToPaymentTransaction")]
+    partial class AddComprobanteUrlToPaymentTransaction
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -382,10 +385,15 @@ namespace GestionHogar.Migrations
                     b.Property<bool>("Paid")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("PaymentTransactionId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ReservationId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PaymentTransactionId");
 
                     b.HasIndex("ReservationId");
 
@@ -841,21 +849,6 @@ namespace GestionHogar.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("PaymentTransactionPayments", b =>
-                {
-                    b.Property<Guid>("PaymentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PaymentTransactionId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("PaymentId", "PaymentTransactionId");
-
-                    b.HasIndex("PaymentTransactionId");
-
-                    b.ToTable("PaymentTransactionPayments");
-                });
-
             modelBuilder.Entity("GestionHogar.Model.Block", b =>
                 {
                     b.HasOne("GestionHogar.Model.Project", "Project")
@@ -951,6 +944,10 @@ namespace GestionHogar.Migrations
 
             modelBuilder.Entity("GestionHogar.Model.Payment", b =>
                 {
+                    b.HasOne("GestionHogar.Model.PaymentTransaction", null)
+                        .WithMany("Payments")
+                        .HasForeignKey("PaymentTransactionId");
+
                     b.HasOne("GestionHogar.Model.Reservation", "Reservation")
                         .WithMany("Payments")
                         .HasForeignKey("ReservationId")
@@ -1066,24 +1063,14 @@ namespace GestionHogar.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("PaymentTransactionPayments", b =>
-                {
-                    b.HasOne("GestionHogar.Model.Payment", null)
-                        .WithMany()
-                        .HasForeignKey("PaymentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("GestionHogar.Model.PaymentTransaction", null)
-                        .WithMany()
-                        .HasForeignKey("PaymentTransactionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("GestionHogar.Model.Block", b =>
                 {
                     b.Navigation("Lots");
+                });
+
+            modelBuilder.Entity("GestionHogar.Model.PaymentTransaction", b =>
+                {
+                    b.Navigation("Payments");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.Project", b =>
