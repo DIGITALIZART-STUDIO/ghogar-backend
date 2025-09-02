@@ -271,22 +271,176 @@ public class ReservationService : IReservationService
 
     public async Task<bool> ToggleContractValidationStatusAsync(Guid reservationId)
     {
-        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
-            r.Id == reservationId && r.IsActive
-        );
+        var reservation = await _context.Reservations.FindAsync(reservationId);
         if (reservation == null)
             return false;
 
-        if (reservation.ContractValidationStatus == ContractValidationStatus.PendingValidation)
-            reservation.ContractValidationStatus = ContractValidationStatus.Validated;
-        else if (reservation.ContractValidationStatus == ContractValidationStatus.Validated)
-            reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
-        else
-            reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
+        reservation.ContractValidationStatus =
+            reservation.ContractValidationStatus == ContractValidationStatus.Validated
+                ? ContractValidationStatus.None
+                : ContractValidationStatus.Validated;
 
-        reservation.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<
+        PaginatedResponseV2<ReservationWithPendingPaymentsDto>
+    > GetAllReservationsWithPendingPaymentsPaginatedAsync(int page, int pageSize)
+    {
+        var query = _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .Include(r => r.Quotation.Lot)
+            .Include(r => r.Quotation.Lot.Block)
+            .Include(r => r.Quotation.Lot.Block.Project)
+            .Include(r => r.Payments)
+            .Where(r =>
+                (r.Status == ReservationStatus.ISSUED || r.Status == ReservationStatus.CANCELED)
+                && r.IsActive
+            );
+
+        var totalCount = await query.CountAsync();
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+        var reservations = await query
+            .OrderBy(r => r.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var result = new List<ReservationWithPendingPaymentsDto>();
+
+        foreach (var reservation in reservations)
+        {
+            // Obtener cuotas pendientes para esta reserva
+            var pendingPayments = await GetPendingPaymentsForReservationAsync(reservation.Id);
+
+            // Calcular totales
+            var totalAmountDue = pendingPayments.Sum(p => p.AmountDue);
+            var totalAmountPaid = pendingPayments.Sum(p => p.AmountPaid);
+            var totalRemainingAmount = pendingPayments.Sum(p => p.RemainingAmount);
+            var nextPaymentDueDate = pendingPayments
+                .Where(p => p.RemainingAmount > 0)
+                .OrderBy(p => p.DueDate)
+                .FirstOrDefault()
+                ?.DueDate;
+
+            result.Add(
+                new ReservationWithPendingPaymentsDto
+                {
+                    Id = reservation.Id,
+                    ReservationDate = reservation.ReservationDate.ToDateTime(TimeOnly.MinValue),
+                    AmountPaid = reservation.AmountPaid,
+                    PaymentMethod = reservation.PaymentMethod,
+                    Status = reservation.Status,
+                    Currency = reservation.Currency,
+                    ExchangeRate = reservation.ExchangeRate,
+                    ExpiresAt = reservation.ExpiresAt,
+                    CreatedAt = reservation.CreatedAt,
+                    ModifiedAt = reservation.ModifiedAt,
+
+                    Client = new ClientDto
+                    {
+                        Id = reservation.Client.Id,
+                        Name = reservation.Client.Name ?? string.Empty,
+                        Dni = reservation.Client.Dni ?? string.Empty,
+                        Ruc = reservation.Client.Ruc,
+                        Email = reservation.Client.Email,
+                        PhoneNumber = reservation.Client.PhoneNumber,
+                    },
+
+                    Lot = new LotDto
+                    {
+                        Id = reservation.Quotation.Lot.Id,
+                        LotNumber = reservation.Quotation.Lot.LotNumber,
+                        Area = reservation.Quotation.Lot.Area,
+                        Price = reservation.Quotation.Lot.Price,
+                    },
+
+                    Project = new ProjectDto
+                    {
+                        Id = reservation.Quotation.Lot.Block.Project.Id,
+                        Name = reservation.Quotation.Lot.Block.Project.Name,
+                        Location = reservation.Quotation.Lot.Block.Project.Location,
+                    },
+
+                    Quotation = new QuotationDto
+                    {
+                        Id = reservation.Quotation.Id,
+                        Code = reservation.Quotation.Code,
+                        FinalPrice = reservation.Quotation.FinalPrice,
+                        MonthsFinanced = reservation.Quotation.MonthsFinanced,
+                        QuotaAmount =
+                            reservation.Quotation.FinalPrice / reservation.Quotation.MonthsFinanced,
+                    },
+
+                    PendingPayments = pendingPayments,
+
+                    TotalAmountDue = totalAmountDue,
+                    TotalAmountPaid = totalAmountPaid,
+                    TotalRemainingAmount = totalRemainingAmount,
+                    TotalPendingQuotas = pendingPayments.Count(p => p.RemainingAmount > 0),
+                    NextPaymentDueDate = nextPaymentDueDate,
+                }
+            );
+        }
+
+        return new PaginatedResponseV2<ReservationWithPendingPaymentsDto>
+        {
+            Data = result,
+            Meta = new PaginationMetadata
+            {
+                Page = page,
+                PageSize = pageSize,
+                Total = totalCount,
+                TotalPages = totalPages,
+                HasNext = page < totalPages,
+                HasPrevious = page > 1,
+            },
+        };
+    }
+
+    private async Task<List<PendingPaymentDto>> GetPendingPaymentsForReservationAsync(
+        Guid reservationId
+    )
+    {
+        var payments = await _context
+            .Payments.Where(p => p.ReservationId == reservationId && p.IsActive)
+            .OrderBy(p => p.DueDate)
+            .ToListAsync();
+
+        var paymentIds = payments.Select(p => p.Id).ToList();
+        var paymentDetails = await _context
+            .PaymentTransactionPayments.Where(ptp => paymentIds.Contains(ptp.PaymentId))
+            .ToListAsync();
+
+        var paymentsByPaymentId = paymentDetails
+            .GroupBy(ptp => ptp.PaymentId)
+            .ToDictionary(g => g.Key, g => g.Sum(ptp => ptp.AmountPaid));
+
+        var result = new List<PendingPaymentDto>();
+
+        foreach (var payment in payments)
+        {
+            var totalPaidForThisPayment = paymentsByPaymentId.GetValueOrDefault(payment.Id, 0);
+            var remainingAmount = payment.AmountDue - totalPaidForThisPayment;
+            var isOverdue = payment.DueDate < DateTime.UtcNow && remainingAmount > 0;
+
+            result.Add(
+                new PendingPaymentDto
+                {
+                    Id = payment.Id,
+                    DueDate = payment.DueDate,
+                    AmountDue = payment.AmountDue,
+                    AmountPaid = totalPaidForThisPayment,
+                    RemainingAmount = Math.Max(0, remainingAmount),
+                    IsOverdue = isOverdue,
+                }
+            );
+        }
+
+        return result;
     }
 
     public async Task<ReservationDto?> UpdateReservationAsync(
