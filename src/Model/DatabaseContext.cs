@@ -42,6 +42,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
 
+    public DbSet<PaymentTransactionPayment> PaymentTransactionPayments { get; set; } = null!;
+
     public DbSet<OtpCode> OtpCodes { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -59,13 +61,31 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
             .HasMany(pt => pt.Payments)
             .WithMany()
             .UsingEntity(
-                "PaymentTransactionPayments",
+                "PaymentTransactionPaymentLegacy", // Cambiar nombre para evitar conflicto
                 l => l.HasOne(typeof(Payment)).WithMany().HasForeignKey("PaymentId"),
                 r =>
                     r.HasOne(typeof(PaymentTransaction))
                         .WithMany()
                         .HasForeignKey("PaymentTransactionId")
             );
+
+        // NUEVA: Configuración de la entidad PaymentTransactionPayment
+        builder.Entity<PaymentTransactionPayment>(entity =>
+        {
+            entity.HasKey(ptp => new { ptp.PaymentTransactionId, ptp.PaymentId });
+
+            entity
+                .HasOne(ptp => ptp.PaymentTransaction)
+                .WithMany(pt => pt.PaymentDetails)
+                .HasForeignKey(ptp => ptp.PaymentTransactionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity
+                .HasOne(ptp => ptp.Payment)
+                .WithMany()
+                .HasForeignKey(ptp => ptp.PaymentId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
 
         // Configuración de OtpCode
         builder.Entity<OtpCode>(entity =>
