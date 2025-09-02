@@ -33,4 +33,11 @@ public interface IReservationService
     Task<byte[]> GenerateContractPdfAsync(Guid reservationId);
     Task<byte[]> GenerateContractDocxAsync(Guid reservationId);
     Task<bool> ToggleContractValidationStatusAsync(Guid reservationId);
+
+    /// <summary>
+    /// Obtiene todas las reservas con cuotas pendientes y paginación
+    /// </summary>
+    Task<
+        PaginatedResponseV2<ReservationWithPendingPaymentsDto>
+    > GetAllReservationsWithPendingPaymentsPaginatedAsync(int page, int pageSize);
 }

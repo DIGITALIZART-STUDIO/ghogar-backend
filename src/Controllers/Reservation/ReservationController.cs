@@ -73,6 +73,30 @@ public class ReservationsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("pending-payments/paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<ReservationWithPendingPaymentsDto>>
+    > GetAllReservationsWithPendingPaymentsPaginated(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10
+    )
+    {
+        try
+        {
+            var result =
+                await _reservationService.GetAllReservationsWithPendingPaymentsPaginatedAsync(
+                    page,
+                    pageSize
+                );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            // _logger.LogError(ex, "Error al obtener reservas con cuotas pendientes"); // Assuming _logger is available
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     // GET: api/reservations/{id}
     [HttpGet("{id}")]
     public async Task<ActionResult<ReservationDto>> GetReservation(Guid id)
