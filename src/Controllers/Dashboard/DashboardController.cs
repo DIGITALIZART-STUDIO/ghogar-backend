@@ -11,14 +11,17 @@ public class DashboardController : ControllerBase
 {
     private readonly GetDashboardAdminDataUseCase _getDashboardAdminDataUseCase;
     private readonly GetAdvisorDashboardDataUseCase _getAdvisorDashboardDataUseCase;
+    private readonly GetFinanceManagerDashboardDataUseCase _getFinanceManagerDashboardDataUseCase;
 
     public DashboardController(
         GetDashboardAdminDataUseCase getDashboardAdminDataUseCase,
-        GetAdvisorDashboardDataUseCase getAdvisorDashboardDataUseCase
+        GetAdvisorDashboardDataUseCase getAdvisorDashboardDataUseCase,
+        GetFinanceManagerDashboardDataUseCase getFinanceManagerDashboardDataUseCase
     )
     {
         _getDashboardAdminDataUseCase = getDashboardAdminDataUseCase;
         _getAdvisorDashboardDataUseCase = getAdvisorDashboardDataUseCase;
+        _getFinanceManagerDashboardDataUseCase = getFinanceManagerDashboardDataUseCase;
     }
 
     [HttpGet("admin")]
@@ -43,6 +46,24 @@ public class DashboardController : ControllerBase
         catch (UnauthorizedAccessException)
         {
             return Unauthorized("Usuario no autenticado");
+        }
+    }
+
+    [HttpGet("finance")]
+    [AuthorizeCurrentUser("FinanceManager", "Admin", "SuperAdmin")]
+    public async Task<ActionResult<FinanceManagerDashboardDto>> GetFinanceDashboard(
+        [FromQuery] int? year,
+        [FromQuery] Guid? projectId
+    )
+    {
+        try
+        {
+            var result = await _getFinanceManagerDashboardDataUseCase.ExecuteAsync(year, projectId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
         }
     }
 }

@@ -49,14 +49,16 @@ public class ReservationsController : ControllerBase
     > GetAllCanceledPendingValidationReservationsPaginated(
         [FromServices] PaginationService paginationService,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10
+        [FromQuery] int pageSize = 10,
+        [FromQuery] Guid? projectId = null
     )
     {
         var result =
             await _reservationService.GetAllCanceledPendingValidationReservationsPaginatedAsync(
                 page,
                 pageSize,
-                paginationService
+                paginationService,
+                projectId
             );
         return Ok(result);
     }
@@ -64,11 +66,16 @@ public class ReservationsController : ControllerBase
     [HttpGet("canceled/paginated")]
     public async Task<
         ActionResult<PaginatedResponseV2<ReservationWithPaymentsDto>>
-    > GetAllCanceledReservationsPaginated([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    > GetAllCanceledReservationsPaginated(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] Guid? projectId = null
+    )
     {
         var result = await _reservationService.GetAllCanceledReservationsPaginatedAsync(
             page,
-            pageSize
+            pageSize,
+            projectId
         );
         return Ok(result);
     }
@@ -78,7 +85,8 @@ public class ReservationsController : ControllerBase
         ActionResult<PaginatedResponseV2<ReservationWithPendingPaymentsDto>>
     > GetAllReservationsWithPendingPaymentsPaginated(
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10
+        [FromQuery] int pageSize = 10,
+        [FromQuery] Guid? projectId = null
     )
     {
         try
@@ -86,7 +94,8 @@ public class ReservationsController : ControllerBase
             var result =
                 await _reservationService.GetAllReservationsWithPendingPaymentsPaginatedAsync(
                     page,
-                    pageSize
+                    pageSize,
+                    projectId
                 );
             return Ok(result);
         }
