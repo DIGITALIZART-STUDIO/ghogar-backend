@@ -9,7 +9,8 @@ public interface IReservationService
     Task<IEnumerable<ReservationWithPaymentsDto>> GetAllCanceledReservationsAsync();
     Task<PaginatedResponseV2<ReservationWithPaymentsDto>> GetAllCanceledReservationsPaginatedAsync(
         int page,
-        int pageSize
+        int pageSize,
+        Guid? projectId = null
     );
     Task<ReservationDto?> GetReservationByIdAsync(Guid id);
     Task<Reservation> CreateReservationAsync(ReservationCreateDto reservationDto);
@@ -23,7 +24,8 @@ public interface IReservationService
     > GetAllCanceledPendingValidationReservationsPaginatedAsync(
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        Guid? projectId = null
     );
     Task<ReservationDto?> ChangeStatusAsync(Guid id, string status);
     Task<byte[]> GenerateReservationPdfAsync(Guid reservationId);
@@ -39,5 +41,9 @@ public interface IReservationService
     /// </summary>
     Task<
         PaginatedResponseV2<ReservationWithPendingPaymentsDto>
-    > GetAllReservationsWithPendingPaymentsPaginatedAsync(int page, int pageSize);
+    > GetAllReservationsWithPendingPaymentsPaginatedAsync(
+        int page,
+        int pageSize,
+        Guid? projectId = null
+    );
 }

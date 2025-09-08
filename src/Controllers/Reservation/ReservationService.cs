@@ -65,12 +65,16 @@ public class ReservationService : IReservationService
     > GetAllCanceledPendingValidationReservationsPaginatedAsync(
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        Guid? projectId = null
     )
     {
         var query = _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(l => l.Block)
+            .ThenInclude(b => b.Project)
             .Where(r =>
                 r.IsActive
                 && r.Status == ReservationStatus.CANCELED
@@ -78,30 +82,37 @@ public class ReservationService : IReservationService
                     r.ContractValidationStatus == ContractValidationStatus.PendingValidation
                     || r.ContractValidationStatus == ContractValidationStatus.Validated
                 )
-            )
-            .Select(r => new ReservationDto
-            {
-                Id = r.Id,
-                ClientId = r.ClientId,
-                ClientName = r.Client.DisplayName,
-                QuotationId = r.QuotationId,
-                QuotationCode = r.Quotation.Code,
-                ReservationDate = r.ReservationDate,
-                AmountPaid = r.AmountPaid,
-                Currency = r.Currency,
-                Status = r.Status,
-                ContractValidationStatus = r.ContractValidationStatus,
-                PaymentMethod = r.PaymentMethod,
-                BankName = r.BankName,
-                ExchangeRate = r.ExchangeRate,
-                ExpiresAt = r.ExpiresAt,
-                Notified = r.Notified,
-                Schedule = r.Schedule,
-                CreatedAt = r.CreatedAt,
-                ModifiedAt = r.ModifiedAt,
-            });
+            );
 
-        return await paginationService.PaginateAsync(query, page, pageSize);
+        // Aplicar filtro por proyecto si se proporciona
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.ProjectId == projectId.Value);
+        }
+
+        var projectedQuery = query.Select(r => new ReservationDto
+        {
+            Id = r.Id,
+            ClientId = r.ClientId,
+            ClientName = r.Client.DisplayName,
+            QuotationId = r.QuotationId,
+            QuotationCode = r.Quotation.Code,
+            ReservationDate = r.ReservationDate,
+            AmountPaid = r.AmountPaid,
+            Currency = r.Currency,
+            Status = r.Status,
+            ContractValidationStatus = r.ContractValidationStatus,
+            PaymentMethod = r.PaymentMethod,
+            BankName = r.BankName,
+            ExchangeRate = r.ExchangeRate,
+            ExpiresAt = r.ExpiresAt,
+            Notified = r.Notified,
+            Schedule = r.Schedule,
+            CreatedAt = r.CreatedAt,
+            ModifiedAt = r.ModifiedAt,
+        });
+
+        return await paginationService.PaginateAsync(projectedQuery, page, pageSize);
     }
 
     public async Task<IEnumerable<ReservationWithPaymentsDto>> GetAllCanceledReservationsAsync()
@@ -142,45 +153,55 @@ public class ReservationService : IReservationService
 
     public async Task<
         PaginatedResponseV2<ReservationWithPaymentsDto>
-    > GetAllCanceledReservationsPaginatedAsync(int page, int pageSize)
+    > GetAllCanceledReservationsPaginatedAsync(int page, int pageSize, Guid? projectId = null)
     {
         var query = _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(l => l.Block)
+            .ThenInclude(b => b.Project)
             .Include(r => r.Payments)
             .Where(r =>
                 r.IsActive
                 && r.Status == ReservationStatus.CANCELED
                 && r.ContractValidationStatus == ContractValidationStatus.Validated
-            )
-            .Select(r => new ReservationWithPaymentsDto
-            {
-                Id = r.Id,
-                ClientId = r.ClientId,
-                ClientName = r.Client.DisplayName,
-                QuotationId = r.QuotationId,
-                QuotationCode = r.Quotation.Code,
-                ReservationDate = r.ReservationDate,
-                AmountPaid = r.AmountPaid,
-                Currency = r.Currency,
-                Status = r.Status,
-                PaymentMethod = r.PaymentMethod,
-                BankName = r.BankName,
-                ExchangeRate = r.ExchangeRate,
-                ExpiresAt = r.ExpiresAt,
-                Notified = r.Notified,
-                Schedule = r.Schedule,
-                CreatedAt = r.CreatedAt,
-                ModifiedAt = r.ModifiedAt,
-                PaymentCount = r.Payments.Count(p => p.Paid),
-                NextPaymentDueDate = r
-                    .Payments.Where(p => !p.Paid)
-                    .OrderBy(p => p.DueDate)
-                    .Select(p => (DateTime?)p.DueDate)
-                    .FirstOrDefault(),
-            });
+            );
 
-        return await _paginationService.PaginateAsync(query, page, pageSize);
+        // Aplicar filtro por proyecto si se proporciona
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.ProjectId == projectId.Value);
+        }
+
+        var projectedQuery = query.Select(r => new ReservationWithPaymentsDto
+        {
+            Id = r.Id,
+            ClientId = r.ClientId,
+            ClientName = r.Client.DisplayName,
+            QuotationId = r.QuotationId,
+            QuotationCode = r.Quotation.Code,
+            ReservationDate = r.ReservationDate,
+            AmountPaid = r.AmountPaid,
+            Currency = r.Currency,
+            Status = r.Status,
+            PaymentMethod = r.PaymentMethod,
+            BankName = r.BankName,
+            ExchangeRate = r.ExchangeRate,
+            ExpiresAt = r.ExpiresAt,
+            Notified = r.Notified,
+            Schedule = r.Schedule,
+            CreatedAt = r.CreatedAt,
+            ModifiedAt = r.ModifiedAt,
+            PaymentCount = r.Payments.Count(p => p.Paid),
+            NextPaymentDueDate = r
+                .Payments.Where(p => !p.Paid)
+                .OrderBy(p => p.DueDate)
+                .Select(p => (DateTime?)p.DueDate)
+                .FirstOrDefault(),
+        });
+
+        return await _paginationService.PaginateAsync(projectedQuery, page, pageSize);
     }
 
     public async Task<ReservationDto?> GetReservationByIdAsync(Guid id)
@@ -286,7 +307,11 @@ public class ReservationService : IReservationService
 
     public async Task<
         PaginatedResponseV2<ReservationWithPendingPaymentsDto>
-    > GetAllReservationsWithPendingPaymentsPaginatedAsync(int page, int pageSize)
+    > GetAllReservationsWithPendingPaymentsPaginatedAsync(
+        int page,
+        int pageSize,
+        Guid? projectId = null
+    )
     {
         var query = _context
             .Reservations.Include(r => r.Client)
@@ -299,6 +324,12 @@ public class ReservationService : IReservationService
                 (r.Status == ReservationStatus.ISSUED || r.Status == ReservationStatus.CANCELED)
                 && r.IsActive
             );
+
+        // Aplicar filtro por proyecto si se proporciona
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.ProjectId == projectId.Value);
+        }
 
         var totalCount = await query.CountAsync();
         var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
