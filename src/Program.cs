@@ -213,6 +213,9 @@ builder.Services.AddScoped<ICloudflareService, CloudflareService>();
 // Background services
 builder.Services.AddHostedService<LeadExpirationService>();
 
+// Health checks
+builder.Services.AddHealthChecks().AddCheck<LeadExpirationHealthCheck>("lead-expiration-service");
+
 // Register controllers explicitly to avoid constructor conflicts
 builder.Services.AddScoped<UsersController>();
 builder.Services.AddScoped<AuthController>();

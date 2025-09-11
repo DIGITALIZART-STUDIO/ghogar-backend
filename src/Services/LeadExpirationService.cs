@@ -35,8 +35,9 @@ public class LeadExpirationService : BackgroundService
         _configuration = configuration;
 
         // Configuración del cron schedule
-        var cronSchedule = configuration["LeadExpiration:CronSchedule"] ?? "0 0 */8 * * *";
-        _cronExpression = CronExpression.Parse(cronSchedule);
+        var cronSchedule = configuration["LeadExpiration:CronSchedule"] ?? "0 0 0,8,16 * * *";
+        _logger.LogInformation("🔧 Configurando cron schedule: '{CronSchedule}'", cronSchedule);
+        _cronExpression = CronExpression.Parse(cronSchedule, CronFormat.IncludeSeconds);
 
         // Configuración de backoff
         _maxConsecutiveErrors = configuration.GetValue<int>(
