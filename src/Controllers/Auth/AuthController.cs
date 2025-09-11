@@ -239,9 +239,41 @@ public class AuthController(
     [HttpPost("logout")]
     public ActionResult logout()
     {
+        // Clear authentication cookies with proper options for both local and production
+        var accessCookieOptions = new CookieOptions { HttpOnly = false };
+        var refreshCookieOptions = new CookieOptions { HttpOnly = true };
+
+#if DEBUG
+        accessCookieOptions.SameSite = SameSiteMode.Lax;
+        accessCookieOptions.Secure = false;
+        refreshCookieOptions.SameSite = SameSiteMode.Lax;
+        refreshCookieOptions.Secure = false;
+        // For localhost development, don't set domain to allow cross-port access
+        if (!string.IsNullOrEmpty(_corsConfig.CookieDomain))
+        {
+            accessCookieOptions.Domain = _corsConfig.CookieDomain;
+            refreshCookieOptions.Domain = _corsConfig.CookieDomain;
+        }
+#else
+        accessCookieOptions.SameSite = SameSiteMode.None;
+        accessCookieOptions.Secure = true;
+        refreshCookieOptions.SameSite = SameSiteMode.None;
+        refreshCookieOptions.Secure = true;
+        // In production, set the domain for cross-subdomain access
+        if (!string.IsNullOrEmpty(_corsConfig.CookieDomain))
+        {
+            accessCookieOptions.Domain = _corsConfig.CookieDomain;
+            refreshCookieOptions.Domain = _corsConfig.CookieDomain;
+        }
+#endif
+
+        // Set expiration to past date to effectively delete the cookies
+        accessCookieOptions.Expires = DateTime.UtcNow.AddDays(-1);
+        refreshCookieOptions.Expires = DateTime.UtcNow.AddDays(-1);
+
         // Clear authentication cookies
-        Response.Cookies.Delete(_corsConfig.CookieName);
-        Response.Cookies.Delete($"{_corsConfig.CookieName}_refresh");
+        Response.Cookies.Append(_corsConfig.CookieName, "", accessCookieOptions);
+        Response.Cookies.Append($"{_corsConfig.CookieName}_refresh", "", refreshCookieOptions);
 
         return Ok(new { message = "Logged out successfully" });
     }
