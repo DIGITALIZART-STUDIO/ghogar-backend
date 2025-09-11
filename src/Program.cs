@@ -210,6 +210,9 @@ builder.Services.AddScoped<WordTemplateService>();
 builder.Services.AddScoped<SofficeConverterService>();
 builder.Services.AddScoped<ICloudflareService, CloudflareService>();
 
+// Background services
+builder.Services.AddHostedService<LeadExpirationService>();
+
 // Register controllers explicitly to avoid constructor conflicts
 builder.Services.AddScoped<UsersController>();
 builder.Services.AddScoped<AuthController>();
