@@ -48,6 +48,8 @@ public class LeadService : ILeadService
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy)
             .ToListAsync();
     }
 
@@ -61,7 +63,9 @@ public class LeadService : ILeadService
             .Leads.OrderByDescending(l => l.CreatedAt)
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
-            .Include(l => l.Project);
+            .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy);
 
         return await paginationService.PaginateAsync(query, page, pageSize);
     }
@@ -72,6 +76,8 @@ public class LeadService : ILeadService
             .Leads.Include(l => l.Client)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy)
             .FirstOrDefaultAsync(l => l.Id == id && l.IsActive);
     }
 
@@ -178,6 +184,8 @@ public class LeadService : ILeadService
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy)
             .ToListAsync();
     }
 
@@ -188,6 +196,8 @@ public class LeadService : ILeadService
             .OrderByDescending(l => l.CreatedAt)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy)
             .ToListAsync();
     }
 
@@ -198,6 +208,8 @@ public class LeadService : ILeadService
             .OrderByDescending(l => l.CreatedAt)
             .Include(l => l.Client)
             .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy)
             .ToListAsync();
     }
 
@@ -212,7 +224,9 @@ public class LeadService : ILeadService
             .Leads.Where(l => l.IsActive && l.AssignedToId == userId)
             .OrderByDescending(l => l.CreatedAt)
             .Include(l => l.Client)
-            .Include(l => l.Project);
+            .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy);
 
         return await paginationService.PaginateAsync(query, page, pageSize);
     }
@@ -224,6 +238,8 @@ public class LeadService : ILeadService
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy)
             .ToListAsync();
     }
 
@@ -255,6 +271,8 @@ public class LeadService : ILeadService
             .Leads.Where(l => l.IsActive && l.AssignedToId == assignedToId)
             .Include(l => l.Client)
             .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy)
             .ToListAsync();
 
         return leads.Select(LeadSummaryDto.FromEntity);
@@ -298,6 +316,9 @@ public class LeadService : ILeadService
                     && l.Status != LeadStatus.Completed
                 )
                 .Include(l => l.Client) // Incluir explícitamente el cliente
+                .Include(l => l.Project)
+                .Include(l => l.Referral)
+                .Include(l => l.LastRecycledBy)
                 .ToListAsync();
 
             // Crear un set de clientes que ya tienen leads asignados al usuario
@@ -352,6 +373,9 @@ public class LeadService : ILeadService
                     && l.Status != LeadStatus.Completed
                 )
                 .Include(l => l.Client) // Incluir explícitamente el cliente
+                .Include(l => l.Project)
+                .Include(l => l.Referral)
+                .Include(l => l.LastRecycledBy)
                 .ToListAsync();
 
             var result = new List<LeadSummaryDto>();
@@ -393,6 +417,8 @@ public class LeadService : ILeadService
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
+            .Include(l => l.Referral)
+            .Include(l => l.LastRecycledBy)
             .ToListAsync();
     }
 

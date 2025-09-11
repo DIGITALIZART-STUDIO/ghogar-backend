@@ -46,6 +46,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<OtpCode> OtpCodes { get; set; } = null!;
 
+    public DbSet<Referral> Referrals { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

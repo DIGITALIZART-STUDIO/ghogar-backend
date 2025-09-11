@@ -24,6 +24,18 @@ builder
         options.JsonSerializerOptions.Converters.Add(
             new System.Text.Json.Serialization.JsonStringEnumConverter()
         );
+        options.JsonSerializerOptions.ReferenceHandler = System
+            .Text
+            .Json
+            .Serialization
+            .ReferenceHandler
+            .IgnoreCycles;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = System
+            .Text
+            .Json
+            .Serialization
+            .JsonIgnoreCondition
+            .WhenWritingNull;
     });
 
 // Configure file upload limits
@@ -195,6 +207,7 @@ var modules = new IModule[]
     new ExcelExportModule(),
     new EmailModule(),
     new UserHigherRankModule(),
+    new LandingModule(),
 };
 
 // Register dashboard services
@@ -208,6 +221,12 @@ foreach (var module in modules)
 builder.Services.AddScoped<WordTemplateService>();
 builder.Services.AddScoped<SofficeConverterService>();
 builder.Services.AddScoped<ICloudflareService, CloudflareService>();
+
+// Background services
+builder.Services.AddHostedService<LeadExpirationService>();
+
+// Health checks
+builder.Services.AddHealthChecks().AddCheck<LeadExpirationHealthCheck>("lead-expiration-service");
 
 // Register controllers explicitly to avoid constructor conflicts
 builder.Services.AddScoped<UsersController>();
