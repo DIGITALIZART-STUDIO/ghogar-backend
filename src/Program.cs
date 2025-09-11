@@ -195,6 +195,7 @@ var modules = new IModule[]
     new ExcelExportModule(),
     new EmailModule(),
     new UserHigherRankModule(),
+    new LandingModule(),
 };
 
 // Register dashboard services
