@@ -8,31 +8,33 @@ services:
         condition: service_started
     env_file:
       - .env.backend
+    ports:
+      - 8888:8080
     networks:
       - proxy
       - gestionhogar-network-develop
 
-  gestionhogar-frontend-develop:
-    image: docker.io/araozu/gestionhogar-frontend-develop:latest
-    container_name: gestionhogar-frontend-develop
-    restart: unless-stopped
-    depends_on:
-      gestionhogar-backend-develop:
-        condition: service_started
-    env_file:
-      - .env.frontend
-    networks:
-      - proxy
-      - gestionhogar-network-develop
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.gestionhogar-frontend-develop.rule=Host(`gestionhogar-frontend-develop.araozu.dev`)"
-      - "traefik.http.routers.gestionhogar-frontend-develop.entrypoints=websecure"
-      - "traefik.http.routers.gestionhogar-frontend-develop.tls=true"
-      - "traefik.http.routers.gestionhogar-frontend-develop.tls.certresolver=dns-cloudflare"
-      - "traefik.http.routers.gestionhogar-frontend-develop.tls.domains[0].main=araozu.dev"
-      - "traefik.http.routers.gestionhogar-frontend-develop.tls.domains[0].sans=*.araozu.dev"
-      - "traefik.http.services.gestionhogar-frontend-develop.loadbalancer.server.port=3000"
+  # gestionhogar-frontend-develop:
+  #   image: docker.io/araozu/gestionhogar-frontend-develop:latest
+  #   container_name: gestionhogar-frontend-develop
+  #   restart: unless-stopped
+  #   depends_on:
+  #     gestionhogar-backend-develop:
+  #       condition: service_started
+  #   env_file:
+  #     - .env.frontend
+  #   networks:
+  #     - proxy
+  #     - gestionhogar-network-develop
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.rule=Host(`gestionhogar-frontend-develop.araozu.dev`)"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.entrypoints=websecure"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.tls=true"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.tls.certresolver=dns-cloudflare"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.tls.domains[0].main=araozu.dev"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.tls.domains[0].sans=*.araozu.dev"
+  #     - "traefik.http.services.gestionhogar-frontend-develop.loadbalancer.server.port=3000"
 
   gestionhogar-db-develop:
     image: postgres:latest
@@ -51,7 +53,6 @@ services:
 
 networks:
   proxy:
-    external: true
   gestionhogar-network-develop:
     driver: bridge
 

@@ -284,6 +284,7 @@ app.UseAuthorization();
 app.UseSecurityStampValidator();
 app.UseAuthenticationMiddleware();
 app.MapControllers();
+app.MapHealthChecks("/api/healthz");
 
 // Libraries startup
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
