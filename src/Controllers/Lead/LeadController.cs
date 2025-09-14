@@ -329,6 +329,45 @@ public class LeadsController : ControllerBase
         return Ok(usersSummary);
     }
 
+    [HttpGet("users/summary/paginated")]
+    public async Task<ActionResult<PaginatedResponseV2<UserSummaryDto>>> GetUsersSummaryPaginated(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] string? orderBy = null,
+        [FromQuery] string? orderDirection = "asc",
+        [FromQuery] string? preselectedId = null
+    )
+    {
+        try
+        {
+            // Validar parámetros
+            if (page < 1)
+                page = 1;
+            if (pageSize < 1 || pageSize > 100)
+                pageSize = 10;
+
+            var result = await _leadService.GetUsersSummaryPaginatedAsync(
+                page,
+                pageSize,
+                search,
+                orderBy,
+                orderDirection,
+                preselectedId
+            );
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener usuarios con paginación");
+            return StatusCode(
+                500,
+                new { message = "Error interno del servidor", error = ex.Message }
+            );
+        }
+    }
+
     [HttpGet("assigned/{assignedToId:guid}/summary")]
     public async Task<ActionResult<IEnumerable<LeadSummaryDto>>> GetAssignedLeadsSummary(
         Guid assignedToId

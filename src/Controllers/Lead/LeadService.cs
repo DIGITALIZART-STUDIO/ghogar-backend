@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
@@ -245,20 +246,168 @@ public class LeadService : ILeadService
 
     public async Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync()
     {
-        var salesAdvisorRoleId = await _context
-            .Roles.Where(r => r.Name == "SalesAdvisor")
-            .Select(r => r.Id)
-            .FirstOrDefaultAsync();
-
         return await _context
-            .Users.Where(u =>
-                u.IsActive
-                && _context.UserRoles.Any(ur =>
-                    ur.UserId == u.Id && ur.RoleId == salesAdvisorRoleId
-                )
-            )
-            .Select(u => new UserSummaryDto { Id = u.Id, UserName = u.Name })
+            .Users.Where(u => u.IsActive)
+            .Select(u => new UserSummaryDto
+            {
+                Id = u.Id,
+                UserName = u.Name,
+                Email = u.Email,
+                Roles = (
+                    from userRole in _context.UserRoles
+                    join role in _context.Roles on userRole.RoleId equals role.Id
+                    where userRole.UserId == u.Id
+                    select role.Name
+                ).ToList(),
+            })
             .ToListAsync();
+    }
+
+    public async Task<PaginatedResponseV2<UserSummaryDto>> GetUsersSummaryPaginatedAsync(
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
+    )
+    {
+        // Diccionario para traducción de roles de español a inglés
+        var roleTranslation = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Super Administrador", "SuperAdmin" },
+            { "Administrador", "Admin" },
+            { "Supervisor", "Supervisor" },
+            { "Asesor de Ventas", "SalesAdvisor" },
+            { "Gerente", "Manager" },
+            { "Gerente de Finanzas", "FinanceManager" },
+        };
+
+        var query = _context
+            .Users.Where(u => u.IsActive)
+            .Select(u => new UserSummaryDto
+            {
+                Id = u.Id,
+                UserName = u.Name,
+                Email = u.Email,
+                Roles = (
+                    from userRole in _context.UserRoles
+                    join role in _context.Roles on userRole.RoleId equals role.Id
+                    where userRole.UserId == u.Id
+                    select role.Name
+                ).ToList(),
+            });
+
+        // Lógica para preselectedId - incluir en la query base
+        Guid? preselectedGuid = null;
+        if (
+            !string.IsNullOrWhiteSpace(preselectedId)
+            && Guid.TryParse(preselectedId, out var parsedGuid)
+        )
+        {
+            preselectedGuid = parsedGuid;
+            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+            if (page == 1)
+            {
+                // Verificar que el usuario preseleccionado existe
+                var preselectedUser = await _context.Users.FirstOrDefaultAsync(u =>
+                    u.Id == preselectedGuid && u.IsActive
+                );
+
+                if (preselectedUser != null)
+                {
+                    // Modificar la query para que el usuario preseleccionado aparezca primero
+                    query = query.OrderBy(u => u.Id == preselectedGuid ? 0 : 1);
+                }
+            }
+        }
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+
+            // Función para encontrar traducciones inteligentes
+            var translatedTerms = GetIntelligentRoleTranslations(searchTerm, roleTranslation);
+
+            // Aplicar filtros de búsqueda
+            query = query.Where(u =>
+                (u.UserName != null && u.UserName.ToLower().Contains(searchTerm))
+                || (u.Email != null && u.Email.ToLower().Contains(searchTerm))
+                || u.Roles.Any(role => role.ToLower().Contains(searchTerm))
+                || u.Roles.Any(role => translatedTerms.Any(term => role.ToLower().Contains(term)))
+            );
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var isDescending = orderDirection?.ToLower() == "desc";
+
+            // Si hay preselectedId en la primera página, mantenerlo primero
+            if (preselectedGuid.HasValue && page == 1)
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "name" => isDescending
+                        ? query
+                            .OrderBy(u => u.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(u => u.UserName)
+                        : query
+                            .OrderBy(u => u.Id == preselectedGuid ? 0 : 1)
+                            .ThenBy(u => u.UserName),
+                    "email" => isDescending
+                        ? query
+                            .OrderBy(u => u.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(u => u.Email)
+                        : query.OrderBy(u => u.Id == preselectedGuid ? 0 : 1).ThenBy(u => u.Email),
+                    "roles" => isDescending
+                        ? query
+                            .OrderBy(u => u.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(u => u.Roles.FirstOrDefault())
+                        : query
+                            .OrderBy(u => u.Id == preselectedGuid ? 0 : 1)
+                            .ThenBy(u => u.Roles.FirstOrDefault()),
+                    _ => query
+                        .OrderBy(u => u.Id == preselectedGuid ? 0 : 1)
+                        .ThenBy(u => u.UserName),
+                };
+            }
+            else
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "name" => isDescending
+                        ? query.OrderByDescending(u => u.UserName)
+                        : query.OrderBy(u => u.UserName),
+                    "email" => isDescending
+                        ? query.OrderByDescending(u => u.Email)
+                        : query.OrderBy(u => u.Email),
+                    "roles" => isDescending
+                        ? query.OrderByDescending(u => u.Roles.FirstOrDefault())
+                        : query.OrderBy(u => u.Roles.FirstOrDefault()),
+                    _ => query.OrderBy(u => u.UserName), // Ordenamiento por defecto
+                };
+            }
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            if (preselectedGuid.HasValue && page == 1)
+            {
+                query = query.OrderBy(u => u.Id == preselectedGuid ? 0 : 1).ThenBy(u => u.UserName);
+            }
+            else
+            {
+                query = query.OrderBy(u => u.UserName);
+            }
+        }
+
+        // Ejecutar paginación
+        var totalCount = await query.CountAsync();
+        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+        return PaginatedResponseV2<UserSummaryDto>.Create(items, totalCount, page, pageSize);
     }
 
     /**
@@ -553,5 +702,116 @@ public class LeadService : ILeadService
             true,
             complexIndexes
         );
+    }
+
+    /// <summary>
+    /// Función inteligente para encontrar traducciones de roles automáticamente
+    /// Detecta coincidencias parciales y exactas sin necesidad de agregar cada variación manualmente
+    /// </summary>
+    private static List<string> GetIntelligentRoleTranslations(
+        string searchTerm,
+        Dictionary<string, string> roleTranslation
+    )
+    {
+        var translatedTerms = new List<string> { searchTerm };
+
+        // 1. Traducciones exactas
+        if (roleTranslation.ContainsKey(searchTerm))
+        {
+            translatedTerms.Add(roleTranslation[searchTerm].ToLower());
+            return translatedTerms; // Si hay coincidencia exacta, solo devolver esa
+        }
+
+        // 2. Buscar coincidencias específicas en roles en español
+        foreach (var kvp in roleTranslation)
+        {
+            var spanishRole = kvp.Key.ToLower();
+            var englishRole = kvp.Value.ToLower();
+
+            // Si el término de búsqueda está contenido en el rol en español
+            if (spanishRole.Contains(searchTerm))
+            {
+                translatedTerms.Add(englishRole);
+                return translatedTerms; // Si encontramos una coincidencia específica, solo devolver esa
+            }
+        }
+
+        // 3. Solo si no hay coincidencias específicas, usar detección de patrones
+        AddPatternBasedTranslations(searchTerm, translatedTerms);
+
+        return translatedTerms.Distinct().ToList();
+    }
+
+    /// <summary>
+    /// Detecta coincidencias inteligentes basadas en patrones comunes
+    /// </summary>
+    private static bool IsIntelligentMatch(
+        string searchTerm,
+        string spanishRole,
+        string englishRole
+    )
+    {
+        // Patrones comunes de abreviaciones y variaciones
+        var patterns = new Dictionary<string, string[]>
+        {
+            { "ases", new[] { "asesor", "salesadvisor" } },
+            { "admin", new[] { "administrador", "admin" } },
+            { "super", new[] { "supervisor", "supervisor", "superadmin" } },
+            { "ger", new[] { "gerente", "manager" } },
+            { "fin", new[] { "finanzas", "finance" } },
+            { "vent", new[] { "ventas", "sales" } },
+        };
+
+        foreach (var pattern in patterns)
+        {
+            if (searchTerm.Contains(pattern.Key))
+            {
+                if (
+                    pattern.Value.Any(term =>
+                        spanishRole.Contains(term) || englishRole.Contains(term)
+                    )
+                )
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Agrega traducciones basadas en patrones comunes
+    /// </summary>
+    private static void AddPatternBasedTranslations(string searchTerm, List<string> translatedTerms)
+    {
+        // Patrones de búsqueda inteligente
+        if (searchTerm.Contains("ases") || searchTerm.Contains("vent"))
+        {
+            translatedTerms.Add("salesadvisor");
+        }
+
+        if (searchTerm.Contains("admin"))
+        {
+            translatedTerms.Add("admin");
+            translatedTerms.Add("superadmin");
+        }
+
+        if (searchTerm.Contains("super"))
+        {
+            translatedTerms.Add("supervisor");
+            translatedTerms.Add("superadmin");
+        }
+
+        if (searchTerm.Contains("ger"))
+        {
+            translatedTerms.Add("manager");
+            translatedTerms.Add("financemanager");
+        }
+
+        if (searchTerm.Contains("fin"))
+        {
+            translatedTerms.Add("financemanager");
+        }
     }
 }
