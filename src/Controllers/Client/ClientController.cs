@@ -23,21 +23,23 @@ public class ClientsController : ControllerBase
 {
     private readonly IClientService _clientService;
     private readonly ILeadService _leadService;
-
     private readonly DatabaseContext _context;
     private readonly IExcelExportService _excelExportService;
+    private readonly OptimizedPaginationService _paginationService;
 
     public ClientsController(
         IClientService clientService,
         ILeadService leadService,
         DatabaseContext context,
-        IExcelExportService excelExportService
+        IExcelExportService excelExportService,
+        OptimizedPaginationService paginationService
     )
     {
         _clientService = clientService;
         _leadService = leadService;
         _context = context;
         _excelExportService = excelExportService;
+        _paginationService = paginationService;
     }
 
     // GET: api/clients
@@ -307,6 +309,206 @@ public class ClientsController : ControllerBase
         return Ok(clientsSummary);
     }
 
+    // GET: api/clients/paginated-search
+    [HttpGet("paginated-search")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<GestionHogar.Model.Client>>
+    > GetClientsPaginated(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] string? orderBy = null,
+        [FromQuery] string? orderDirection = "asc",
+        [FromQuery] string? preselectedId = null
+    )
+    {
+        try
+        {
+            // Validar parámetros
+            if (page < 1)
+                page = 1;
+            if (pageSize < 1 || pageSize > 100)
+                pageSize = 10;
+
+            // Construir consulta base
+            var query = _context.Clients.AsQueryable();
+
+            // Lógica para preselectedId - incluir en la query base
+            Guid? preselectedGuid = null;
+            if (
+                !string.IsNullOrWhiteSpace(preselectedId)
+                && Guid.TryParse(preselectedId, out var parsedGuid)
+            )
+            {
+                preselectedGuid = parsedGuid;
+                // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+                if (page == 1)
+                {
+                    // Verificar que el cliente preseleccionado existe
+                    var preselectedClient = await _context.Clients.FirstOrDefaultAsync(c =>
+                        c.Id == preselectedGuid
+                    );
+
+                    if (preselectedClient != null)
+                    {
+                        // Modificar la query para que el cliente preseleccionado aparezca primero
+                        query = query.OrderBy(c => c.Id == preselectedGuid ? 0 : 1);
+                    }
+                }
+            }
+
+            // Aplicar filtro de búsqueda si se proporciona
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var searchTerm = search.ToLower();
+                query = query.Where(c =>
+                    (c.Name != null && c.Name.ToLower().Contains(searchTerm))
+                    || (c.Email != null && c.Email.ToLower().Contains(searchTerm))
+                    || (c.PhoneNumber != null && c.PhoneNumber.Contains(searchTerm))
+                    || (c.Dni != null && c.Dni.Contains(searchTerm))
+                    || (c.Ruc != null && c.Ruc.Contains(searchTerm))
+                    || (c.CompanyName != null && c.CompanyName.ToLower().Contains(searchTerm))
+                );
+            }
+
+            // Aplicar ordenamiento
+            if (!string.IsNullOrWhiteSpace(orderBy))
+            {
+                var isDescending = orderDirection?.ToLower() == "desc";
+
+                // Si hay preselectedId en la primera página, mantenerlo primero
+                if (preselectedGuid.HasValue && page == 1)
+                {
+                    query = orderBy.ToLower() switch
+                    {
+                        "name" => isDescending
+                            ? query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenByDescending(c => c.Name)
+                            : query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenBy(c => c.Name),
+                        "email" => isDescending
+                            ? query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenByDescending(c => c.Email)
+                            : query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenBy(c => c.Email),
+                        "phonenumber" => isDescending
+                            ? query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenByDescending(c => c.PhoneNumber)
+                            : query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenBy(c => c.PhoneNumber),
+                        "dni" => isDescending
+                            ? query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenByDescending(c => c.Dni)
+                            : query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenBy(c => c.Dni),
+                        "ruc" => isDescending
+                            ? query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenByDescending(c => c.Ruc)
+                            : query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenBy(c => c.Ruc),
+                        "companyname" => isDescending
+                            ? query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenByDescending(c => c.CompanyName)
+                            : query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenBy(c => c.CompanyName),
+                        "createdat" => isDescending
+                            ? query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenByDescending(c => c.CreatedAt)
+                            : query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenBy(c => c.CreatedAt),
+                        "modifiedat" => isDescending
+                            ? query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenByDescending(c => c.ModifiedAt)
+                            : query
+                                .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                                .ThenBy(c => c.ModifiedAt),
+                        _ => query
+                            .OrderBy(c => c.Id == preselectedGuid ? 0 : 1)
+                            .ThenBy(c => c.Name),
+                    };
+                }
+                else
+                {
+                    query = orderBy.ToLower() switch
+                    {
+                        "name" => isDescending
+                            ? query.OrderByDescending(c => c.Name)
+                            : query.OrderBy(c => c.Name),
+                        "email" => isDescending
+                            ? query.OrderByDescending(c => c.Email)
+                            : query.OrderBy(c => c.Email),
+                        "phonenumber" => isDescending
+                            ? query.OrderByDescending(c => c.PhoneNumber)
+                            : query.OrderBy(c => c.PhoneNumber),
+                        "dni" => isDescending
+                            ? query.OrderByDescending(c => c.Dni)
+                            : query.OrderBy(c => c.Dni),
+                        "ruc" => isDescending
+                            ? query.OrderByDescending(c => c.Ruc)
+                            : query.OrderBy(c => c.Ruc),
+                        "companyname" => isDescending
+                            ? query.OrderByDescending(c => c.CompanyName)
+                            : query.OrderBy(c => c.CompanyName),
+                        "createdat" => isDescending
+                            ? query.OrderByDescending(c => c.CreatedAt)
+                            : query.OrderBy(c => c.CreatedAt),
+                        "modifiedat" => isDescending
+                            ? query.OrderByDescending(c => c.ModifiedAt)
+                            : query.OrderBy(c => c.ModifiedAt),
+                        _ => query.OrderBy(c => c.Name), // Ordenamiento por defecto
+                    };
+                }
+            }
+            else
+            {
+                // Ordenamiento por defecto
+                if (preselectedGuid.HasValue && page == 1)
+                {
+                    query = query.OrderBy(c => c.Id == preselectedGuid ? 0 : 1).ThenBy(c => c.Name);
+                }
+                else
+                {
+                    query = query.OrderBy(c => c.Name);
+                }
+            }
+
+            // Ejecutar paginación optimizada
+            var result = await _paginationService.GetAllPaginatedAsync(
+                query,
+                page,
+                pageSize,
+                orderBy,
+                null, // filters
+                new List<string> { "Referrals" }, // includes
+                HttpContext.RequestAborted
+            );
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(
+                500,
+                new { message = "Error interno del servidor", error = ex.Message }
+            );
+        }
+    }
+
     [HttpGet("excel")]
     public async Task<IActionResult> DownloadClientsExcel()
     {
@@ -346,7 +548,6 @@ public class ClientsController : ControllerBase
                 ParseJsonObject(c.SeparatePropertyData ?? string.Empty) ?? string.Empty, // Datos complejos - índice 11
             })
             .ToList();
-
 
         // Especifica qué columnas contienen datos complejos - NO necesario para expansión vertical
         var complexDataColumnIndexes = new List<int>(); // Lista vacía porque usaremos expansión vertical
