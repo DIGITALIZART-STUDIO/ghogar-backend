@@ -129,14 +129,20 @@ public class UserHigherRankService : IUserHigherRankService
     public async Task<PaginatedResponseV2<UserHigherRankDTO>> GetUsersWithHigherRankPaginatedAsync(
         Guid currentUserId,
         int page = 1,
-        int pageSize = 10
+        int pageSize = 10,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
     )
     {
         _logger.LogInformation(
-            "Obteniendo usuarios con mayor rango paginados, excluyendo usuario: {CurrentUserId}, página: {Page}, tamaño: {PageSize}",
+            "Obteniendo usuarios con mayor rango paginados, excluyendo usuario: {CurrentUserId}, página: {Page}, tamaño: {PageSize}, búsqueda: {Search}, preselectedId: {PreselectedId}",
             currentUserId,
             page,
-            pageSize
+            pageSize,
+            search ?? "sin filtro",
+            preselectedId ?? "sin preselección"
         );
 
         var query = _db
@@ -151,40 +157,164 @@ public class UserHigherRankService : IUserHigherRankService
                     select role.Name
                 ).ToList(),
             })
-            .Where(u => u.Roles.Any() && !u.Roles.Contains("SaleAdvisor"))
-            .OrderByDescending(x => x.Roles.Contains("SUPERADMIN"))
-            .ThenByDescending(x => x.Roles.Contains("Admin"))
-            .ThenByDescending(x => x.User.CreatedAt)
-            .Select(u => new UserHigherRankDTO
+            .Where(u => u.Roles.Any() && !u.Roles.Contains("SaleAdvisor"));
+
+        // Lógica para preselectedId - incluir en la query base
+        Guid? preselectedGuid = null;
+        if (
+            !string.IsNullOrWhiteSpace(preselectedId)
+            && Guid.TryParse(preselectedId, out var parsedGuid)
+        )
+        {
+            preselectedGuid = parsedGuid;
+            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+            if (page == 1)
             {
-                Id = u.User.Id,
-                Name = u.User.Name ?? string.Empty,
-                Email = u.User.Email ?? string.Empty,
-                PhoneNumber = u.User.PhoneNumber ?? string.Empty,
-                IsActive = u.User.IsActive,
-                CreatedAt = u.User.CreatedAt,
-                Roles = u.Roles,
-            });
+                // Verificar que el usuario preseleccionado existe y cumple los criterios
+                var preselectedUser = await _db
+                    .Users.Where(u =>
+                        u.Id == preselectedGuid && u.Id != currentUserId && u.IsActive
+                    )
+                    .Select(user => new
+                    {
+                        User = user,
+                        Roles = (
+                            from userRole in _db.UserRoles
+                            join role in _db.Roles on userRole.RoleId equals role.Id
+                            where userRole.UserId == user.Id
+                            select role.Name
+                        ).ToList(),
+                    })
+                    .Where(u => u.Roles.Any() && !u.Roles.Contains("SaleAdvisor"))
+                    .FirstOrDefaultAsync();
 
-        var totalCount = await query.CountAsync();
-        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+                if (preselectedUser != null)
+                {
+                    // Modificar la query para que el usuario preseleccionado aparezca primero
+                    query = query.OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1);
+                }
+            }
+        }
 
-        var users = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(u =>
+                (u.User.Name != null && u.User.Name.ToLower().Contains(searchTerm))
+                || (u.User.Email != null && u.User.Email.ToLower().Contains(searchTerm))
+                || u.Roles.Any(role => role.ToLower().Contains(searchTerm))
+            );
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var isDescending = orderDirection?.ToLower() == "desc";
+
+            // Si hay preselectedId en la primera página, mantenerlo primero
+            if (preselectedGuid.HasValue && page == 1)
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "name" => isDescending
+                        ? query
+                            .OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(u => u.User.Name)
+                        : query
+                            .OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1)
+                            .ThenBy(u => u.User.Name),
+                    "email" => isDescending
+                        ? query
+                            .OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(u => u.User.Email)
+                        : query
+                            .OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1)
+                            .ThenBy(u => u.User.Email),
+                    "createdat" => isDescending
+                        ? query
+                            .OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(u => u.User.CreatedAt)
+                        : query
+                            .OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1)
+                            .ThenBy(u => u.User.CreatedAt),
+                    _ => query
+                        .OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1)
+                        .ThenByDescending(u => u.Roles.Contains("SUPERADMIN"))
+                        .ThenByDescending(u => u.Roles.Contains("Admin"))
+                        .ThenByDescending(u => u.User.CreatedAt),
+                };
+            }
+            else
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "name" => isDescending
+                        ? query.OrderByDescending(u => u.User.Name)
+                        : query.OrderBy(u => u.User.Name),
+                    "email" => isDescending
+                        ? query.OrderByDescending(u => u.User.Email)
+                        : query.OrderBy(u => u.User.Email),
+                    "createdat" => isDescending
+                        ? query.OrderByDescending(u => u.User.CreatedAt)
+                        : query.OrderBy(u => u.User.CreatedAt),
+                    _ => query
+                        .OrderByDescending(u => u.Roles.Contains("SUPERADMIN"))
+                        .ThenByDescending(u => u.Roles.Contains("Admin"))
+                        .ThenByDescending(u => u.User.CreatedAt),
+                };
+            }
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            if (preselectedGuid.HasValue && page == 1)
+            {
+                query = query
+                    .OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1)
+                    .ThenByDescending(u => u.Roles.Contains("SUPERADMIN"))
+                    .ThenByDescending(u => u.Roles.Contains("Admin"))
+                    .ThenByDescending(u => u.User.CreatedAt);
+            }
+            else
+            {
+                query = query
+                    .OrderByDescending(u => u.Roles.Contains("SUPERADMIN"))
+                    .ThenByDescending(u => u.Roles.Contains("Admin"))
+                    .ThenByDescending(u => u.User.CreatedAt);
+            }
+        }
+
+        // Convertir a DTO
+        var dtoQuery = query.Select(u => new UserHigherRankDTO
+        {
+            Id = u.User.Id,
+            Name = u.User.Name ?? string.Empty,
+            Email = u.User.Email ?? string.Empty,
+            PhoneNumber = u.User.PhoneNumber ?? string.Empty,
+            IsActive = u.User.IsActive,
+            CreatedAt = u.User.CreatedAt,
+            Roles = u.Roles,
+        });
+
+        // Ejecutar paginación
+        var totalCount = await dtoQuery.CountAsync();
+        var users = await dtoQuery.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
 
         var metadata = new PaginationMetadata
         {
             Page = page,
             PageSize = pageSize,
             Total = totalCount,
-            TotalPages = totalPages,
+            TotalPages = (int)Math.Ceiling((double)totalCount / pageSize),
             HasPrevious = page > 1,
-            HasNext = page < totalPages,
+            HasNext = page < (int)Math.Ceiling((double)totalCount / pageSize),
         };
 
         _logger.LogInformation(
             "Paginación completada: {TotalCount} usuarios, {TotalPages} páginas, página actual: {CurrentPage}",
             totalCount,
-            totalPages,
+            metadata.TotalPages,
             page
         );
 
