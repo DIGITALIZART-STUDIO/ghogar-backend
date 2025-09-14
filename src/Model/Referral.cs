@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace GestionHogar.Model;
 
@@ -19,6 +20,7 @@ public class Referral : IEntity
     public Guid ReferredLeadId { get; set; }
 
     [ForeignKey("ReferredLeadId")]
+    [JsonIgnore]
     public Lead ReferredLead { get; set; } = null!;
 
     // Proyecto de interés del referido (opcional, puede venir del formulario)
