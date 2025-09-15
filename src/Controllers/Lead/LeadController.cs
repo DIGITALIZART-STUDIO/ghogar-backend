@@ -435,7 +435,6 @@ public class LeadsController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? orderBy = null,
         [FromQuery] string? orderDirection = "asc",
-        [FromQuery] Guid? excludeQuotationId = null,
         [FromQuery] string? preselectedId = null
     )
     {
@@ -456,13 +455,12 @@ public class LeadsController : ControllerBase
             var currentUserRoles = User.GetCurrentUserRoles().ToList();
 
             _logger.LogInformation(
-                "Obteniendo leads disponibles para cotización paginados para usuario: {UserId} con roles: {Roles}, página: {Page}, tamaño: {PageSize}, búsqueda: {Search}, excludeQuotationId: {ExcludeQuotationId}, preselectedId: {PreselectedId}",
+                "Obteniendo leads disponibles para cotización paginados para usuario: {UserId} con roles: {Roles}, página: {Page}, tamaño: {PageSize}, búsqueda: {Search}, preselectedId: {PreselectedId}",
                 currentUserId,
                 string.Join(", ", currentUserRoles),
                 page,
                 pageSize,
                 search ?? "null",
-                excludeQuotationId?.ToString() ?? "null",
                 preselectedId ?? "null"
             );
 
@@ -475,7 +473,6 @@ public class LeadsController : ControllerBase
                 search,
                 orderBy,
                 orderDirection,
-                excludeQuotationId,
                 preselectedId
             );
 

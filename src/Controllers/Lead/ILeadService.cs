@@ -40,7 +40,6 @@ public interface ILeadService
         string? search = null,
         string? orderBy = null,
         string? orderDirection = "asc",
-        Guid? excludeQuotationId = null,
         string? preselectedId = null
     );
     Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();

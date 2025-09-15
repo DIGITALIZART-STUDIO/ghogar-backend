@@ -53,6 +53,125 @@ public class BlockService : IBlockService
         return blocks.Select(BlockDTO.FromEntity);
     }
 
+    public async Task<PaginatedResponseV2<BlockDTO>> GetActiveBlocksByProjectIdPaginatedAsync(
+        Guid projectId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
+    )
+    {
+        var query = _context
+            .Blocks.Include(b => b.Project)
+            .Include(b => b.Lots)
+            .Where(b => b.ProjectId == projectId && b.IsActive);
+
+        // Lógica para preselectedId - incluir en la query base
+        Guid? preselectedGuid = null;
+        if (
+            !string.IsNullOrWhiteSpace(preselectedId)
+            && Guid.TryParse(preselectedId, out var parsedGuid)
+        )
+        {
+            preselectedGuid = parsedGuid;
+            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+            if (page == 1)
+            {
+                // Verificar que el bloque preseleccionado existe
+                var preselectedBlock = await _context
+                    .Blocks.Include(b => b.Project)
+                    .Include(b => b.Lots)
+                    .FirstOrDefaultAsync(b =>
+                        b.Id == preselectedGuid && b.ProjectId == projectId && b.IsActive
+                    );
+
+                if (preselectedBlock != null)
+                {
+                    // Modificar la query para que el bloque preseleccionado aparezca primero
+                    query = query.OrderBy(b => b.Id == preselectedGuid ? 0 : 1);
+                }
+            }
+        }
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(b => (b.Name != null && b.Name.ToLower().Contains(searchTerm)));
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var isDescending = orderDirection?.ToLower() == "desc";
+
+            // Si hay preselectedId en la primera página, mantenerlo primero
+            if (preselectedGuid.HasValue && page == 1)
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "name" => isDescending
+                        ? query
+                            .OrderBy(b => b.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(b => b.Name)
+                        : query.OrderBy(b => b.Id == preselectedGuid ? 0 : 1).ThenBy(b => b.Name),
+                    "description" => isDescending
+                        ? query
+                            .OrderBy(b => b.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(b => b.Name)
+                        : query.OrderBy(b => b.Id == preselectedGuid ? 0 : 1).ThenBy(b => b.Name),
+                    "createdat" => isDescending
+                        ? query
+                            .OrderBy(b => b.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(b => b.CreatedAt)
+                        : query
+                            .OrderBy(b => b.Id == preselectedGuid ? 0 : 1)
+                            .ThenBy(b => b.CreatedAt),
+                    _ => query.OrderBy(b => b.Id == preselectedGuid ? 0 : 1).ThenBy(b => b.Name),
+                };
+            }
+            else
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "name" => isDescending
+                        ? query.OrderByDescending(b => b.Name)
+                        : query.OrderBy(b => b.Name),
+                    "description" => isDescending
+                        ? query.OrderByDescending(b => b.Name)
+                        : query.OrderBy(b => b.Name),
+                    "createdat" => isDescending
+                        ? query.OrderByDescending(b => b.CreatedAt)
+                        : query.OrderBy(b => b.CreatedAt),
+                    _ => query.OrderBy(b => b.Name), // Ordenamiento por defecto
+                };
+            }
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            if (preselectedGuid.HasValue && page == 1)
+            {
+                query = query.OrderBy(b => b.Id == preselectedGuid ? 0 : 1).ThenBy(b => b.Name);
+            }
+            else
+            {
+                query = query.OrderBy(b => b.Name);
+            }
+        }
+
+        // Ejecutar paginación
+        var totalCount = await query.CountAsync();
+        var blocks = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+        // Convertir a DTOs usando el método FromEntity existente
+        var items = blocks.Select(BlockDTO.FromEntity).ToList();
+
+        return PaginatedResponseV2<BlockDTO>.Create(items, totalCount, page, pageSize);
+    }
+
     public async Task<BlockDTO?> GetBlockByIdAsync(Guid id)
     {
         var block = await _context

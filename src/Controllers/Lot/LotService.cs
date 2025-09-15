@@ -42,6 +42,152 @@ public class LotService : ILotService
         return lots.Select(LotDTO.FromEntity);
     }
 
+    public async Task<PaginatedResponseV2<LotDTO>> GetLotsByBlockIdPaginatedAsync(
+        Guid blockId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
+    )
+    {
+        var query = _context
+            .Lots.Include(l => l.Block)
+            .ThenInclude(b => b.Project)
+            .Where(l => l.BlockId == blockId);
+
+        // Lógica para preselectedId - incluir en la query base
+        Guid? preselectedGuid = null;
+        if (
+            !string.IsNullOrWhiteSpace(preselectedId)
+            && Guid.TryParse(preselectedId, out var parsedGuid)
+        )
+        {
+            preselectedGuid = parsedGuid;
+            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+            if (page == 1)
+            {
+                // Verificar que el lote preseleccionado existe
+                var preselectedLot = await _context
+                    .Lots.Include(l => l.Block)
+                    .ThenInclude(b => b.Project)
+                    .FirstOrDefaultAsync(l => l.Id == preselectedGuid && l.BlockId == blockId);
+
+                if (preselectedLot != null)
+                {
+                    // Modificar la query para que el lote preseleccionado aparezca primero
+                    query = query.OrderBy(l => l.Id == preselectedGuid ? 0 : 1);
+                }
+            }
+        }
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(l =>
+                (l.LotNumber != null && l.LotNumber.ToLower().Contains(searchTerm))
+                || (
+                    l.Block != null
+                    && l.Block.Name != null
+                    && l.Block.Name.ToLower().Contains(searchTerm)
+                )
+            );
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var isDescending = orderDirection?.ToLower() == "desc";
+
+            // Si hay preselectedId en la primera página, mantenerlo primero
+            if (preselectedGuid.HasValue && page == 1)
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "lotnumber" => isDescending
+                        ? query
+                            .OrderBy(l => l.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(l => l.LotNumber)
+                        : query
+                            .OrderBy(l => l.Id == preselectedGuid ? 0 : 1)
+                            .ThenBy(l => l.LotNumber),
+                    "area" => isDescending
+                        ? query
+                            .OrderBy(l => l.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(l => l.Area)
+                        : query.OrderBy(l => l.Id == preselectedGuid ? 0 : 1).ThenBy(l => l.Area),
+                    "price" => isDescending
+                        ? query
+                            .OrderBy(l => l.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(l => l.Price)
+                        : query.OrderBy(l => l.Id == preselectedGuid ? 0 : 1).ThenBy(l => l.Price),
+                    "status" => isDescending
+                        ? query
+                            .OrderBy(l => l.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(l => l.Status)
+                        : query.OrderBy(l => l.Id == preselectedGuid ? 0 : 1).ThenBy(l => l.Status),
+                    "createdat" => isDescending
+                        ? query
+                            .OrderBy(l => l.Id == preselectedGuid ? 0 : 1)
+                            .ThenByDescending(l => l.CreatedAt)
+                        : query
+                            .OrderBy(l => l.Id == preselectedGuid ? 0 : 1)
+                            .ThenBy(l => l.CreatedAt),
+                    _ => query
+                        .OrderBy(l => l.Id == preselectedGuid ? 0 : 1)
+                        .ThenBy(l => l.LotNumber),
+                };
+            }
+            else
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "lotnumber" => isDescending
+                        ? query.OrderByDescending(l => l.LotNumber)
+                        : query.OrderBy(l => l.LotNumber),
+                    "area" => isDescending
+                        ? query.OrderByDescending(l => l.Area)
+                        : query.OrderBy(l => l.Area),
+                    "price" => isDescending
+                        ? query.OrderByDescending(l => l.Price)
+                        : query.OrderBy(l => l.Price),
+                    "status" => isDescending
+                        ? query.OrderByDescending(l => l.Status)
+                        : query.OrderBy(l => l.Status),
+                    "createdat" => isDescending
+                        ? query.OrderByDescending(l => l.CreatedAt)
+                        : query.OrderBy(l => l.CreatedAt),
+                    _ => query.OrderBy(l => l.LotNumber), // Ordenamiento por defecto
+                };
+            }
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            if (preselectedGuid.HasValue && page == 1)
+            {
+                query = query
+                    .OrderBy(l => l.Id == preselectedGuid ? 0 : 1)
+                    .ThenBy(l => l.LotNumber);
+            }
+            else
+            {
+                query = query.OrderBy(l => l.LotNumber);
+            }
+        }
+
+        // Ejecutar paginación
+        var totalCount = await query.CountAsync();
+        var lots = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+        // Convertir a DTOs usando el método FromEntity existente
+        var items = lots.Select(LotDTO.FromEntity).ToList();
+
+        return PaginatedResponseV2<LotDTO>.Create(items, totalCount, page, pageSize);
+    }
+
     public async Task<IEnumerable<LotDTO>> GetLotsByProjectIdAsync(Guid projectId)
     {
         var lots = await _context

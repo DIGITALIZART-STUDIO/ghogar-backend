@@ -10,6 +10,15 @@ public interface ILotService
 {
     Task<IEnumerable<LotDTO>> GetAllLotsAsync();
     Task<IEnumerable<LotDTO>> GetLotsByBlockIdAsync(Guid blockId);
+    Task<PaginatedResponseV2<LotDTO>> GetLotsByBlockIdPaginatedAsync(
+        Guid blockId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
+    );
     Task<IEnumerable<LotDTO>> GetLotsByProjectIdAsync(Guid projectId);
     Task<IEnumerable<LotDTO>> GetLotsByStatusAsync(LotStatus status);
     Task<IEnumerable<LotDTO>> GetAvailableLotsAsync();
