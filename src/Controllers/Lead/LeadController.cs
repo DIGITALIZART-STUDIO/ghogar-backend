@@ -426,6 +426,72 @@ public class LeadsController : ControllerBase
         }
     }
 
+    [HttpGet("available-for-quotation/paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<LeadSummaryDto>>
+    > GetAvailableLeadsForQuotationPaginated(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] string? orderBy = null,
+        [FromQuery] string? orderDirection = "asc",
+        [FromQuery] Guid? excludeQuotationId = null,
+        [FromQuery] string? preselectedId = null
+    )
+    {
+        try
+        {
+            // Validar parámetros
+            if (page < 1)
+            {
+                return BadRequest("La página debe ser mayor a 0");
+            }
+            if (pageSize < 1 || pageSize > 100)
+            {
+                return BadRequest("El tamaño de página debe estar entre 1 y 100");
+            }
+
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            _logger.LogInformation(
+                "Obteniendo leads disponibles para cotización paginados para usuario: {UserId} con roles: {Roles}, página: {Page}, tamaño: {PageSize}, búsqueda: {Search}, excludeQuotationId: {ExcludeQuotationId}, preselectedId: {PreselectedId}",
+                currentUserId,
+                string.Join(", ", currentUserRoles),
+                page,
+                pageSize,
+                search ?? "null",
+                excludeQuotationId?.ToString() ?? "null",
+                preselectedId ?? "null"
+            );
+
+            // Obtener leads paginados
+            var result = await _leadService.GetAvailableLeadsForQuotationPaginatedAsync(
+                currentUserId,
+                currentUserRoles,
+                page,
+                pageSize,
+                search,
+                orderBy,
+                orderDirection,
+                excludeQuotationId,
+                preselectedId
+            );
+
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener leads disponibles para cotización paginados");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     [HttpGet("export")]
     public async Task<IActionResult> ExportLeadsToExcel(
         [FromServices] IExcelExportService excelExportService

@@ -32,6 +32,17 @@ public interface ILeadService
         Guid? excludeQuotationId = null,
         IList<string>? currentUserRoles = null
     );
+    Task<PaginatedResponseV2<LeadSummaryDto>> GetAvailableLeadsForQuotationPaginatedAsync(
+        Guid currentUserId,
+        IList<string> currentUserRoles,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        Guid? excludeQuotationId = null,
+        string? preselectedId = null
+    );
     Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync();
     Task<PaginatedResponseV2<UserSummaryDto>> GetUsersSummaryPaginatedAsync(
         int page,
