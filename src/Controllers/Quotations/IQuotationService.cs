@@ -16,7 +16,15 @@ public interface IQuotationService
         int pageSize,
         PaginationService paginationService
     );
-    Task<IEnumerable<QuotationSummaryDTO>> GetAcceptedQuotationsByAdvisorIdAsync(Guid advisorId);
+    Task<PaginatedResponseV2<QuotationSummaryDTO>> GetAcceptedQuotationsByAdvisorPaginatedAsync(
+        Guid currentUserId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
+    );
     Task<QuotationDTO> CreateQuotationAsync(
         QuotationCreateDTO dto,
         Guid currentUserId,

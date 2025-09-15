@@ -134,15 +134,31 @@ public class QuotationsController : ControllerBase
         }
     }
 
-    [HttpGet("advisor/accepted/{advisorId:guid}")]
+    [HttpGet("advisor/accepted")]
     public async Task<
-        ActionResult<IEnumerable<QuotationSummaryDTO>>
-    > GetAcceptedQuotationsByAdvisor(Guid advisorId)
+        ActionResult<PaginatedResponseV2<QuotationSummaryDTO>>
+    > GetAcceptedQuotationsByAdvisor(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] string? orderBy = null,
+        [FromQuery] string? orderDirection = "asc",
+        [FromQuery] string? preselectedId = null
+    )
     {
         try
         {
-            var quotations = await _quotationService.GetAcceptedQuotationsByAdvisorIdAsync(
-                advisorId
+            // Obtener el usuario actual
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
+            var quotations = await _quotationService.GetAcceptedQuotationsByAdvisorPaginatedAsync(
+                currentUserId,
+                page,
+                pageSize,
+                search,
+                orderBy,
+                orderDirection,
+                preselectedId
             );
             return Ok(quotations);
         }
