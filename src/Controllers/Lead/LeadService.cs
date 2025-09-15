@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,20 @@ public class LeadService : ILeadService
         }
 
         return $"{yearPrefix}{sequence:D5}";
+    }
+
+    public string GenerateClientCodeFromId(Guid clientId)
+    {
+        // Formato: CLI-XXXXX donde XXXXX es un número derivado del UUID del cliente
+        // Usar los últimos 8 caracteres del UUID para crear un código único y consistente
+        var uuidString = clientId.ToString("N"); // Sin guiones
+        var last8Chars = uuidString.Substring(uuidString.Length - 8);
+
+        // Convertir a número para hacer el código más legible
+        var numericValue = Convert.ToInt64(last8Chars, 16);
+        var shortCode = (numericValue % 99999).ToString("D5"); // Máximo 5 dígitos
+
+        return $"CLI-{shortCode}";
     }
 
     public async Task<IEnumerable<Lead>> GetAllLeadsAsync()
@@ -245,20 +260,172 @@ public class LeadService : ILeadService
 
     public async Task<IEnumerable<UserSummaryDto>> GetUsersSummaryAsync()
     {
-        var salesAdvisorRoleId = await _context
-            .Roles.Where(r => r.Name == "SalesAdvisor")
-            .Select(r => r.Id)
-            .FirstOrDefaultAsync();
-
         return await _context
-            .Users.Where(u =>
-                u.IsActive
-                && _context.UserRoles.Any(ur =>
-                    ur.UserId == u.Id && ur.RoleId == salesAdvisorRoleId
-                )
-            )
-            .Select(u => new UserSummaryDto { Id = u.Id, UserName = u.Name })
+            .Users.Where(u => u.IsActive)
+            .Select(u => new UserSummaryDto
+            {
+                Id = u.Id,
+                UserName = u.Name,
+                Email = u.Email,
+                Roles = (
+                    from userRole in _context.UserRoles
+                    join role in _context.Roles on userRole.RoleId equals role.Id
+                    where userRole.UserId == u.Id
+                    select role.Name
+                ).ToList(),
+            })
             .ToListAsync();
+    }
+
+    public async Task<PaginatedResponseV2<UserSummaryDto>> GetUsersSummaryPaginatedAsync(
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
+    )
+    {
+        // Diccionario para traducción de roles de español a inglés
+        var roleTranslation = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Super Administrador", "SuperAdmin" },
+            { "Administrador", "Admin" },
+            { "Supervisor", "Supervisor" },
+            { "Asesor de Ventas", "SalesAdvisor" },
+            { "Gerente", "Manager" },
+            { "Gerente de Finanzas", "FinanceManager" },
+        };
+
+        var query = _context
+            .Users.Where(u => u.IsActive)
+            .Select(u => new UserSummaryDto
+            {
+                Id = u.Id,
+                UserName = u.Name,
+                Email = u.Email,
+                Roles = (
+                    from userRole in _context.UserRoles
+                    join role in _context.Roles on userRole.RoleId equals role.Id
+                    where userRole.UserId == u.Id
+                    select role.Name
+                ).ToList(),
+            });
+
+        // Lógica para preselectedId - incluir en la query base
+        Guid? preselectedLeadGuid = null;
+        if (
+            !string.IsNullOrWhiteSpace(preselectedId)
+            && Guid.TryParse(preselectedId, out var parsedGuid)
+        )
+        {
+            preselectedLeadGuid = parsedGuid;
+            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+            if (page == 1)
+            {
+                // Verificar que el usuario preseleccionado existe
+                var preselectedUser = await _context.Users.FirstOrDefaultAsync(u =>
+                    u.Id == preselectedLeadGuid && u.IsActive
+                );
+
+                if (preselectedUser != null)
+                {
+                    // Modificar la query para que el usuario preseleccionado aparezca primero
+                    query = query.OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1);
+                }
+            }
+        }
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+
+            // Función para encontrar traducciones inteligentes
+            var translatedTerms = GetIntelligentRoleTranslations(searchTerm, roleTranslation);
+
+            // Aplicar filtros de búsqueda
+            query = query.Where(u =>
+                (u.UserName != null && u.UserName.ToLower().Contains(searchTerm))
+                || (u.Email != null && u.Email.ToLower().Contains(searchTerm))
+                || u.Roles.Any(role => role.ToLower().Contains(searchTerm))
+                || u.Roles.Any(role => translatedTerms.Any(term => role.ToLower().Contains(term)))
+            );
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var isDescending = orderDirection?.ToLower() == "desc";
+
+            // Si hay preselectedId en la primera página, mantenerlo primero
+            if (preselectedLeadGuid.HasValue && page == 1)
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "name" => isDescending
+                        ? query
+                            .OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenByDescending(u => u.UserName)
+                        : query
+                            .OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenBy(u => u.UserName),
+                    "email" => isDescending
+                        ? query
+                            .OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenByDescending(u => u.Email)
+                        : query
+                            .OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenBy(u => u.Email),
+                    "roles" => isDescending
+                        ? query
+                            .OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenByDescending(u => u.Roles.FirstOrDefault())
+                        : query
+                            .OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenBy(u => u.Roles.FirstOrDefault()),
+                    _ => query
+                        .OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1)
+                        .ThenBy(u => u.UserName),
+                };
+            }
+            else
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "name" => isDescending
+                        ? query.OrderByDescending(u => u.UserName)
+                        : query.OrderBy(u => u.UserName),
+                    "email" => isDescending
+                        ? query.OrderByDescending(u => u.Email)
+                        : query.OrderBy(u => u.Email),
+                    "roles" => isDescending
+                        ? query.OrderByDescending(u => u.Roles.FirstOrDefault())
+                        : query.OrderBy(u => u.Roles.FirstOrDefault()),
+                    _ => query.OrderBy(u => u.UserName), // Ordenamiento por defecto
+                };
+            }
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            if (preselectedLeadGuid.HasValue && page == 1)
+            {
+                query = query
+                    .OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1)
+                    .ThenBy(u => u.UserName);
+            }
+            else
+            {
+                query = query.OrderBy(u => u.UserName);
+            }
+        }
+
+        // Ejecutar paginación
+        var totalCount = await query.CountAsync();
+        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+        return PaginatedResponseV2<UserSummaryDto>.Create(items, totalCount, page, pageSize);
     }
 
     /**
@@ -301,12 +468,33 @@ public class LeadService : ILeadService
                 )
             ) ?? false;
 
+        // Obtener leads que ya tienen cotizaciones activas (para excluirlos)
+        var leadsWithActiveQuotations = await _context
+            .Quotations.Where(q => q.Status != QuotationStatus.CANCELED)
+            .Select(q => q.LeadId)
+            .ToListAsync();
+
+        // Si se proporciona excludeQuotationId, excluir también ese lead específico
+        if (excludeQuotationId.HasValue)
+        {
+            var excludedLeadId = await _context
+                .Quotations.Where(q => q.Id == excludeQuotationId.Value)
+                .Select(q => q.LeadId)
+                .FirstOrDefaultAsync();
+
+            if (excludedLeadId != Guid.Empty)
+            {
+                leadsWithActiveQuotations.Remove(excludedLeadId);
+            }
+        }
+
         if (hasHigherRole)
         {
             // Para roles mayores a SalesAdvisor: mostrar leads asignados + clientes sin leads
             var allClients = await _context.Clients.Where(c => c.IsActive).ToListAsync();
 
             // Obtener todos los leads del usuario actual con sus clientes incluidos
+            // EXCLUIR leads que ya tienen cotizaciones activas
             var userLeads = await _context
                 .Leads.Where(l =>
                     l.AssignedToId == currentUserId
@@ -314,6 +502,7 @@ public class LeadService : ILeadService
                     && l.Status != LeadStatus.Canceled
                     && l.Status != LeadStatus.Expired
                     && l.Status != LeadStatus.Completed
+                    && !leadsWithActiveQuotations.Contains(l.Id) // Excluir leads con cotizaciones activas
                 )
                 .Include(l => l.Client) // Incluir explícitamente el cliente
                 .Include(l => l.Project)
@@ -341,13 +530,14 @@ public class LeadService : ILeadService
                     var virtualLead = new LeadSummaryDto
                     {
                         Id = client.Id, // ID temporal para el lead virtual
-                        Code = $"CLI-{client.Id}", // Código especial para identificar que es un cliente
+                        Code = GenerateClientCodeFromId(client.Id), // Código único y consistente basado en el UUID del cliente
                         Client = new ClientSummaryDto
                         {
                             Id = client.Id,
                             Name = client.Name ?? string.Empty,
                             Dni = client.Dni,
                             Ruc = client.Ruc,
+                            PhoneNumber = client.PhoneNumber,
                         },
                         Status = LeadStatus.Registered, // Estado por defecto
                         ExpirationDate = DateTime.UtcNow.AddDays(7), // Fecha de expiración por defecto
@@ -364,6 +554,7 @@ public class LeadService : ILeadService
         else
         {
             // Para SalesAdvisor: mostrar solo sus leads asignados
+            // EXCLUIR leads que ya tienen cotizaciones activas
             var userLeads = await _context
                 .Leads.Where(l =>
                     l.AssignedToId == currentUserId
@@ -371,6 +562,7 @@ public class LeadService : ILeadService
                     && l.Status != LeadStatus.Canceled
                     && l.Status != LeadStatus.Expired
                     && l.Status != LeadStatus.Completed
+                    && !leadsWithActiveQuotations.Contains(l.Id) // Excluir leads con cotizaciones activas
                 )
                 .Include(l => l.Client) // Incluir explícitamente el cliente
                 .Include(l => l.Project)
@@ -388,6 +580,338 @@ public class LeadService : ILeadService
 
             return result;
         }
+    }
+
+    public async Task<
+        PaginatedResponseV2<LeadSummaryDto>
+    > GetAvailableLeadsForQuotationPaginatedAsync(
+        Guid currentUserId,
+        IList<string> currentUserRoles,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
+    )
+    {
+        _logger.LogInformation(
+            "Obteniendo leads disponibles para cotización paginados para usuario: {UserId} con roles: {Roles}, página: {Page}, tamaño: {PageSize}, búsqueda: {Search}, preselectedId: {PreselectedId}",
+            currentUserId,
+            string.Join(", ", currentUserRoles),
+            page,
+            pageSize,
+            search ?? "null",
+            preselectedId ?? "null"
+        );
+
+        // Lógica para preselectedId - incluir en la query base
+        Guid? preselectedLeadGuid = null;
+        Guid? excludeQuotationId = null;
+
+        if (!string.IsNullOrWhiteSpace(preselectedId))
+        {
+            if (Guid.TryParse(preselectedId, out var parsedGuid))
+            {
+                // Verificar si es un ID de cotización
+                var quotationExists = await _context.Quotations.AnyAsync(q => q.Id == parsedGuid);
+
+                if (quotationExists)
+                {
+                    // Es un ID de cotización - obtener el lead asociado
+                    var leadId = await _context
+                        .Quotations.Where(q => q.Id == parsedGuid)
+                        .Select(q => q.LeadId)
+                        .FirstOrDefaultAsync();
+
+                    if (leadId != Guid.Empty)
+                    {
+                        preselectedLeadGuid = leadId;
+                        excludeQuotationId = parsedGuid;
+                    }
+                }
+                else
+                {
+                    // Es un ID de lead directamente
+                    preselectedLeadGuid = parsedGuid;
+                }
+            }
+        }
+
+        // Verificar si el usuario tiene roles mayores a SalesAdvisor
+        var hasHigherRole = currentUserRoles.Any(role =>
+            role != "SalesAdvisor"
+            && (
+                role == "SuperAdmin"
+                || role == "Admin"
+                || role == "Supervisor"
+                || role == "Manager"
+                || role == "FinanceManager"
+            )
+        );
+
+        // Obtener leads que ya tienen cotizaciones activas (para excluirlos)
+        var leadsWithActiveQuotations = await _context
+            .Quotations.Where(q => q.Status != QuotationStatus.CANCELED)
+            .Select(q => q.LeadId)
+            .ToListAsync();
+
+        // Si se proporciona excludeQuotationId, excluir también ese lead específico
+        if (excludeQuotationId.HasValue)
+        {
+            var excludedLeadId = await _context
+                .Quotations.Where(q => q.Id == excludeQuotationId.Value)
+                .Select(q => q.LeadId)
+                .FirstOrDefaultAsync();
+
+            if (excludedLeadId != Guid.Empty)
+            {
+                leadsWithActiveQuotations.Remove(excludedLeadId);
+            }
+        }
+
+        // Construir la query base directamente (como en GetUsersSummaryPaginatedAsync)
+        IQueryable<LeadSummaryDto> query;
+
+        if (hasHigherRole)
+        {
+            // Para roles mayores a SalesAdvisor: mostrar leads asignados + clientes sin leads
+            var allClients = await _context.Clients.Where(c => c.IsActive).ToListAsync();
+
+            // Obtener todos los leads del usuario actual
+            var userLeads = await _context
+                .Leads.Where(l =>
+                    l.AssignedToId == currentUserId
+                    && l.IsActive
+                    && l.Status != LeadStatus.Canceled
+                    && l.Status != LeadStatus.Expired
+                    && l.Status != LeadStatus.Completed
+                    && (
+                        !leadsWithActiveQuotations.Contains(l.Id)
+                        || (preselectedLeadGuid.HasValue && l.Id == preselectedLeadGuid.Value)
+                    )
+                )
+                .Include(l => l.Client)
+                .Include(l => l.Project)
+                .Include(l => l.Referral)
+                .Include(l => l.LastRecycledBy)
+                .ToListAsync();
+
+            // Crear un set de clientes que ya tienen leads asignados al usuario
+            var clientsWithUserLeads = userLeads.Select(l => l.ClientId).ToHashSet();
+
+            var result = new List<LeadSummaryDto>();
+
+            // Agregar los leads reales del usuario
+            foreach (var lead in userLeads)
+            {
+                result.Add(LeadSummaryDto.FromEntity(lead));
+            }
+
+            // Agregar clientes que NO tienen leads asignados al usuario actual
+            foreach (var client in allClients)
+            {
+                if (!clientsWithUserLeads.Contains(client.Id))
+                {
+                    // Crear un LeadSummaryDto virtual para este cliente
+                    var virtualLead = new LeadSummaryDto
+                    {
+                        Id = client.Id,
+                        Code = GenerateClientCodeFromId(client.Id),
+                        Client = new ClientSummaryDto
+                        {
+                            Id = client.Id,
+                            Name = client.Name ?? string.Empty,
+                            Dni = client.Dni,
+                            Ruc = client.Ruc,
+                            PhoneNumber = client.PhoneNumber,
+                        },
+                        Status = LeadStatus.Registered,
+                        ExpirationDate = DateTime.UtcNow.AddDays(7),
+                        ProjectName = null,
+                        RecycleCount = 0,
+                    };
+
+                    result.Add(virtualLead);
+                }
+            }
+
+            query = result.AsQueryable();
+        }
+        else
+        {
+            // Para SalesAdvisor: mostrar solo sus leads asignados
+            var userLeads = await _context
+                .Leads.Where(l =>
+                    l.AssignedToId == currentUserId
+                    && l.IsActive
+                    && l.Status != LeadStatus.Canceled
+                    && l.Status != LeadStatus.Expired
+                    && l.Status != LeadStatus.Completed
+                    && (
+                        !leadsWithActiveQuotations.Contains(l.Id)
+                        || (preselectedLeadGuid.HasValue && l.Id == preselectedLeadGuid.Value)
+                    )
+                )
+                .Include(l => l.Client)
+                .Include(l => l.Project)
+                .Include(l => l.Referral)
+                .Include(l => l.LastRecycledBy)
+                .ToListAsync();
+
+            var result = new List<LeadSummaryDto>();
+
+            // Agregar solo los leads reales del usuario
+            foreach (var lead in userLeads)
+            {
+                result.Add(LeadSummaryDto.FromEntity(lead));
+            }
+
+            query = result.AsQueryable();
+        }
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            query = query.Where(l =>
+                (l.Code != null && l.Code.ToLower().Contains(searchLower))
+                || (
+                    l.Client != null
+                    && l.Client.Name != null
+                    && l.Client.Name.ToLower().Contains(searchLower)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.Dni != null
+                    && l.Client.Dni.ToLower().Contains(searchLower)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.Ruc != null
+                    && l.Client.Ruc.ToLower().Contains(searchLower)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.PhoneNumber != null
+                    && l.Client.PhoneNumber.ToLower().Contains(searchLower)
+                )
+                || (l.ProjectName != null && l.ProjectName.ToLower().Contains(searchLower))
+            );
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var isDescending = orderDirection?.ToLower() == "desc";
+
+            // Si hay preselectedId en la primera página, mantenerlo primero
+            if (preselectedLeadGuid.HasValue && page == 1)
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "code" => isDescending
+                        ? query
+                            .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenByDescending(l => l.Code)
+                        : query
+                            .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenBy(l => l.Code),
+                    "clientname" => isDescending
+                        ? query
+                            .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenByDescending(l => l.Client != null ? l.Client.Name : "")
+                        : query
+                            .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenBy(l => l.Client != null ? l.Client.Name : ""),
+                    "status" => isDescending
+                        ? query
+                            .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenByDescending(l => l.Status)
+                        : query
+                            .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenBy(l => l.Status),
+                    "expirationdate" => isDescending
+                        ? query
+                            .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenByDescending(l => l.ExpirationDate)
+                        : query
+                            .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                            .ThenBy(l => l.ExpirationDate),
+                    _ => query
+                        .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                        .ThenByDescending(l => l.ExpirationDate),
+                };
+            }
+            else
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "code" => isDescending
+                        ? query.OrderByDescending(l => l.Code)
+                        : query.OrderBy(l => l.Code),
+                    "clientname" => isDescending
+                        ? query.OrderByDescending(l => l.Client != null ? l.Client.Name : "")
+                        : query.OrderBy(l => l.Client != null ? l.Client.Name : ""),
+                    "status" => isDescending
+                        ? query.OrderByDescending(l => l.Status)
+                        : query.OrderBy(l => l.Status),
+                    "expirationdate" => isDescending
+                        ? query.OrderByDescending(l => l.ExpirationDate)
+                        : query.OrderBy(l => l.ExpirationDate),
+                    _ => query.OrderByDescending(l => l.ExpirationDate), // Ordenamiento por defecto
+                };
+            }
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            if (preselectedLeadGuid.HasValue && page == 1)
+            {
+                query = query
+                    .OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1)
+                    .ThenByDescending(l => l.ExpirationDate);
+            }
+            else
+            {
+                query = query.OrderByDescending(l => l.ExpirationDate);
+            }
+        }
+
+        // Aplicar lógica de desplazamiento del preselectedId (como en GetUsersSummaryPaginatedAsync)
+        if (preselectedLeadGuid.HasValue && page == 1)
+        {
+            // Verificar que el lead preseleccionado existe en los resultados
+            var preselectedLead = query.FirstOrDefault(l => l.Id == preselectedLeadGuid);
+            if (preselectedLead != null)
+            {
+                // Reordenar para que el lead preseleccionado aparezca primero
+                query = query.OrderBy(l => l.Id == preselectedLeadGuid ? 0 : 1);
+            }
+        }
+
+        // Aplicar paginación
+        var totalCount = query.Count();
+        var leads = query.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        // Si hay preselectedId y NO estamos en la primera página, remover el lead preseleccionado
+        if (preselectedLeadGuid.HasValue && page > 1)
+        {
+            leads = leads.Where(l => l.Id != preselectedLeadGuid.Value).ToList();
+        }
+
+        // Crear metadatos de paginación
+        var paginationMetadata = new PaginationMetadata
+        {
+            Page = page,
+            PageSize = pageSize,
+            Total = totalCount,
+            TotalPages = (int)Math.Ceiling((double)totalCount / pageSize),
+            HasPrevious = page > 1,
+            HasNext = page < (int)Math.Ceiling((double)totalCount / pageSize),
+        };
+
+        return new PaginatedResponseV2<LeadSummaryDto> { Data = leads, Meta = paginationMetadata };
     }
 
     // Nuevos métodos para manejar reciclaje y expiración
@@ -553,5 +1077,116 @@ public class LeadService : ILeadService
             true,
             complexIndexes
         );
+    }
+
+    /// <summary>
+    /// Función inteligente para encontrar traducciones de roles automáticamente
+    /// Detecta coincidencias parciales y exactas sin necesidad de agregar cada variación manualmente
+    /// </summary>
+    private static List<string> GetIntelligentRoleTranslations(
+        string searchTerm,
+        Dictionary<string, string> roleTranslation
+    )
+    {
+        var translatedTerms = new List<string> { searchTerm };
+
+        // 1. Traducciones exactas
+        if (roleTranslation.ContainsKey(searchTerm))
+        {
+            translatedTerms.Add(roleTranslation[searchTerm].ToLower());
+            return translatedTerms; // Si hay coincidencia exacta, solo devolver esa
+        }
+
+        // 2. Buscar coincidencias específicas en roles en español
+        foreach (var kvp in roleTranslation)
+        {
+            var spanishRole = kvp.Key.ToLower();
+            var englishRole = kvp.Value.ToLower();
+
+            // Si el término de búsqueda está contenido en el rol en español
+            if (spanishRole.Contains(searchTerm))
+            {
+                translatedTerms.Add(englishRole);
+                return translatedTerms; // Si encontramos una coincidencia específica, solo devolver esa
+            }
+        }
+
+        // 3. Solo si no hay coincidencias específicas, usar detección de patrones
+        AddPatternBasedTranslations(searchTerm, translatedTerms);
+
+        return translatedTerms.Distinct().ToList();
+    }
+
+    /// <summary>
+    /// Detecta coincidencias inteligentes basadas en patrones comunes
+    /// </summary>
+    private static bool IsIntelligentMatch(
+        string searchTerm,
+        string spanishRole,
+        string englishRole
+    )
+    {
+        // Patrones comunes de abreviaciones y variaciones
+        var patterns = new Dictionary<string, string[]>
+        {
+            { "ases", new[] { "asesor", "salesadvisor" } },
+            { "admin", new[] { "administrador", "admin" } },
+            { "super", new[] { "supervisor", "supervisor", "superadmin" } },
+            { "ger", new[] { "gerente", "manager" } },
+            { "fin", new[] { "finanzas", "finance" } },
+            { "vent", new[] { "ventas", "sales" } },
+        };
+
+        foreach (var pattern in patterns)
+        {
+            if (searchTerm.Contains(pattern.Key))
+            {
+                if (
+                    pattern.Value.Any(term =>
+                        spanishRole.Contains(term) || englishRole.Contains(term)
+                    )
+                )
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Agrega traducciones basadas en patrones comunes
+    /// </summary>
+    private static void AddPatternBasedTranslations(string searchTerm, List<string> translatedTerms)
+    {
+        // Patrones de búsqueda inteligente
+        if (searchTerm.Contains("ases") || searchTerm.Contains("vent"))
+        {
+            translatedTerms.Add("salesadvisor");
+        }
+
+        if (searchTerm.Contains("admin"))
+        {
+            translatedTerms.Add("admin");
+            translatedTerms.Add("superadmin");
+        }
+
+        if (searchTerm.Contains("super"))
+        {
+            translatedTerms.Add("supervisor");
+            translatedTerms.Add("superadmin");
+        }
+
+        if (searchTerm.Contains("ger"))
+        {
+            translatedTerms.Add("manager");
+            translatedTerms.Add("financemanager");
+        }
+
+        if (searchTerm.Contains("fin"))
+        {
+            translatedTerms.Add("financemanager");
+        }
     }
 }

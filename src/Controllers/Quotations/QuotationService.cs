@@ -122,23 +122,260 @@ public class QuotationService(
         return await paginationService.PaginateAsync(query, page, pageSize);
     }
 
-    public async Task<IEnumerable<QuotationSummaryDTO>> GetAcceptedQuotationsByAdvisorIdAsync(
-        Guid advisorId
+    public async Task<
+        PaginatedResponseV2<QuotationSummaryDTO>
+    > GetAcceptedQuotationsByAdvisorPaginatedAsync(
+        Guid currentUserId,
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
     )
     {
-        var quotations = await _context
+        // Lógica para preselectedId - incluir en la query base
+        Guid? preselectedQuotationGuid = null;
+        if (
+            !string.IsNullOrWhiteSpace(preselectedId)
+            && Guid.TryParse(preselectedId, out var parsedGuid)
+        )
+        {
+            preselectedQuotationGuid = parsedGuid;
+        }
+
+        // Construir la query base
+        var query = _context
             .Quotations.Include(q => q.Lead)
             .ThenInclude(l => l!.Client)
-            .Include(q => q.Lot) // **NUEVO: Incluir el lote**
+            .Include(q => q.Lot)
             .ThenInclude(l => l!.Block)
             .ThenInclude(b => b.Project)
-            .Where(q => q.AdvisorId == advisorId && q.Status == QuotationStatus.ACCEPTED)
-            // **NUEVO: Excluir cotizaciones que ya tienen reservas activas**
-            .Where(q => !_context.Reservations.Any(r => r.QuotationId == q.Id && r.IsActive))
-            .OrderByDescending(q => q.CreatedAt)
-            .ToListAsync();
+            .Where(q => q.Status == QuotationStatus.ACCEPTED)
+            // Solo cotizaciones del usuario actual
+            .Where(q => q.AdvisorId == currentUserId)
+            // Excluir cotizaciones que ya tienen reservas activas
+            .Where(q => !_context.Reservations.Any(r => r.QuotationId == q.Id && r.IsActive));
 
-        return quotations.Select(QuotationSummaryDTO.FromEntity);
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            query = query.Where(q =>
+                (
+                    q.Lead != null
+                    && q.Lead.Client != null
+                    && q.Lead.Client.Name != null
+                    && q.Lead.Client.Name.ToLower().Contains(searchLower)
+                )
+                || (
+                    q.Lead != null
+                    && q.Lead.Client != null
+                    && q.Lead.Client.Dni != null
+                    && q.Lead.Client.Dni.ToLower().Contains(searchLower)
+                )
+                || (
+                    q.Lead != null
+                    && q.Lead.Client != null
+                    && q.Lead.Client.Ruc != null
+                    && q.Lead.Client.Ruc.ToLower().Contains(searchLower)
+                )
+                || (
+                    q.Lead != null
+                    && q.Lead.Client != null
+                    && q.Lead.Client.PhoneNumber != null
+                    && q.Lead.Client.PhoneNumber.ToLower().Contains(searchLower)
+                )
+                || (
+                    q.Lot != null
+                    && q.Lot.Block != null
+                    && q.Lot.Block.Project != null
+                    && q.Lot.Block.Project.Name != null
+                    && q.Lot.Block.Project.Name.ToLower().Contains(searchLower)
+                )
+                || (
+                    q.Lot != null
+                    && q.Lot.LotNumber != null
+                    && q.Lot.LotNumber.ToLower().Contains(searchLower)
+                )
+            );
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var isDescending = orderDirection?.ToLower() == "desc";
+
+            // Si hay preselectedId en la primera página, mantenerlo primero
+            if (preselectedQuotationGuid.HasValue && page == 1)
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "clientname" => isDescending
+                        ? query
+                            .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                            .ThenByDescending(q =>
+                                q.Lead != null
+                                    ? q.Lead.Client != null
+                                        ? q.Lead.Client.Name
+                                        : ""
+                                    : ""
+                            )
+                        : query
+                            .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                            .ThenBy(q =>
+                                q.Lead != null
+                                    ? q.Lead.Client != null
+                                        ? q.Lead.Client.Name
+                                        : ""
+                                    : ""
+                            ),
+                    "projectname" => isDescending
+                        ? query
+                            .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                            .ThenByDescending(q =>
+                                q.Lot != null
+                                    ? q.Lot.Block != null
+                                        ? q.Lot.Block.Project != null
+                                            ? q.Lot.Block.Project.Name
+                                            : ""
+                                        : ""
+                                    : ""
+                            )
+                        : query
+                            .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                            .ThenBy(q =>
+                                q.Lot != null
+                                    ? q.Lot.Block != null
+                                        ? q.Lot.Block.Project != null
+                                            ? q.Lot.Block.Project.Name
+                                            : ""
+                                        : ""
+                                    : ""
+                            ),
+                    "lotcode" => isDescending
+                        ? query
+                            .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                            .ThenByDescending(q => q.Lot != null ? q.Lot.LotNumber : "")
+                        : query
+                            .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                            .ThenBy(q => q.Lot != null ? q.Lot.LotNumber : ""),
+                    "createdat" => isDescending
+                        ? query
+                            .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                            .ThenByDescending(q => q.CreatedAt)
+                        : query
+                            .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                            .ThenBy(q => q.CreatedAt),
+                    _ => query
+                        .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                        .ThenByDescending(q => q.CreatedAt),
+                };
+            }
+            else
+            {
+                query = orderBy.ToLower() switch
+                {
+                    "clientname" => isDescending
+                        ? query.OrderByDescending(q =>
+                            q.Lead != null
+                                ? q.Lead.Client != null
+                                    ? q.Lead.Client.Name
+                                    : ""
+                                : ""
+                        )
+                        : query.OrderBy(q =>
+                            q.Lead != null
+                                ? q.Lead.Client != null
+                                    ? q.Lead.Client.Name
+                                    : ""
+                                : ""
+                        ),
+                    "projectname" => isDescending
+                        ? query.OrderByDescending(q =>
+                            q.Lot != null
+                                ? q.Lot.Block != null
+                                    ? q.Lot.Block.Project != null
+                                        ? q.Lot.Block.Project.Name
+                                        : ""
+                                    : ""
+                                : ""
+                        )
+                        : query.OrderBy(q =>
+                            q.Lot != null
+                                ? q.Lot.Block != null
+                                    ? q.Lot.Block.Project != null
+                                        ? q.Lot.Block.Project.Name
+                                        : ""
+                                    : ""
+                                : ""
+                        ),
+                    "lotcode" => isDescending
+                        ? query.OrderByDescending(q => q.Lot != null ? q.Lot.LotNumber : "")
+                        : query.OrderBy(q => q.Lot != null ? q.Lot.LotNumber : ""),
+                    "createdat" => isDescending
+                        ? query.OrderByDescending(q => q.CreatedAt)
+                        : query.OrderBy(q => q.CreatedAt),
+                    _ => query.OrderByDescending(q => q.CreatedAt), // Ordenamiento por defecto
+                };
+            }
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            if (preselectedQuotationGuid.HasValue && page == 1)
+            {
+                query = query
+                    .OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1)
+                    .ThenByDescending(q => q.CreatedAt);
+            }
+            else
+            {
+                query = query.OrderByDescending(q => q.CreatedAt);
+            }
+        }
+
+        // Aplicar lógica de desplazamiento del preselectedId (como en GetUsersSummaryPaginatedAsync)
+        if (preselectedQuotationGuid.HasValue && page == 1)
+        {
+            // Verificar que la cotización preseleccionada existe en los resultados
+            var preselectedQuotation = query.FirstOrDefault(q => q.Id == preselectedQuotationGuid);
+            if (preselectedQuotation != null)
+            {
+                // Reordenar para que la cotización preseleccionada aparezca primero
+                query = query.OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1);
+            }
+        }
+
+        // Aplicar paginación
+        var totalCount = await query.CountAsync();
+        var quotations = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+        // Si hay preselectedId y NO estamos en la primera página, remover la cotización preseleccionada
+        if (preselectedQuotationGuid.HasValue && page > 1)
+        {
+            quotations = quotations.Where(q => q.Id != preselectedQuotationGuid.Value).ToList();
+        }
+
+        // Convertir a DTOs
+        var quotationDtos = quotations.Select(QuotationSummaryDTO.FromEntity).ToList();
+
+        // Crear metadatos de paginación
+        var paginationMetadata = new PaginationMetadata
+        {
+            Page = page,
+            PageSize = pageSize,
+            Total = totalCount,
+            TotalPages = (int)Math.Ceiling((double)totalCount / pageSize),
+            HasPrevious = page > 1,
+            HasNext = page < (int)Math.Ceiling((double)totalCount / pageSize),
+        };
+
+        return new PaginatedResponseV2<QuotationSummaryDTO>
+        {
+            Data = quotationDtos,
+            Meta = paginationMetadata,
+        };
     }
 
     // **NUEVO: Obtener cotizaciones por lote**

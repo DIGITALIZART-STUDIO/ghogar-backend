@@ -410,21 +410,40 @@ public class UsersController(
     [HttpGet("higher-rank/paginated")]
     public async Task<
         ActionResult<PaginatedResponseV2<UserHigherRankDTO>>
-    > GetUsersWithHigherRankPaginated([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    > GetUsersWithHigherRankPaginated(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] string? orderBy = null,
+        [FromQuery] string? orderDirection = "asc",
+        [FromQuery] string? preselectedId = null
+    )
     {
         try
         {
+            // Validar parámetros
+            if (page < 1)
+                page = 1;
+            if (pageSize < 1 || pageSize > 100)
+                pageSize = 10;
+
             var currentUserId = User.GetCurrentUserIdOrThrow();
             var result = await userHigherRankService.GetUsersWithHigherRankPaginatedAsync(
                 currentUserId,
                 page,
-                pageSize
+                pageSize,
+                search,
+                orderBy,
+                orderDirection,
+                preselectedId
             );
 
             logger.LogInformation(
-                "Usuarios con mayor rango paginados obtenidos exitosamente para usuario: {CurrentUserId}, página: {Page}",
+                "Usuarios con mayor rango paginados obtenidos exitosamente para usuario: {CurrentUserId}, página: {Page}, búsqueda: {Search}, preselectedId: {PreselectedId}",
                 currentUserId,
-                page
+                page,
+                search ?? "sin filtro",
+                preselectedId ?? "sin preselección"
             );
             return Ok(result);
         }

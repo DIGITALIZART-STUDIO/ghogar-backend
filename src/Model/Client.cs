@@ -64,6 +64,7 @@ public class Client : IEntity
     }
 
     // Navegación hacia los referidos que ha hecho este cliente
+    [JsonIgnore]
     public ICollection<Referral>? Referrals { get; set; }
 }
 
