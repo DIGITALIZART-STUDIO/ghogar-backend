@@ -42,6 +42,20 @@ public class LeadService : ILeadService
         return $"{yearPrefix}{sequence:D5}";
     }
 
+    public string GenerateClientCodeFromId(Guid clientId)
+    {
+        // Formato: CLI-XXXXX donde XXXXX es un número derivado del UUID del cliente
+        // Usar los últimos 8 caracteres del UUID para crear un código único y consistente
+        var uuidString = clientId.ToString("N"); // Sin guiones
+        var last8Chars = uuidString.Substring(uuidString.Length - 8);
+
+        // Convertir a número para hacer el código más legible
+        var numericValue = Convert.ToInt64(last8Chars, 16);
+        var shortCode = (numericValue % 99999).ToString("D5"); // Máximo 5 dígitos
+
+        return $"CLI-{shortCode}";
+    }
+
     public async Task<IEnumerable<Lead>> GetAllLeadsAsync()
     {
         return await _context
@@ -450,12 +464,33 @@ public class LeadService : ILeadService
                 )
             ) ?? false;
 
+        // Obtener leads que ya tienen cotizaciones activas (para excluirlos)
+        var leadsWithActiveQuotations = await _context
+            .Quotations.Where(q => q.Status != QuotationStatus.CANCELED)
+            .Select(q => q.LeadId)
+            .ToListAsync();
+
+        // Si se proporciona excludeQuotationId, excluir también ese lead específico
+        if (excludeQuotationId.HasValue)
+        {
+            var excludedLeadId = await _context
+                .Quotations.Where(q => q.Id == excludeQuotationId.Value)
+                .Select(q => q.LeadId)
+                .FirstOrDefaultAsync();
+
+            if (excludedLeadId != Guid.Empty)
+            {
+                leadsWithActiveQuotations.Remove(excludedLeadId);
+            }
+        }
+
         if (hasHigherRole)
         {
             // Para roles mayores a SalesAdvisor: mostrar leads asignados + clientes sin leads
             var allClients = await _context.Clients.Where(c => c.IsActive).ToListAsync();
 
             // Obtener todos los leads del usuario actual con sus clientes incluidos
+            // EXCLUIR leads que ya tienen cotizaciones activas
             var userLeads = await _context
                 .Leads.Where(l =>
                     l.AssignedToId == currentUserId
@@ -463,6 +498,7 @@ public class LeadService : ILeadService
                     && l.Status != LeadStatus.Canceled
                     && l.Status != LeadStatus.Expired
                     && l.Status != LeadStatus.Completed
+                    && !leadsWithActiveQuotations.Contains(l.Id) // Excluir leads con cotizaciones activas
                 )
                 .Include(l => l.Client) // Incluir explícitamente el cliente
                 .Include(l => l.Project)
@@ -490,13 +526,14 @@ public class LeadService : ILeadService
                     var virtualLead = new LeadSummaryDto
                     {
                         Id = client.Id, // ID temporal para el lead virtual
-                        Code = $"CLI-{client.Id}", // Código especial para identificar que es un cliente
+                        Code = GenerateClientCodeFromId(client.Id), // Código único y consistente basado en el UUID del cliente
                         Client = new ClientSummaryDto
                         {
                             Id = client.Id,
                             Name = client.Name ?? string.Empty,
                             Dni = client.Dni,
                             Ruc = client.Ruc,
+                            PhoneNumber = client.PhoneNumber,
                         },
                         Status = LeadStatus.Registered, // Estado por defecto
                         ExpirationDate = DateTime.UtcNow.AddDays(7), // Fecha de expiración por defecto
@@ -513,6 +550,7 @@ public class LeadService : ILeadService
         else
         {
             // Para SalesAdvisor: mostrar solo sus leads asignados
+            // EXCLUIR leads que ya tienen cotizaciones activas
             var userLeads = await _context
                 .Leads.Where(l =>
                     l.AssignedToId == currentUserId
@@ -520,6 +558,7 @@ public class LeadService : ILeadService
                     && l.Status != LeadStatus.Canceled
                     && l.Status != LeadStatus.Expired
                     && l.Status != LeadStatus.Completed
+                    && !leadsWithActiveQuotations.Contains(l.Id) // Excluir leads con cotizaciones activas
                 )
                 .Include(l => l.Client) // Incluir explícitamente el cliente
                 .Include(l => l.Project)
@@ -606,6 +645,11 @@ public class LeadService : ILeadService
                     l.Client != null
                     && l.Client.Ruc != null
                     && l.Client.Ruc.ToLower().Contains(searchLower)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.PhoneNumber != null
+                    && l.Client.PhoneNumber.ToLower().Contains(searchLower)
                 )
                 || (l.ProjectName != null && l.ProjectName.ToLower().Contains(searchLower))
             );
