@@ -40,17 +40,46 @@ public class BlocksController : ControllerBase
     }
 
     [HttpGet("project/{projectId:guid}")]
-    public async Task<ActionResult<IEnumerable<BlockDTO>>> GetBlocksByProject(Guid projectId)
+    [EndpointSummary("Get blocks by project with pagination")]
+    [EndpointDescription(
+        "Retrieves blocks by project with pagination, search and ordering capabilities"
+    )]
+    public async Task<ActionResult<PaginatedResponseV2<BlockDTO>>> GetBlocksByProject(
+        Guid projectId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] string? orderBy = null,
+        [FromQuery] string? orderDirection = "asc",
+        [FromQuery] string? preselectedId = null
+    )
     {
         try
         {
-            var blocks = await _blockService.GetBlocksByProjectIdAsync(projectId);
-            return Ok(blocks);
+            // Validar parámetros
+            if (page < 1)
+                page = 1;
+            if (pageSize < 1 || pageSize > 100)
+                pageSize = 10;
+
+            var result = await _blockService.GetBlocksByProjectIdAsync(
+                projectId,
+                page,
+                pageSize,
+                search,
+                orderBy,
+                orderDirection,
+                preselectedId
+            );
+            return Ok(result);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al obtener bloques del proyecto");
-            return StatusCode(500, "Error interno del servidor");
+            _logger.LogError(ex, "Error al obtener bloques del proyecto con paginación");
+            return StatusCode(
+                500,
+                new { message = "Error interno del servidor", error = ex.Message }
+            );
         }
     }
 
