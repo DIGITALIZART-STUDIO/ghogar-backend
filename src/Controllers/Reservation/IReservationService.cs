@@ -6,6 +6,27 @@ namespace GestionHogar.Services;
 public interface IReservationService
 {
     Task<IEnumerable<ReservationDto>> GetAllReservationsAsync();
+    Task<PaginatedResponseV2<ReservationDto>> GetAllReservationsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        Guid? projectId = null,
+        string? orderBy = null
+    );
+    Task<PaginatedResponseV2<ReservationDto>> GetReservationsByAdvisorIdPaginatedAsync(
+        Guid advisorId,
+        int page,
+        int pageSize,
+        PaginationService paginationService,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        Guid? projectId = null,
+        string? orderBy = null
+    );
     Task<IEnumerable<ReservationWithPaymentsDto>> GetAllCanceledReservationsAsync();
     Task<PaginatedResponseV2<ReservationWithPaymentsDto>> GetAllCanceledReservationsPaginatedAsync(
         int page,

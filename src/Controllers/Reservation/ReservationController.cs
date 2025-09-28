@@ -1,6 +1,7 @@
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using GestionHogar.Services;
+using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -32,6 +33,72 @@ public class ReservationsController : ControllerBase
     {
         var reservations = await _reservationService.GetAllReservationsAsync();
         return Ok(reservations);
+    }
+
+    [HttpGet("paginated")]
+    public async Task<ActionResult<PaginatedResponseV2<ReservationDto>>> GetReservationsPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] ReservationStatus[]? status = null,
+        [FromQuery] PaymentMethod[]? paymentMethod = null,
+        [FromQuery] Guid? projectId = null,
+        [FromQuery] string? orderBy = null
+    )
+    {
+        var result = await _reservationService.GetAllReservationsPaginatedAsync(
+            page,
+            pageSize,
+            paginationService,
+            search,
+            status,
+            paymentMethod,
+            projectId,
+            orderBy
+        );
+        return Ok(result);
+    }
+
+    [HttpGet("advisor/paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<ReservationDto>>
+    > GetReservationsByAdvisorPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] ReservationStatus[]? status = null,
+        [FromQuery] PaymentMethod[]? paymentMethod = null,
+        [FromQuery] Guid? projectId = null,
+        [FromQuery] string? orderBy = null
+    )
+    {
+        try
+        {
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
+            var result = await _reservationService.GetReservationsByAdvisorIdPaginatedAsync(
+                currentUserId,
+                page,
+                pageSize,
+                paginationService,
+                search,
+                status,
+                paymentMethod,
+                projectId,
+                orderBy
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     [HttpGet("canceled")]
