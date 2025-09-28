@@ -54,17 +54,64 @@ public class UsersController(
     }
 
     [EndpointSummary("Get all users")]
-    [EndpointDescription("Gets information about all users")]
+    [EndpointDescription("Gets information about all users with search and filtering capabilities")]
     [Authorize]
     [HttpGet("all")]
     public async Task<ActionResult<PaginatedResponseV2<UserGetDTO>>> GetUsers(
-        [FromServices] PaginationService paginationService,
+        [FromServices] OptimizedPaginationService optimizedPaginationService,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] bool[]? isActive = null,
+        [FromQuery] string[]? roleName = null,
+        [FromQuery] string? orderBy = "CreatedAt desc"
     )
     {
-        var query = db
-            .Users.Select(user => new UserGetDTO
+        try
+        {
+            logger.LogInformation(
+                "Iniciando consulta de usuarios: página {Page}, pageSize {PageSize}, search: {Search}, isActive: {IsActive}, roleName: {RoleName}",
+                page,
+                pageSize,
+                search,
+                isActive,
+                roleName
+            );
+
+            // Construir consulta base optimizada
+            var baseQuery = db.Users.AsQueryable();
+
+            // Aplicar búsqueda general en todos los campos de la tabla
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var searchTerm = search.ToLower();
+                baseQuery = baseQuery.Where(u =>
+                    u.Name.ToLower().Contains(searchTerm)
+                    || u.Email.ToLower().Contains(searchTerm)
+                    || u.PhoneNumber.ToLower().Contains(searchTerm)
+                    || u.Id.ToString().ToLower().Contains(searchTerm)
+                );
+            }
+
+            // Aplicar filtro por estado activo (soporta múltiples valores)
+            if (isActive != null && isActive.Length > 0)
+            {
+                baseQuery = baseQuery.Where(u => isActive.Contains(u.IsActive));
+            }
+
+            // Aplicar filtro por rol (soporta múltiples valores)
+            if (roleName != null && roleName.Length > 0)
+            {
+                baseQuery = baseQuery.Where(u =>
+                    db.UserRoles.Any(ur =>
+                        ur.UserId == u.Id
+                        && db.Roles.Any(r => r.Id == ur.RoleId && roleName.Contains(r.Name))
+                    )
+                );
+            }
+
+            // Proyección optimizada con roles
+            var query = baseQuery.Select(user => new UserGetDTO
             {
                 User = user,
                 Roles = (
@@ -73,13 +120,74 @@ public class UsersController(
                     where userRole.UserId == user.Id
                     select role.Name
                 ).ToList(),
-            })
-            .OrderByDescending(x => x.Roles.Contains("SUPERADMIN"))
-            .ThenByDescending(x => x.User.CreatedAt);
+            });
 
-        var paginated = await paginationService.PaginateAsync(query, page, pageSize);
+            // Aplicar ordenamiento dinámico
+            query = ApplyUserOrdering(query, orderBy);
 
-        return Ok(paginated);
+            // Usar servicio de paginación optimizado
+            var paginated = await optimizedPaginationService.GetAllPaginatedAsync(
+                query,
+                page,
+                pageSize,
+                orderBy,
+                null, // filters (ya aplicados en la consulta)
+                null, // includes
+                CancellationToken.None
+            );
+
+            logger.LogInformation(
+                "Consulta de usuarios completada: {Total} usuarios encontrados, tiempo: {ExecutionTime}ms",
+                paginated.Meta.Total,
+                paginated.Meta.ExecutionTimeMs
+            );
+
+            return Ok(paginated);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al obtener usuarios paginados");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    /// <summary>
+    /// Aplica ordenamiento dinámico a la consulta de usuarios
+    /// </summary>
+    private IQueryable<UserGetDTO> ApplyUserOrdering(IQueryable<UserGetDTO> query, string? orderBy)
+    {
+        if (string.IsNullOrWhiteSpace(orderBy))
+        {
+            return query
+                .OrderByDescending(x => x.Roles.Contains("SUPERADMIN"))
+                .ThenByDescending(x => x.User.CreatedAt);
+        }
+
+        var orderParts = orderBy.Split(' ');
+        var field = orderParts[0].ToLower();
+        var direction = orderParts.Length > 1 ? orderParts[1].ToLower() : "asc";
+
+        return field switch
+        {
+            "name" => direction == "desc"
+                ? query.OrderByDescending(x => x.User.Name)
+                : query.OrderBy(x => x.User.Name),
+            "email" => direction == "desc"
+                ? query.OrderByDescending(x => x.User.Email)
+                : query.OrderBy(x => x.User.Email),
+            "createdat" => direction == "desc"
+                ? query.OrderByDescending(x => x.User.CreatedAt)
+                : query.OrderBy(x => x.User.CreatedAt),
+            "isactive" => direction == "desc"
+                ? query.OrderByDescending(x => x.User.IsActive)
+                : query.OrderBy(x => x.User.IsActive),
+            "role" => direction == "desc"
+                ? query.OrderByDescending(x => x.Roles.FirstOrDefault())
+                : query.OrderBy(x => x.Roles.FirstOrDefault()),
+            _ => query
+                .OrderByDescending(x => x.Roles.Contains("SUPERADMIN"))
+                .ThenByDescending(x => x.User.CreatedAt),
+        };
     }
 
     [EndpointSummary("Create User")]
