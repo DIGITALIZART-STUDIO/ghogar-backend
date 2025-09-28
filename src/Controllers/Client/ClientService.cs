@@ -21,10 +21,99 @@ public class ClientService : IClientService
     public async Task<PaginatedResponseV2<Client>> GetAllClientsPaginatedAsync(
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        bool[]? isActive = null,
+        ClientType[]? type = null,
+        string? orderBy = null
     )
     {
-        var query = _context.Clients.OrderByDescending(c => c.CreatedAt);
+        // Construir consulta base
+        var query = _context.Clients.AsQueryable();
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(c =>
+                (c.Name != null && c.Name.ToLower().Contains(searchTerm))
+                || (c.Email != null && c.Email.ToLower().Contains(searchTerm))
+                || (c.PhoneNumber != null && c.PhoneNumber.Contains(searchTerm))
+                || (c.Dni != null && c.Dni.Contains(searchTerm))
+                || (c.Ruc != null && c.Ruc.Contains(searchTerm))
+                || (c.CompanyName != null && c.CompanyName.ToLower().Contains(searchTerm))
+                || (c.Address != null && c.Address.ToLower().Contains(searchTerm))
+                || (c.Country != null && c.Country.ToLower().Contains(searchTerm))
+            );
+        }
+
+        // Aplicar filtro de isActive si se proporciona
+        if (isActive != null && isActive.Length > 0)
+        {
+            query = query.Where(c => isActive.Contains(c.IsActive));
+        }
+
+        // Aplicar filtro de type si se proporciona
+        if (type != null && type.Length > 0)
+        {
+            query = query.Where(c => c.Type.HasValue && type.Contains(c.Type.Value));
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "name" => direction == "desc"
+                    ? query.OrderByDescending(c => c.Name)
+                    : query.OrderBy(c => c.Name),
+                "email" => direction == "desc"
+                    ? query.OrderByDescending(c => c.Email)
+                    : query.OrderBy(c => c.Email),
+                "phonenumber" => direction == "desc"
+                    ? query.OrderByDescending(c => c.PhoneNumber)
+                    : query.OrderBy(c => c.PhoneNumber),
+                "dni" => direction == "desc"
+                    ? query.OrderByDescending(c => c.Dni)
+                    : query.OrderBy(c => c.Dni),
+                "ruc" => direction == "desc"
+                    ? query.OrderByDescending(c => c.Ruc)
+                    : query.OrderBy(c => c.Ruc),
+                "companyname" => direction == "desc"
+                    ? query.OrderByDescending(c => c.CompanyName)
+                    : query.OrderBy(c => c.CompanyName),
+                "address" => direction == "desc"
+                    ? query.OrderByDescending(c => c.Address)
+                    : query.OrderBy(c => c.Address),
+                "country" => direction == "desc"
+                    ? query.OrderByDescending(c => c.Country)
+                    : query.OrderBy(c => c.Country),
+                "type" => direction == "desc"
+                    ? query.OrderByDescending(c => c.Type)
+                    : query.OrderBy(c => c.Type),
+                "isactive" => direction == "desc"
+                    ? query.OrderByDescending(c => c.IsActive)
+                    : query.OrderBy(c => c.IsActive),
+                "createdat" => direction == "desc"
+                    ? query.OrderByDescending(c => c.CreatedAt)
+                    : query.OrderBy(c => c.CreatedAt),
+                "modifiedat" => direction == "desc"
+                    ? query.OrderByDescending(c => c.ModifiedAt)
+                    : query.OrderBy(c => c.ModifiedAt),
+                _ => query.OrderBy(c => c.Name), // Ordenamiento por defecto
+            };
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            query = query.OrderBy(c => c.Name);
+        }
+
         return await paginationService.PaginateAsync(query, page, pageSize);
     }
 

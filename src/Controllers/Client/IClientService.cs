@@ -10,7 +10,11 @@ public interface IClientService
     Task<PaginatedResponseV2<Client>> GetAllClientsPaginatedAsync(
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        bool[]? isActive = null,
+        ClientType[]? type = null,
+        string? orderBy = null
     );
     Task<Client?> GetClientByIdAsync(Guid id);
     Task<Client> CreateClientAsync(Client client);

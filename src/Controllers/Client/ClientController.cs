@@ -56,13 +56,21 @@ public class ClientsController : ControllerBase
     > GetClientsPaginated(
         [FromServices] PaginationService paginationService,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] bool[]? isActive = null,
+        [FromQuery] ClientType[]? type = null,
+        [FromQuery] string? orderBy = null
     )
     {
         var result = await _clientService.GetAllClientsPaginatedAsync(
             page,
             pageSize,
-            paginationService
+            paginationService,
+            search,
+            isActive,
+            type,
+            orderBy
         );
         return Ok(result);
     }
