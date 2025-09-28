@@ -34,13 +34,23 @@ public class LeadsController : ControllerBase
     public async Task<ActionResult<PaginatedResponseV2<Lead>>> GetLeadsPaginated(
         [FromServices] PaginationService paginationService,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] LeadStatus[]? status = null,
+        [FromQuery] LeadCaptureSource[]? captureSource = null,
+        [FromQuery] LeadCompletionReason[]? completionReason = null,
+        [FromQuery] string? orderBy = null
     )
     {
         var result = await _leadService.GetAllLeadsPaginatedAsync(
             page,
             pageSize,
-            paginationService
+            paginationService,
+            search,
+            status,
+            captureSource,
+            completionReason,
+            orderBy
         );
         return Ok(result);
     }
@@ -194,14 +204,24 @@ public class LeadsController : ControllerBase
         Guid userId,
         [FromServices] PaginationService paginationService,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] LeadStatus[]? status = null,
+        [FromQuery] LeadCaptureSource[]? captureSource = null,
+        [FromQuery] LeadCompletionReason[]? completionReason = null,
+        [FromQuery] string? orderBy = null
     )
     {
         var result = await _leadService.GetLeadsByAssignedToIdPaginatedAsync(
             userId,
             page,
             pageSize,
-            paginationService
+            paginationService,
+            search,
+            status,
+            captureSource,
+            completionReason,
+            orderBy
         );
         return Ok(result);
     }

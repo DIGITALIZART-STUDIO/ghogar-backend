@@ -9,7 +9,12 @@ public interface ILeadService
     Task<PaginatedResponseV2<Lead>> GetAllLeadsPaginatedAsync(
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        LeadStatus[]? status = null,
+        LeadCaptureSource[]? captureSource = null,
+        LeadCompletionReason[]? completionReason = null,
+        string? orderBy = null
     );
     Task<Lead?> GetLeadByIdAsync(Guid id);
     Task<Lead> CreateLeadAsync(Lead lead);
@@ -23,7 +28,12 @@ public interface ILeadService
         Guid userId,
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        LeadStatus[]? status = null,
+        LeadCaptureSource[]? captureSource = null,
+        LeadCompletionReason[]? completionReason = null,
+        string? orderBy = null
     );
     Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status);
     Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId);

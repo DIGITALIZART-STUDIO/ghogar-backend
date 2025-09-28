@@ -71,11 +71,133 @@ public class LeadService : ILeadService
     public async Task<PaginatedResponseV2<Lead>> GetAllLeadsPaginatedAsync(
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        LeadStatus[]? status = null,
+        LeadCaptureSource[]? captureSource = null,
+        LeadCompletionReason[]? completionReason = null,
+        string? orderBy = null
     )
     {
-        var query = _context
-            .Leads.OrderByDescending(l => l.CreatedAt)
+        // Construir consulta base
+        var query = _context.Leads.AsQueryable();
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(l =>
+                (l.Code != null && l.Code.ToLower().Contains(searchTerm))
+                || (
+                    l.Client != null
+                    && l.Client.Name != null
+                    && l.Client.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.Email != null
+                    && l.Client.Email.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.PhoneNumber != null
+                    && l.Client.PhoneNumber.Contains(searchTerm)
+                )
+                || (l.Client != null && l.Client.Dni != null && l.Client.Dni.Contains(searchTerm))
+                || (l.Client != null && l.Client.Ruc != null && l.Client.Ruc.Contains(searchTerm))
+                || (
+                    l.AssignedTo != null
+                    && l.AssignedTo.Name != null
+                    && l.AssignedTo.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Project != null
+                    && l.Project.Name != null
+                    && l.Project.Name.ToLower().Contains(searchTerm)
+                )
+            );
+        }
+
+        // Aplicar filtro de status si se proporciona
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(l => status.Contains(l.Status));
+        }
+
+        // Aplicar filtro de captureSource si se proporciona
+        if (captureSource != null && captureSource.Length > 0)
+        {
+            query = query.Where(l => captureSource.Contains(l.CaptureSource));
+        }
+
+        // Aplicar filtro de completionReason si se proporciona
+        if (completionReason != null && completionReason.Length > 0)
+        {
+            query = query.Where(l =>
+                l.CompletionReason.HasValue && completionReason.Contains(l.CompletionReason.Value)
+            );
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "code" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Code)
+                    : query.OrderBy(l => l.Code),
+                "status" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Status)
+                    : query.OrderBy(l => l.Status),
+                "capturesource" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CaptureSource)
+                    : query.OrderBy(l => l.CaptureSource),
+                "completionreason" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CompletionReason)
+                    : query.OrderBy(l => l.CompletionReason),
+                "entrydate" => direction == "desc"
+                    ? query.OrderByDescending(l => l.EntryDate)
+                    : query.OrderBy(l => l.EntryDate),
+                "expirationdate" => direction == "desc"
+                    ? query.OrderByDescending(l => l.ExpirationDate)
+                    : query.OrderBy(l => l.ExpirationDate),
+                "recyclecount" => direction == "desc"
+                    ? query.OrderByDescending(l => l.RecycleCount)
+                    : query.OrderBy(l => l.RecycleCount),
+                "clientname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Client != null ? l.Client.Name : "")
+                    : query.OrderBy(l => l.Client != null ? l.Client.Name : ""),
+                "assignedtoname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.AssignedTo != null ? l.AssignedTo.Name : "")
+                    : query.OrderBy(l => l.AssignedTo != null ? l.AssignedTo.Name : ""),
+                "projectname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Project != null ? l.Project.Name : "")
+                    : query.OrderBy(l => l.Project != null ? l.Project.Name : ""),
+                "isactive" => direction == "desc"
+                    ? query.OrderByDescending(l => l.IsActive)
+                    : query.OrderBy(l => l.IsActive),
+                "createdat" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CreatedAt)
+                    : query.OrderBy(l => l.CreatedAt),
+                "modifiedat" => direction == "desc"
+                    ? query.OrderByDescending(l => l.ModifiedAt)
+                    : query.OrderBy(l => l.ModifiedAt),
+                _ => query.OrderByDescending(l => l.CreatedAt), // Ordenamiento por defecto
+            };
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            query = query.OrderByDescending(l => l.CreatedAt);
+        }
+
+        // Incluir las relaciones necesarias
+        query = query
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
@@ -232,12 +354,133 @@ public class LeadService : ILeadService
         Guid userId,
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        LeadStatus[]? status = null,
+        LeadCaptureSource[]? captureSource = null,
+        LeadCompletionReason[]? completionReason = null,
+        string? orderBy = null
     )
     {
-        var query = _context
-            .Leads.Where(l => l.IsActive && l.AssignedToId == userId)
-            .OrderByDescending(l => l.CreatedAt)
+        // Construir consulta base con filtro de usuario asignado
+        var query = _context.Leads.Where(l => l.IsActive && l.AssignedToId == userId);
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(l =>
+                (l.Code != null && l.Code.ToLower().Contains(searchTerm))
+                || (
+                    l.Client != null
+                    && l.Client.Name != null
+                    && l.Client.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.Email != null
+                    && l.Client.Email.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.PhoneNumber != null
+                    && l.Client.PhoneNumber.Contains(searchTerm)
+                )
+                || (l.Client != null && l.Client.Dni != null && l.Client.Dni.Contains(searchTerm))
+                || (l.Client != null && l.Client.Ruc != null && l.Client.Ruc.Contains(searchTerm))
+                || (
+                    l.AssignedTo != null
+                    && l.AssignedTo.Name != null
+                    && l.AssignedTo.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Project != null
+                    && l.Project.Name != null
+                    && l.Project.Name.ToLower().Contains(searchTerm)
+                )
+            );
+        }
+
+        // Aplicar filtro de status si se proporciona
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(l => status.Contains(l.Status));
+        }
+
+        // Aplicar filtro de captureSource si se proporciona
+        if (captureSource != null && captureSource.Length > 0)
+        {
+            query = query.Where(l => captureSource.Contains(l.CaptureSource));
+        }
+
+        // Aplicar filtro de completionReason si se proporciona
+        if (completionReason != null && completionReason.Length > 0)
+        {
+            query = query.Where(l =>
+                l.CompletionReason.HasValue && completionReason.Contains(l.CompletionReason.Value)
+            );
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "code" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Code)
+                    : query.OrderBy(l => l.Code),
+                "status" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Status)
+                    : query.OrderBy(l => l.Status),
+                "capturesource" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CaptureSource)
+                    : query.OrderBy(l => l.CaptureSource),
+                "completionreason" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CompletionReason)
+                    : query.OrderBy(l => l.CompletionReason),
+                "entrydate" => direction == "desc"
+                    ? query.OrderByDescending(l => l.EntryDate)
+                    : query.OrderBy(l => l.EntryDate),
+                "expirationdate" => direction == "desc"
+                    ? query.OrderByDescending(l => l.ExpirationDate)
+                    : query.OrderBy(l => l.ExpirationDate),
+                "recyclecount" => direction == "desc"
+                    ? query.OrderByDescending(l => l.RecycleCount)
+                    : query.OrderBy(l => l.RecycleCount),
+                "clientname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Client != null ? l.Client.Name : "")
+                    : query.OrderBy(l => l.Client != null ? l.Client.Name : ""),
+                "assignedtoname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.AssignedTo != null ? l.AssignedTo.Name : "")
+                    : query.OrderBy(l => l.AssignedTo != null ? l.AssignedTo.Name : ""),
+                "projectname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Project != null ? l.Project.Name : "")
+                    : query.OrderBy(l => l.Project != null ? l.Project.Name : ""),
+                "isactive" => direction == "desc"
+                    ? query.OrderByDescending(l => l.IsActive)
+                    : query.OrderBy(l => l.IsActive),
+                "createdat" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CreatedAt)
+                    : query.OrderBy(l => l.CreatedAt),
+                "modifiedat" => direction == "desc"
+                    ? query.OrderByDescending(l => l.ModifiedAt)
+                    : query.OrderBy(l => l.ModifiedAt),
+                _ => query.OrderByDescending(l => l.CreatedAt), // Ordenamiento por defecto
+            };
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            query = query.OrderByDescending(l => l.CreatedAt);
+        }
+
+        // Incluir las relaciones necesarias
+        query = query
             .Include(l => l.Client)
             .Include(l => l.Project)
             .Include(l => l.Referral)
