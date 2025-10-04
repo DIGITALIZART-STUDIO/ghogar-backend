@@ -10,6 +10,7 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using GestionHogar.Services;
+using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -315,6 +316,37 @@ public class ClientsController : ControllerBase
     {
         var clientsSummary = await _clientService.GetClientsSummaryAsync();
         return Ok(clientsSummary);
+    }
+
+    // GET: api/clients/current-user/summary
+    [HttpGet("current-user/summary")]
+    public async Task<ActionResult<IEnumerable<ClientSummaryDto>>> GetClientsByCurrentUserSummary(
+        [FromQuery] Guid? projectId = null,
+        [FromQuery] bool useCurrentUser = true
+    )
+    {
+        try
+        {
+            Guid? currentUserId = null;
+            if (useCurrentUser)
+            {
+                currentUserId = User.GetCurrentUserIdOrThrow();
+            }
+
+            var clientsSummary = await _clientService.GetClientsByCurrentUserSummaryAsync(
+                currentUserId,
+                projectId
+            );
+            return Ok(clientsSummary);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     // GET: api/clients/paginated-search

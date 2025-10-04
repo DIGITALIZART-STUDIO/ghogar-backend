@@ -365,6 +365,55 @@ public class ClientService : IClientService
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<ClientSummaryDto>> GetClientsByCurrentUserSummaryAsync(
+        Guid? currentUserId = null,
+        Guid? projectId = null
+    )
+    {
+        var query = _context.Clients.Where(c => c.IsActive).AsQueryable();
+
+        // Aplicar filtro por usuario si se especifica
+        if (currentUserId.HasValue)
+        {
+            query = query.Where(c =>
+                _context.Leads.Any(l => l.ClientId == c.Id && l.AssignedToId == currentUserId.Value)
+            );
+        }
+
+        // Aplicar filtro por proyecto si se especifica
+        if (projectId.HasValue)
+        {
+            if (currentUserId.HasValue)
+            {
+                query = query.Where(c =>
+                    _context.Leads.Any(l =>
+                        l.ClientId == c.Id
+                        && l.AssignedToId == currentUserId.Value
+                        && l.ProjectId == projectId.Value
+                    )
+                );
+            }
+            else
+            {
+                query = query.Where(c =>
+                    _context.Leads.Any(l => l.ClientId == c.Id && l.ProjectId == projectId.Value)
+                );
+            }
+        }
+
+        return await query
+            .Select(c => new ClientSummaryDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Dni = c.Dni,
+                Ruc = c.Ruc,
+                PhoneNumber = c.PhoneNumber,
+            })
+            .Distinct()
+            .ToListAsync();
+    }
+
     public async Task<Client> GetClientByDniAsync(string dni)
     {
         if (string.IsNullOrWhiteSpace(dni))

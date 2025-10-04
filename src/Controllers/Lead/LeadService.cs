@@ -76,6 +76,8 @@ public class LeadService : ILeadService
         LeadStatus[]? status = null,
         LeadCaptureSource[]? captureSource = null,
         LeadCompletionReason[]? completionReason = null,
+        Guid? clientId = null,
+        Guid? userId = null,
         string? orderBy = null
     )
     {
@@ -136,6 +138,18 @@ public class LeadService : ILeadService
             query = query.Where(l =>
                 l.CompletionReason.HasValue && completionReason.Contains(l.CompletionReason.Value)
             );
+        }
+
+        // Aplicar filtro de clientId si se proporciona
+        if (clientId.HasValue)
+        {
+            query = query.Where(l => l.ClientId == clientId.Value);
+        }
+
+        // Aplicar filtro de userId si se proporciona
+        if (userId.HasValue)
+        {
+            query = query.Where(l => l.AssignedToId == userId.Value);
         }
 
         // Aplicar ordenamiento
@@ -359,6 +373,7 @@ public class LeadService : ILeadService
         LeadStatus[]? status = null,
         LeadCaptureSource[]? captureSource = null,
         LeadCompletionReason[]? completionReason = null,
+        Guid? clientId = null,
         string? orderBy = null
     )
     {
@@ -419,6 +434,12 @@ public class LeadService : ILeadService
             query = query.Where(l =>
                 l.CompletionReason.HasValue && completionReason.Contains(l.CompletionReason.Value)
             );
+        }
+
+        // Aplicar filtro de clientId si se proporciona
+        if (clientId.HasValue)
+        {
+            query = query.Where(l => l.ClientId == clientId.Value);
         }
 
         // Aplicar ordenamiento
@@ -505,6 +526,39 @@ public class LeadService : ILeadService
     {
         return await _context
             .Users.Where(u => u.IsActive)
+            .Select(u => new UserSummaryDto
+            {
+                Id = u.Id,
+                UserName = u.Name,
+                Email = u.Email,
+                Roles = (
+                    from userRole in _context.UserRoles
+                    join role in _context.Roles on userRole.RoleId equals role.Id
+                    where userRole.UserId == u.Id
+                    select role.Name
+                ).ToList(),
+            })
+            .ToListAsync();
+    }
+
+    public async Task<IEnumerable<UserSummaryDto>> GetUsersWithLeadsSummaryAsync(
+        Guid? projectId = null
+    )
+    {
+        var query = _context
+            .Users.Where(u => u.IsActive)
+            .Where(u => _context.Leads.Any(l => l.AssignedToId == u.Id))
+            .AsQueryable();
+
+        // Aplicar filtro por proyecto si se especifica
+        if (projectId.HasValue)
+        {
+            query = query.Where(u =>
+                _context.Leads.Any(l => l.AssignedToId == u.Id && l.ProjectId == projectId.Value)
+            );
+        }
+
+        return await query
             .Select(u => new UserSummaryDto
             {
                 Id = u.Id,

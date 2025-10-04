@@ -39,6 +39,8 @@ public class LeadsController : ControllerBase
         [FromQuery] LeadStatus[]? status = null,
         [FromQuery] LeadCaptureSource[]? captureSource = null,
         [FromQuery] LeadCompletionReason[]? completionReason = null,
+        [FromQuery] Guid? clientId = null,
+        [FromQuery] Guid? userId = null,
         [FromQuery] string? orderBy = null
     )
     {
@@ -50,6 +52,8 @@ public class LeadsController : ControllerBase
             status,
             captureSource,
             completionReason,
+            clientId,
+            userId,
             orderBy
         );
         return Ok(result);
@@ -209,6 +213,7 @@ public class LeadsController : ControllerBase
         [FromQuery] LeadStatus[]? status = null,
         [FromQuery] LeadCaptureSource[]? captureSource = null,
         [FromQuery] LeadCompletionReason[]? completionReason = null,
+        [FromQuery] Guid? clientId = null,
         [FromQuery] string? orderBy = null
     )
     {
@@ -221,6 +226,7 @@ public class LeadsController : ControllerBase
             status,
             captureSource,
             completionReason,
+            clientId,
             orderBy
         );
         return Ok(result);
@@ -346,6 +352,15 @@ public class LeadsController : ControllerBase
     public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetUsersSummary()
     {
         var usersSummary = await _leadService.GetUsersSummaryAsync();
+        return Ok(usersSummary);
+    }
+
+    [HttpGet("users/with-leads/summary")]
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetUsersWithLeadsSummary(
+        [FromQuery] Guid? projectId = null
+    )
+    {
+        var usersSummary = await _leadService.GetUsersWithLeadsSummaryAsync(projectId);
         return Ok(usersSummary);
     }
 

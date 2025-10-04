@@ -14,6 +14,8 @@ public interface ILeadService
         LeadStatus[]? status = null,
         LeadCaptureSource[]? captureSource = null,
         LeadCompletionReason[]? completionReason = null,
+        Guid? clientId = null,
+        Guid? userId = null,
         string? orderBy = null
     );
     Task<Lead?> GetLeadByIdAsync(Guid id);
@@ -33,6 +35,7 @@ public interface ILeadService
         LeadStatus[]? status = null,
         LeadCaptureSource[]? captureSource = null,
         LeadCompletionReason[]? completionReason = null,
+        Guid? clientId = null,
         string? orderBy = null
     );
     Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status);
@@ -61,6 +64,7 @@ public interface ILeadService
         string? orderDirection = "asc",
         string? preselectedId = null
     );
+    Task<IEnumerable<UserSummaryDto>> GetUsersWithLeadsSummaryAsync(Guid? projectId = null);
     Task<Lead?> ChangeLeadStatusAsync(Guid id, LeadStatus status, LeadCompletionReason? reason);
 
     // Método para generar código único de Lead
