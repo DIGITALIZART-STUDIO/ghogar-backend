@@ -48,6 +48,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<Referral> Referrals { get; set; } = null!;
 
+    public DbSet<SupervisorSalesAdvisor> SupervisorSalesAdvisors { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -112,6 +114,31 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
                 e.IsActive,
             });
             entity.HasIndex(e => e.ExpiresAt);
+        });
+
+        // Configuración de SupervisorSalesAdvisor
+        builder.Entity<SupervisorSalesAdvisor>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // Relación con Supervisor (User)
+            entity
+                .HasOne(e => e.Supervisor)
+                .WithMany()
+                .HasForeignKey(e => e.SupervisorId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Relación con SalesAdvisor (User)
+            entity
+                .HasOne(e => e.SalesAdvisor)
+                .WithMany()
+                .HasForeignKey(e => e.SalesAdvisorId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Índices para optimizar consultas
+            entity.HasIndex(e => e.SupervisorId);
+            entity.HasIndex(e => e.SalesAdvisorId);
+            entity.HasIndex(e => new { e.SupervisorId, e.SalesAdvisorId }).IsUnique();
         });
     }
 

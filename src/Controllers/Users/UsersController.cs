@@ -738,4 +738,263 @@ public class UsersController(
             <a href=""{businessUrl}"" class=""btn"">Acceder a la Plataforma</a>
         </div>";
     }
+
+    [EndpointSummary("Assign SalesAdvisor to Supervisor")]
+    [EndpointDescription("Assigns a SalesAdvisor to a Supervisor")]
+    [Authorize]
+    [HttpPost("assign-sales-advisor")]
+    public async Task<ActionResult> AssignSalesAdvisorToSupervisor(
+        [FromBody] AssignSalesAdvisorToSupervisorDTO dto
+    )
+    {
+        try
+        {
+            // Verificar que el supervisor existe y tiene el rol correcto
+            var supervisor = await userManager.FindByIdAsync(dto.SupervisorId.ToString());
+            if (supervisor == null)
+                return NotFound("Supervisor no encontrado");
+
+            var supervisorRoles = await userManager.GetRolesAsync(supervisor);
+            if (!supervisorRoles.Contains("Supervisor"))
+                return BadRequest("El usuario especificado no es un supervisor");
+
+            // Verificar que el SalesAdvisor existe y tiene el rol correcto
+            var salesAdvisor = await userManager.FindByIdAsync(dto.SalesAdvisorId.ToString());
+            if (salesAdvisor == null)
+                return NotFound("Asesor de ventas no encontrado");
+
+            var salesAdvisorRoles = await userManager.GetRolesAsync(salesAdvisor);
+            if (!salesAdvisorRoles.Contains("SalesAdvisor"))
+                return BadRequest("El usuario especificado no es un asesor de ventas");
+
+            // Verificar que no existe ya esta asignación
+            var existingAssignment = await db.SupervisorSalesAdvisors.FirstOrDefaultAsync(ssa =>
+                ssa.SupervisorId == dto.SupervisorId && ssa.SalesAdvisorId == dto.SalesAdvisorId
+            );
+
+            if (existingAssignment != null)
+            {
+                if (existingAssignment.IsActive)
+                    return BadRequest("Esta asignación ya existe y está activa");
+                else
+                {
+                    // Reactivar la asignación existente
+                    existingAssignment.IsActive = true;
+                    existingAssignment.ModifiedAt = DateTime.UtcNow;
+                    await db.SaveChangesAsync();
+                    return Ok(new { message = "Asignación reactivada exitosamente" });
+                }
+            }
+
+            // Crear nueva asignación
+            var assignment = new SupervisorSalesAdvisor
+            {
+                SupervisorId = dto.SupervisorId,
+                SalesAdvisorId = dto.SalesAdvisorId,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                ModifiedAt = DateTime.UtcNow,
+            };
+
+            db.SupervisorSalesAdvisors.Add(assignment);
+            await db.SaveChangesAsync();
+
+            logger.LogInformation(
+                "SalesAdvisor {SalesAdvisorId} asignado al Supervisor {SupervisorId}",
+                dto.SalesAdvisorId,
+                dto.SupervisorId
+            );
+
+            return Ok(new { message = "Asignación creada exitosamente" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al asignar SalesAdvisor al Supervisor");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    [EndpointSummary("Get SalesAdvisors assigned to Supervisor")]
+    [EndpointDescription("Gets all SalesAdvisors assigned to a specific Supervisor")]
+    [Authorize]
+    [HttpGet("supervisor/{supervisorId}/sales-advisors")]
+    public async Task<
+        ActionResult<IEnumerable<SalesAdvisorAssignmentDTO>>
+    > GetSalesAdvisorsBySupervisor(Guid supervisorId)
+    {
+        try
+        {
+            // Verificar que el supervisor existe
+            var supervisor = await userManager.FindByIdAsync(supervisorId.ToString());
+            if (supervisor == null)
+                return NotFound("Supervisor no encontrado");
+
+            var assignments = await db
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SupervisorId == supervisorId && ssa.IsActive
+                )
+                .Include(ssa => ssa.SalesAdvisor)
+                .Select(ssa => new SalesAdvisorAssignmentDTO
+                {
+                    Id = ssa.SalesAdvisor.Id,
+                    Name = ssa.SalesAdvisor.Name,
+                    Email = ssa.SalesAdvisor.Email!,
+                    PhoneNumber = ssa.SalesAdvisor.PhoneNumber ?? string.Empty,
+                    IsActive = ssa.SalesAdvisor.IsActive,
+                    CreatedAt = ssa.SalesAdvisor.CreatedAt,
+                    AssignedAt = ssa.CreatedAt,
+                })
+                .OrderBy(sa => sa.Name)
+                .ToListAsync();
+
+            logger.LogInformation(
+                "Obtenidos {Count} SalesAdvisors para el Supervisor {SupervisorId}",
+                assignments.Count,
+                supervisorId
+            );
+
+            return Ok(assignments);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Error al obtener SalesAdvisors del Supervisor {SupervisorId}",
+                supervisorId
+            );
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    [EndpointSummary("Remove SalesAdvisor from Supervisor")]
+    [EndpointDescription("Removes a SalesAdvisor assignment from a Supervisor")]
+    [Authorize]
+    [HttpDelete("supervisor/{supervisorId}/sales-advisor/{salesAdvisorId}")]
+    public async Task<ActionResult> RemoveSalesAdvisorFromSupervisor(
+        Guid supervisorId,
+        Guid salesAdvisorId
+    )
+    {
+        try
+        {
+            var assignment = await db.SupervisorSalesAdvisors.FirstOrDefaultAsync(ssa =>
+                ssa.SupervisorId == supervisorId && ssa.SalesAdvisorId == salesAdvisorId
+            );
+
+            if (assignment == null)
+                return NotFound("Asignación no encontrada");
+
+            if (!assignment.IsActive)
+                return BadRequest("La asignación ya está inactiva");
+
+            // Desactivar la asignación en lugar de eliminarla
+            assignment.IsActive = false;
+            assignment.ModifiedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            logger.LogInformation(
+                "SalesAdvisor {SalesAdvisorId} removido del Supervisor {SupervisorId}",
+                salesAdvisorId,
+                supervisorId
+            );
+
+            return Ok(new { message = "Asignación removida exitosamente" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al remover SalesAdvisor del Supervisor");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    [EndpointSummary("Get all Supervisor-SalesAdvisor assignments")]
+    [EndpointDescription("Gets all active Supervisor-SalesAdvisor assignments with pagination")]
+    [Authorize]
+    [HttpGet("supervisor-sales-advisor-assignments")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<SupervisorSalesAdvisorDTO>>
+    > GetSupervisorSalesAdvisorAssignments(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] string? orderBy = "CreatedAt desc"
+    )
+    {
+        try
+        {
+            var query = db
+                .SupervisorSalesAdvisors.Where(ssa => ssa.IsActive)
+                .Include(ssa => ssa.Supervisor)
+                .Include(ssa => ssa.SalesAdvisor)
+                .AsQueryable();
+
+            // Aplicar búsqueda
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var searchTerm = search.ToLower();
+                query = query.Where(ssa =>
+                    ssa.Supervisor.Name.ToLower().Contains(searchTerm)
+                    || ssa.Supervisor.Email!.ToLower().Contains(searchTerm)
+                    || ssa.SalesAdvisor.Name.ToLower().Contains(searchTerm)
+                    || ssa.SalesAdvisor.Email!.ToLower().Contains(searchTerm)
+                );
+            }
+
+            // Aplicar ordenamiento
+            query = orderBy?.ToLower() switch
+            {
+                "supervisor asc" => query.OrderBy(ssa => ssa.Supervisor.Name),
+                "supervisor desc" => query.OrderByDescending(ssa => ssa.Supervisor.Name),
+                "salesadvisor asc" => query.OrderBy(ssa => ssa.SalesAdvisor.Name),
+                "salesadvisor desc" => query.OrderByDescending(ssa => ssa.SalesAdvisor.Name),
+                "createdat asc" => query.OrderBy(ssa => ssa.CreatedAt),
+                "createdat desc" => query.OrderByDescending(ssa => ssa.CreatedAt),
+                _ => query.OrderByDescending(ssa => ssa.CreatedAt),
+            };
+
+            var totalCount = await query.CountAsync();
+            var assignments = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(ssa => new SupervisorSalesAdvisorDTO
+                {
+                    Id = ssa.Id,
+                    SupervisorId = ssa.SupervisorId,
+                    SalesAdvisorId = ssa.SalesAdvisorId,
+                    SupervisorName = ssa.Supervisor.Name,
+                    SupervisorEmail = ssa.Supervisor.Email!,
+                    SalesAdvisorName = ssa.SalesAdvisor.Name,
+                    SalesAdvisorEmail = ssa.SalesAdvisor.Email!,
+                    IsActive = ssa.IsActive,
+                    CreatedAt = ssa.CreatedAt,
+                    ModifiedAt = ssa.ModifiedAt,
+                })
+                .ToListAsync();
+
+            var paginatedResponse = new PaginatedResponseV2<SupervisorSalesAdvisorDTO>
+            {
+                Data = assignments,
+                Meta = new PaginationMetadata
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    Total = totalCount,
+                    TotalPages = (int)Math.Ceiling((double)totalCount / pageSize),
+                },
+            };
+
+            logger.LogInformation(
+                "Obtenidas {Count} asignaciones Supervisor-SalesAdvisor, página {Page}",
+                assignments.Count,
+                page
+            );
+
+            return Ok(paginatedResponse);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al obtener asignaciones Supervisor-SalesAdvisor");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
 }
