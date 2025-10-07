@@ -44,19 +44,47 @@ public class LeadsController : ControllerBase
         [FromQuery] string? orderBy = null
     )
     {
-        var result = await _leadService.GetAllLeadsPaginatedAsync(
-            page,
-            pageSize,
-            paginationService,
-            search,
-            status,
-            captureSource,
-            completionReason,
-            clientId,
-            userId,
-            orderBy
-        );
-        return Ok(result);
+        try
+        {
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            _logger.LogInformation(
+                "Obteniendo leads paginados para usuario: {UserId} con roles: {Roles}",
+                currentUserId,
+                string.Join(", ", currentUserRoles)
+            );
+
+            // Verificar si es Supervisor
+            var isSupervisor = currentUserRoles.Contains("Supervisor");
+
+            var result = await _leadService.GetAllLeadsPaginatedAsync(
+                page,
+                pageSize,
+                paginationService,
+                search,
+                status,
+                captureSource,
+                completionReason,
+                clientId,
+                userId,
+                orderBy,
+                currentUserId,
+                currentUserRoles,
+                isSupervisor
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener leads paginados");
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     // GET: api/leads/{id}
@@ -194,18 +222,32 @@ public class LeadsController : ControllerBase
         return Ok(leads);
     }
 
-    // GET: api/leads/assignedto/{userId}
-    [HttpGet("assignedto/{userId}")]
-    public async Task<ActionResult<IEnumerable<Lead>>> GetLeadsByAssignedTo(Guid userId)
+    // GET: api/leads/assignedto
+    [HttpGet("assignedto")]
+    public async Task<ActionResult<IEnumerable<Lead>>> GetLeadsByAssignedTo()
     {
-        var leads = await _leadService.GetLeadsByAssignedToIdAsync(userId);
-        return Ok(leads);
+        try
+        {
+            // Obtener el usuario actual usando UserExtensions
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
+            var leads = await _leadService.GetLeadsByAssignedToIdAsync(currentUserId);
+            return Ok(leads);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener leads del usuario actual");
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
-    // GET: api/leads/assignedto/{userId}/paginated
-    [HttpGet("assignedto/{userId}/paginated")]
+    // GET: api/leads/assignedto/paginated
+    [HttpGet("assignedto/paginated")]
     public async Task<ActionResult<PaginatedResponseV2<Lead>>> GetLeadsByAssignedToPaginated(
-        Guid userId,
         [FromServices] PaginationService paginationService,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
@@ -217,19 +259,47 @@ public class LeadsController : ControllerBase
         [FromQuery] string? orderBy = null
     )
     {
-        var result = await _leadService.GetLeadsByAssignedToIdPaginatedAsync(
-            userId,
-            page,
-            pageSize,
-            paginationService,
-            search,
-            status,
-            captureSource,
-            completionReason,
-            clientId,
-            orderBy
-        );
-        return Ok(result);
+        try
+        {
+            // Obtener el usuario actual y sus roles usando UserExtensions
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            _logger.LogInformation(
+                "Obteniendo leads paginados del usuario actual: {UserId} con roles: {Roles}",
+                currentUserId,
+                string.Join(", ", currentUserRoles)
+            );
+
+            // Verificar si es Supervisor
+            var isSupervisor = currentUserRoles.Contains("Supervisor");
+
+            var result = await _leadService.GetLeadsByAssignedToIdPaginatedAsync(
+                currentUserId,
+                page,
+                pageSize,
+                paginationService,
+                search,
+                status,
+                captureSource,
+                completionReason,
+                clientId,
+                orderBy,
+                currentUserId,
+                currentUserRoles,
+                isSupervisor
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener leads paginados del usuario actual");
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     // GET: api/leads/status/{status}
@@ -360,8 +430,38 @@ public class LeadsController : ControllerBase
         [FromQuery] Guid? projectId = null
     )
     {
-        var usersSummary = await _leadService.GetUsersWithLeadsSummaryAsync(projectId);
-        return Ok(usersSummary);
+        try
+        {
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            _logger.LogInformation(
+                "Obteniendo usuarios con leads summary para usuario: {UserId} con roles: {Roles}",
+                currentUserId,
+                string.Join(", ", currentUserRoles)
+            );
+
+            // Verificar si es Supervisor
+            var isSupervisor = currentUserRoles.Contains("Supervisor");
+
+            var usersSummary = await _leadService.GetUsersWithLeadsSummaryAsync(
+                projectId,
+                currentUserId,
+                currentUserRoles,
+                isSupervisor
+            );
+            return Ok(usersSummary);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener usuarios con leads summary");
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     [HttpGet("users/summary/paginated")]
@@ -408,8 +508,23 @@ public class LeadsController : ControllerBase
         Guid assignedToId
     )
     {
-        var leads = await _leadService.GetAssignedLeadsSummaryAsync(assignedToId);
-        return Ok(leads);
+        try
+        {
+            // Obtener el usuario actual usando UserExtensions
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
+            var leads = await _leadService.GetAssignedLeadsSummaryAsync(currentUserId);
+            return Ok(leads);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener resumen de leads del usuario actual");
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     [HttpGet("available-for-quotation/{excludeQuotationId:guid?}")]

@@ -78,11 +78,46 @@ public class LeadService : ILeadService
         LeadCompletionReason[]? completionReason = null,
         Guid? clientId = null,
         Guid? userId = null,
-        string? orderBy = null
+        string? orderBy = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     )
     {
         // Construir consulta base
         var query = _context.Leads.AsQueryable();
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar leads de sus SalesAdvisors asignados
+        if (isSupervisor && currentUserId.HasValue)
+        {
+            _logger.LogInformation(
+                "Aplicando filtro de supervisor para usuario: {UserId}",
+                currentUserId.Value
+            );
+
+            // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+            var assignedSalesAdvisorIds = await _context
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SupervisorId == currentUserId.Value && ssa.IsActive
+                )
+                .Select(ssa => ssa.SalesAdvisorId)
+                .ToListAsync();
+
+            _logger.LogInformation(
+                "Supervisor {SupervisorId} tiene {Count} SalesAdvisors asignados: {SalesAdvisorIds}",
+                currentUserId.Value,
+                assignedSalesAdvisorIds.Count,
+                string.Join(", ", assignedSalesAdvisorIds)
+            );
+
+            // Incluir también el propio ID del supervisor para que vea sus propios leads
+            assignedSalesAdvisorIds.Add(currentUserId.Value);
+
+            // Filtrar leads de los SalesAdvisors asignados O del propio supervisor
+            query = query.Where(l =>
+                l.AssignedToId.HasValue && assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
+            );
+        }
 
         // Aplicar filtro de búsqueda si se proporciona
         if (!string.IsNullOrWhiteSpace(search))
@@ -374,11 +409,61 @@ public class LeadService : ILeadService
         LeadCaptureSource[]? captureSource = null,
         LeadCompletionReason[]? completionReason = null,
         Guid? clientId = null,
-        string? orderBy = null
+        string? orderBy = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     )
     {
         // Construir consulta base con filtro de usuario asignado
         var query = _context.Leads.Where(l => l.IsActive && l.AssignedToId == userId);
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Verificar que el usuario consultado esté asignado al supervisor
+        if (isSupervisor && currentUserId.HasValue)
+        {
+            _logger.LogInformation(
+                "Verificando acceso de supervisor {SupervisorId} al usuario {TargetUserId}",
+                currentUserId.Value,
+                userId
+            );
+
+            // Verificar que el usuario consultado esté asignado a este supervisor
+            var isUserAssignedToSupervisor = await _context.SupervisorSalesAdvisors.AnyAsync(ssa =>
+                ssa.SupervisorId == currentUserId.Value
+                && ssa.SalesAdvisorId == userId
+                && ssa.IsActive
+            );
+
+            if (!isUserAssignedToSupervisor)
+            {
+                _logger.LogWarning(
+                    "Supervisor {SupervisorId} intentó acceder a leads del usuario {TargetUserId} que no está asignado",
+                    currentUserId.Value,
+                    userId
+                );
+
+                // Retornar resultado vacío si el supervisor no tiene acceso a este usuario
+                return new PaginatedResponseV2<Lead>
+                {
+                    Data = new List<Lead>(),
+                    Meta = new PaginationMetadata
+                    {
+                        Page = page,
+                        PageSize = pageSize,
+                        Total = 0,
+                        TotalPages = 0,
+                        HasPrevious = false,
+                        HasNext = false,
+                    },
+                };
+            }
+
+            _logger.LogInformation(
+                "Acceso autorizado: Supervisor {SupervisorId} puede ver leads del usuario {TargetUserId}",
+                currentUserId.Value,
+                userId
+            );
+        }
 
         // Aplicar filtro de búsqueda si se proporciona
         if (!string.IsNullOrWhiteSpace(search))
@@ -542,13 +627,42 @@ public class LeadService : ILeadService
     }
 
     public async Task<IEnumerable<UserSummaryDto>> GetUsersWithLeadsSummaryAsync(
-        Guid? projectId = null
+        Guid? projectId = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     )
     {
         var query = _context
             .Users.Where(u => u.IsActive)
             .Where(u => _context.Leads.Any(l => l.AssignedToId == u.Id))
             .AsQueryable();
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar usuarios asignados al supervisor
+        if (isSupervisor && currentUserId.HasValue)
+        {
+            _logger.LogInformation(
+                "Aplicando filtro de supervisor en GetUsersWithLeadsSummaryAsync para usuario: {UserId}",
+                currentUserId.Value
+            );
+
+            // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+            var assignedSalesAdvisorIds = await _context
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SupervisorId == currentUserId.Value && ssa.IsActive
+                )
+                .Select(ssa => ssa.SalesAdvisorId)
+                .ToListAsync();
+
+            _logger.LogInformation(
+                "Supervisor {SupervisorId} tiene {Count} SalesAdvisors asignados en summary",
+                currentUserId.Value,
+                assignedSalesAdvisorIds.Count
+            );
+
+            // Filtrar usuarios que están asignados a este supervisor
+            query = query.Where(u => assignedSalesAdvisorIds.Contains(u.Id));
+        }
 
         // Aplicar filtro por proyecto si se especifica
         if (projectId.HasValue)

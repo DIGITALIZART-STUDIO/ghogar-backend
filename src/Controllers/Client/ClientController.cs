@@ -47,8 +47,59 @@ public class ClientsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<GestionHogar.Model.Client>>> GetClients()
     {
-        var clients = await _clientService.GetAllClientsAsync();
-        return Ok(clients);
+        try
+        {
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            // Verificar si es Supervisor
+            var isSupervisor = currentUserRoles.Contains("Supervisor");
+
+            // Construir consulta base
+            var query = _context.Clients.AsQueryable();
+
+            // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar clientes que tienen leads asignados a sus SalesAdvisors o al propio supervisor
+            if (isSupervisor)
+            {
+                // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+                var assignedSalesAdvisorIds = await _context
+                    .SupervisorSalesAdvisors.Where(ssa =>
+                        ssa.SupervisorId == currentUserId && ssa.IsActive
+                    )
+                    .Select(ssa => ssa.SalesAdvisorId)
+                    .ToListAsync();
+
+                // Incluir también el propio ID del supervisor para que vea sus propios clientes
+                assignedSalesAdvisorIds.Add(currentUserId);
+
+                // Filtrar clientes que tienen leads asignados a estos usuarios
+                query = query.Where(c =>
+                    _context.Leads.Any(l =>
+                        l.ClientId == c.Id
+                        && l.IsActive
+                        && (
+                            l.AssignedToId.HasValue
+                            && (
+                                assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
+                                || l.AssignedToId.Value == currentUserId
+                            )
+                        )
+                    )
+                );
+            }
+
+            var clients = await query.ToListAsync();
+            return Ok(clients);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
+        }
     }
 
     [HttpGet("paginated")]
@@ -64,16 +115,37 @@ public class ClientsController : ControllerBase
         [FromQuery] string? orderBy = null
     )
     {
-        var result = await _clientService.GetAllClientsPaginatedAsync(
-            page,
-            pageSize,
-            paginationService,
-            search,
-            isActive,
-            type,
-            orderBy
-        );
-        return Ok(result);
+        try
+        {
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            // Verificar si es Supervisor
+            var isSupervisor = currentUserRoles.Contains("Supervisor");
+
+            var result = await _clientService.GetAllClientsPaginatedAsync(
+                page,
+                pageSize,
+                paginationService,
+                search,
+                isActive,
+                type,
+                orderBy,
+                currentUserId,
+                currentUserRoles,
+                isSupervisor
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
+        }
     }
 
     // GET: api/clients/{id}
@@ -328,14 +400,26 @@ public class ClientsController : ControllerBase
         try
         {
             Guid? currentUserId = null;
+            Guid? supervisorId = null;
+            var currentUserRoles = new List<string>();
+
             if (useCurrentUser)
             {
                 currentUserId = User.GetCurrentUserIdOrThrow();
+                supervisorId = currentUserId;
+                currentUserRoles = User.GetCurrentUserRoles().ToList();
             }
+
+            // Verificar si es Supervisor
+            var isSupervisor = currentUserRoles.Contains("Supervisor");
 
             var clientsSummary = await _clientService.GetClientsByCurrentUserSummaryAsync(
                 currentUserId,
-                projectId
+                projectId,
+                supervisorId,
+                currentUserRoles,
+                isSupervisor,
+                useCurrentUser
             );
             return Ok(clientsSummary);
         }
@@ -343,9 +427,9 @@ public class ClientsController : ControllerBase
         {
             return Unauthorized("No se pudo identificar al usuario actual");
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return StatusCode(500, "Error interno del servidor");
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
         }
     }
 
@@ -370,8 +454,45 @@ public class ClientsController : ControllerBase
             if (pageSize < 1 || pageSize > 100)
                 pageSize = 10;
 
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            // Verificar si es Supervisor
+            var isSupervisor = currentUserRoles.Contains("Supervisor");
+
             // Construir consulta base
             var query = _context.Clients.AsQueryable();
+
+            // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar clientes que tienen leads asignados a sus SalesAdvisors o al propio supervisor
+            if (isSupervisor)
+            {
+                // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+                var assignedSalesAdvisorIds = await _context
+                    .SupervisorSalesAdvisors.Where(ssa =>
+                        ssa.SupervisorId == currentUserId && ssa.IsActive
+                    )
+                    .Select(ssa => ssa.SalesAdvisorId)
+                    .ToListAsync();
+
+                // Incluir también el propio ID del supervisor para que vea sus propios clientes
+                assignedSalesAdvisorIds.Add(currentUserId);
+
+                // Filtrar clientes que tienen leads asignados a estos usuarios
+                query = query.Where(c =>
+                    _context.Leads.Any(l =>
+                        l.ClientId == c.Id
+                        && l.IsActive
+                        && (
+                            l.AssignedToId.HasValue
+                            && (
+                                assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
+                                || l.AssignedToId.Value == currentUserId
+                            )
+                        )
+                    )
+                );
+            }
 
             // Lógica para preselectedId - incluir en la query base
             Guid? preselectedGuid = null;

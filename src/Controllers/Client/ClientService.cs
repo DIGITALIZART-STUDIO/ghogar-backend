@@ -25,11 +25,44 @@ public class ClientService : IClientService
         string? search = null,
         bool[]? isActive = null,
         ClientType[]? type = null,
-        string? orderBy = null
+        string? orderBy = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     )
     {
         // Construir consulta base
         var query = _context.Clients.AsQueryable();
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar clientes que tienen leads asignados a sus SalesAdvisors o al propio supervisor
+        if (isSupervisor && currentUserId.HasValue)
+        {
+            // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+            var assignedSalesAdvisorIds = await _context
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SupervisorId == currentUserId.Value && ssa.IsActive
+                )
+                .Select(ssa => ssa.SalesAdvisorId)
+                .ToListAsync();
+
+            // Incluir también el propio ID del supervisor para que vea sus propios clientes
+            assignedSalesAdvisorIds.Add(currentUserId.Value);
+
+            // Filtrar clientes que tienen leads asignados a estos usuarios
+            query = query.Where(c =>
+                _context.Leads.Any(l =>
+                    l.ClientId == c.Id
+                    && l.IsActive
+                    && (
+                        l.AssignedToId.HasValue
+                        && (
+                            assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
+                            || l.AssignedToId.Value == currentUserId.Value
+                        )
+                    )
+                )
+            );
+        }
 
         // Aplicar filtro de búsqueda si se proporciona
         if (!string.IsNullOrWhiteSpace(search))
@@ -367,13 +400,43 @@ public class ClientService : IClientService
 
     public async Task<IEnumerable<ClientSummaryDto>> GetClientsByCurrentUserSummaryAsync(
         Guid? currentUserId = null,
-        Guid? projectId = null
+        Guid? projectId = null,
+        Guid? supervisorId = null,
+        IList<string>? supervisorRoles = null,
+        bool isSupervisor = false,
+        bool useCurrentUser = true
     )
     {
         var query = _context.Clients.Where(c => c.IsActive).AsQueryable();
 
-        // Aplicar filtro por usuario si se especifica
-        if (currentUserId.HasValue)
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo cuando useCurrentUser=false
+        if (!useCurrentUser && isSupervisor && supervisorId.HasValue)
+        {
+            // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+            var assignedSalesAdvisorIds = await _context
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SupervisorId == supervisorId.Value && ssa.IsActive
+                )
+                .Select(ssa => ssa.SalesAdvisorId)
+                .ToListAsync();
+
+            // Incluir también el propio ID del supervisor para que vea sus propios clientes
+            assignedSalesAdvisorIds.Add(supervisorId.Value);
+
+            // Filtrar clientes que tienen leads asignados a estos usuarios
+            query = query.Where(c =>
+                _context.Leads.Any(l =>
+                    l.ClientId == c.Id
+                    && l.IsActive
+                    && (
+                        l.AssignedToId.HasValue
+                        && assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
+                    )
+                )
+            );
+        }
+        // Si useCurrentUser=true o no es supervisor, aplicar el filtro normal (solo sus propios clientes)
+        else if (currentUserId.HasValue)
         {
             query = query.Where(c =>
                 _context.Leads.Any(l => l.ClientId == c.Id && l.AssignedToId == currentUserId.Value)
@@ -383,7 +446,32 @@ public class ClientService : IClientService
         // Aplicar filtro por proyecto si se especifica
         if (projectId.HasValue)
         {
-            if (currentUserId.HasValue)
+            if (!useCurrentUser && isSupervisor && supervisorId.HasValue)
+            {
+                // Para supervisores con useCurrentUser=false: incluir leads de sus SalesAdvisors asignados + propios
+                var assignedSalesAdvisorIds = await _context
+                    .SupervisorSalesAdvisors.Where(ssa =>
+                        ssa.SupervisorId == supervisorId.Value && ssa.IsActive
+                    )
+                    .Select(ssa => ssa.SalesAdvisorId)
+                    .ToListAsync();
+
+                // Incluir también el propio ID del supervisor
+                assignedSalesAdvisorIds.Add(supervisorId.Value);
+
+                query = query.Where(c =>
+                    _context.Leads.Any(l =>
+                        l.ClientId == c.Id
+                        && l.ProjectId == projectId.Value
+                        && l.IsActive
+                        && (
+                            l.AssignedToId.HasValue
+                            && assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
+                        )
+                    )
+                );
+            }
+            else if (currentUserId.HasValue)
             {
                 query = query.Where(c =>
                     _context.Leads.Any(l =>

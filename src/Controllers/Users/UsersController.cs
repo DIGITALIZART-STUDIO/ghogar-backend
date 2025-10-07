@@ -814,6 +814,151 @@ public class UsersController(
         }
     }
 
+    [EndpointSummary("Assign Multiple SalesAdvisors to Supervisor")]
+    [EndpointDescription("Assigns multiple SalesAdvisors to a specific Supervisor")]
+    [Authorize]
+    [HttpPost("supervisor/assign-multiple")]
+    public async Task<ActionResult> AssignMultipleSalesAdvisorsToSupervisor(
+        AssignMultipleSalesAdvisorsToSupervisorDTO dto
+    )
+    {
+        try
+        {
+            // Verificar que el supervisor existe y tiene el rol correcto
+            var supervisor = await userManager.FindByIdAsync(dto.SupervisorId.ToString());
+            if (supervisor == null)
+                return NotFound("Supervisor no encontrado");
+
+            var supervisorRoles = await userManager.GetRolesAsync(supervisor);
+            if (!supervisorRoles.Contains("Supervisor"))
+                return BadRequest("El usuario especificado no es un supervisor");
+
+            var results = new List<object>();
+            var errors = new List<string>();
+
+            foreach (var salesAdvisorId in dto.SalesAdvisorIds)
+            {
+                try
+                {
+                    // Verificar que el SalesAdvisor existe y tiene el rol correcto
+                    var salesAdvisor = await userManager.FindByIdAsync(salesAdvisorId.ToString());
+                    if (salesAdvisor == null)
+                    {
+                        errors.Add($"Asesor de ventas con ID {salesAdvisorId} no encontrado");
+                        continue;
+                    }
+
+                    var salesAdvisorRoles = await userManager.GetRolesAsync(salesAdvisor);
+                    if (!salesAdvisorRoles.Contains("SalesAdvisor"))
+                    {
+                        errors.Add($"El usuario {salesAdvisor.UserName} no es un asesor de ventas");
+                        continue;
+                    }
+
+                    // Verificar que no existe ya esta asignación
+                    var existingAssignment = await db.SupervisorSalesAdvisors.FirstOrDefaultAsync(
+                        ssa =>
+                            ssa.SupervisorId == dto.SupervisorId
+                            && ssa.SalesAdvisorId == salesAdvisorId
+                    );
+
+                    if (existingAssignment != null)
+                    {
+                        if (existingAssignment.IsActive)
+                        {
+                            results.Add(
+                                new
+                                {
+                                    salesAdvisorId,
+                                    salesAdvisorName = salesAdvisor.UserName,
+                                    status = "already_assigned",
+                                    message = "Ya estaba asignado",
+                                }
+                            );
+                        }
+                        else
+                        {
+                            // Reactivar la asignación existente
+                            existingAssignment.IsActive = true;
+                            existingAssignment.ModifiedAt = DateTime.UtcNow;
+                            results.Add(
+                                new
+                                {
+                                    salesAdvisorId,
+                                    salesAdvisorName = salesAdvisor.UserName,
+                                    status = "reactivated",
+                                    message = "Asignación reactivada",
+                                }
+                            );
+                        }
+                    }
+                    else
+                    {
+                        // Crear nueva asignación
+                        var assignment = new SupervisorSalesAdvisor
+                        {
+                            SupervisorId = dto.SupervisorId,
+                            SalesAdvisorId = salesAdvisorId,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow,
+                            ModifiedAt = DateTime.UtcNow,
+                        };
+
+                        db.SupervisorSalesAdvisors.Add(assignment);
+                        results.Add(
+                            new
+                            {
+                                salesAdvisorId,
+                                salesAdvisorName = salesAdvisor.UserName,
+                                status = "assigned",
+                                message = "Asignado exitosamente",
+                            }
+                        );
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(
+                        ex,
+                        "Error al procesar SalesAdvisor {SalesAdvisorId}",
+                        salesAdvisorId
+                    );
+                    errors.Add($"Error al procesar asesor {salesAdvisorId}: {ex.Message}");
+                }
+            }
+
+            await db.SaveChangesAsync();
+
+            logger.LogInformation(
+                "Procesados {Count} SalesAdvisors para el Supervisor {SupervisorId}. Exitosos: {SuccessCount}, Errores: {ErrorCount}",
+                dto.SalesAdvisorIds.Count,
+                dto.SupervisorId,
+                results.Count,
+                errors.Count
+            );
+
+            return Ok(
+                new
+                {
+                    message = "Procesamiento completado",
+                    results,
+                    errors,
+                    summary = new
+                    {
+                        total = dto.SalesAdvisorIds.Count,
+                        successful = results.Count,
+                        failed = errors.Count,
+                    },
+                }
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al asignar múltiples SalesAdvisors al Supervisor");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     [EndpointSummary("Get SalesAdvisors assigned to Supervisor")]
     [EndpointDescription("Gets all SalesAdvisors assigned to a specific Supervisor")]
     [Authorize]

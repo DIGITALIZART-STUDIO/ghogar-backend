@@ -79,6 +79,16 @@ public class AssignSalesAdvisorToSupervisorDTO
     public required Guid SalesAdvisorId { get; set; }
 }
 
+public class AssignMultipleSalesAdvisorsToSupervisorDTO
+{
+    [Required(ErrorMessage = "El ID del supervisor es requerido")]
+    public required Guid SupervisorId { get; set; }
+
+    [Required(ErrorMessage = "Al menos un ID de asesor de ventas es requerido")]
+    [MinLength(1, ErrorMessage = "Debe proporcionar al menos un asesor de ventas")]
+    public required List<Guid> SalesAdvisorIds { get; set; }
+}
+
 public class SupervisorSalesAdvisorDTO
 {
     public Guid Id { get; set; }
