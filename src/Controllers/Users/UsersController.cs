@@ -485,8 +485,10 @@ public class UsersController(
         try
         {
             var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
             var users = await userHigherRankService.GetUsersWithHigherRankAsync(
                 currentUserId,
+                currentUserRoles,
                 name,
                 limit
             );
@@ -536,8 +538,10 @@ public class UsersController(
                 pageSize = 10;
 
             var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
             var result = await userHigherRankService.GetUsersWithHigherRankPaginatedAsync(
                 currentUserId,
+                currentUserRoles,
                 page,
                 pageSize,
                 search,
