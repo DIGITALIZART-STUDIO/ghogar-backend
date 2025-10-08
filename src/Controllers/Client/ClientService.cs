@@ -409,8 +409,8 @@ public class ClientService : IClientService
     {
         var query = _context.Clients.Where(c => c.IsActive).AsQueryable();
 
-        // FILTRO ESPECIAL PARA SUPERVISORES: Solo cuando useCurrentUser=false
-        if (!useCurrentUser && isSupervisor && supervisorId.HasValue)
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo cuando useCurrentUser=false y se proporciona supervisorId
+        if (!useCurrentUser && supervisorId.HasValue)
         {
             // Obtener los IDs de los SalesAdvisors asignados a este supervisor
             var assignedSalesAdvisorIds = await _context
@@ -423,7 +423,7 @@ public class ClientService : IClientService
             // Incluir también el propio ID del supervisor para que vea sus propios clientes
             assignedSalesAdvisorIds.Add(supervisorId.Value);
 
-            // Filtrar clientes que tienen leads asignados a estos usuarios
+            // Filtrar clientes que tienen leads asignados a estos usuarios (supervisor + sus SalesAdvisors)
             query = query.Where(c =>
                 _context.Leads.Any(l =>
                     l.ClientId == c.Id
@@ -435,8 +435,8 @@ public class ClientService : IClientService
                 )
             );
         }
-        // Si useCurrentUser=true o no es supervisor, aplicar el filtro normal (solo sus propios clientes)
-        else if (currentUserId.HasValue)
+        // Si useCurrentUser=true, aplicar el filtro normal (solo sus propios clientes)
+        else if (useCurrentUser && currentUserId.HasValue)
         {
             query = query.Where(c =>
                 _context.Leads.Any(l => l.ClientId == c.Id && l.AssignedToId == currentUserId.Value)
@@ -446,7 +446,7 @@ public class ClientService : IClientService
         // Aplicar filtro por proyecto si se especifica
         if (projectId.HasValue)
         {
-            if (!useCurrentUser && isSupervisor && supervisorId.HasValue)
+            if (!useCurrentUser && supervisorId.HasValue)
             {
                 // Para supervisores con useCurrentUser=false: incluir leads de sus SalesAdvisors asignados + propios
                 var assignedSalesAdvisorIds = await _context
@@ -471,7 +471,7 @@ public class ClientService : IClientService
                     )
                 );
             }
-            else if (currentUserId.HasValue)
+            else if (useCurrentUser && currentUserId.HasValue)
             {
                 query = query.Where(c =>
                     _context.Leads.Any(l =>
