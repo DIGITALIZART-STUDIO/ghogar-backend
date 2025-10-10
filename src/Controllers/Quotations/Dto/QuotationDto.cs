@@ -11,6 +11,7 @@ public class QuotationDTO
 
     // Lead information
     public Guid LeadId { get; set; }
+    public Guid ClientId { get; set; }
     public string LeadClientName { get; set; } = string.Empty;
 
     // Lot information (actual)
@@ -66,6 +67,7 @@ public class QuotationDTO
             Id = quotation.Id,
             Code = quotation.Code,
             LeadId = quotation.LeadId,
+            ClientId = quotation.Lead?.ClientId ?? Guid.Empty,
             LeadClientName = quotation.Lead?.Client?.Name ?? "Cliente no especificado",
             LotId = quotation.LotId,
             ProjectId = projectId, // **NUEVO: ID del proyecto**

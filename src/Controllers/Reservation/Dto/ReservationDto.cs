@@ -21,6 +21,7 @@ public class ReservationDto
     public DateTime ExpiresAt { get; set; }
     public bool Notified { get; set; }
     public string? Schedule { get; set; }
+    public string? CoOwners { get; set; } // JSON con los copropietarios
     public DateTime CreatedAt { get; set; }
     public DateTime ModifiedAt { get; set; }
 }

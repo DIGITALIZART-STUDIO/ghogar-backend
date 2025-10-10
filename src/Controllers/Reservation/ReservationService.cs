@@ -54,6 +54,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
@@ -372,6 +373,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
                 PaymentCount = r.Payments.Count(p => p.Paid), // Solo pagos realizados
@@ -424,6 +426,7 @@ public class ReservationService : IReservationService
             ExpiresAt = r.ExpiresAt,
             Notified = r.Notified,
             Schedule = r.Schedule,
+            CoOwners = r.CoOwners,
             CreatedAt = r.CreatedAt,
             ModifiedAt = r.ModifiedAt,
             PaymentCount = r.Payments.Count(p => p.Paid),
@@ -460,6 +463,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
@@ -512,6 +516,7 @@ public class ReservationService : IReservationService
             ExchangeRate = reservationDto.ExchangeRate,
             ExpiresAt = reservationDto.ExpiresAt,
             Schedule = reservationDto.Schedule,
+            CoOwners = reservationDto.CoOwners,
             Status = ReservationStatus.ISSUED,
             Notified = false,
             Client = client,
@@ -734,6 +739,7 @@ public class ReservationService : IReservationService
                 : DateTime.SpecifyKind(reservationDto.ExpiresAt, DateTimeKind.Utc);
         reservation.Notified = reservationDto.Notified;
         reservation.Schedule = reservationDto.Schedule;
+        reservation.CoOwners = reservationDto.CoOwners;
         reservation.ModifiedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -756,6 +762,7 @@ public class ReservationService : IReservationService
             ExpiresAt = reservation.ExpiresAt,
             Notified = reservation.Notified,
             Schedule = reservation.Schedule,
+            CoOwners = reservation.CoOwners,
             CreatedAt = reservation.CreatedAt,
             ModifiedAt = reservation.ModifiedAt,
         };
@@ -799,6 +806,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
@@ -830,6 +838,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
@@ -841,6 +850,7 @@ public class ReservationService : IReservationService
         var reservation = await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
 
         if (
@@ -852,6 +862,30 @@ public class ReservationService : IReservationService
         var previousStatus = reservation.Status;
         reservation.Status = statusEnum;
         reservation.ModifiedAt = DateTime.UtcNow;
+
+        // **NUEVO: Actualizar estado del lote según el cambio de estado de la reserva**
+        if (reservation.Quotation?.Lot != null)
+        {
+            switch (statusEnum)
+            {
+                case ReservationStatus.CANCELED:
+                    // Si se cancela la reserva, el lote pasa a reservado
+                    reservation.Quotation.Lot.Status = LotStatus.Reserved;
+                    break;
+
+                case ReservationStatus.ANULATED:
+                    // Si se anula la reserva, el lote pasa a disponible
+                    reservation.Quotation.Lot.Status = LotStatus.Available;
+                    break;
+
+                case ReservationStatus.ISSUED:
+                    // Si vuelve a emitida desde cancelada/anulada, el lote pasa a cotizado
+                    reservation.Quotation.Lot.Status = LotStatus.Quoted;
+                    break;
+            }
+
+            reservation.Quotation.Lot.ModifiedAt = DateTime.UtcNow;
+        }
 
         // Actualiza el estado de validación de contrato según el nuevo estado
         if (statusEnum == ReservationStatus.CANCELED)
@@ -889,6 +923,7 @@ public class ReservationService : IReservationService
             ExpiresAt = reservation.ExpiresAt,
             Notified = reservation.Notified,
             Schedule = reservation.Schedule,
+            CoOwners = reservation.CoOwners,
             CreatedAt = reservation.CreatedAt,
             ModifiedAt = reservation.ModifiedAt,
         };

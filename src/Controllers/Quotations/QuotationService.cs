@@ -804,30 +804,6 @@ public class QuotationService(
         quotation.Status = statusEnum;
         quotation.ModifiedAt = DateTime.UtcNow;
 
-        // **NUEVO: Actualizar estado del lote según el cambio de estado de la cotización**
-        if (quotation.Lot != null)
-        {
-            switch (statusEnum)
-            {
-                case QuotationStatus.ACCEPTED:
-                    // Si se acepta la cotización, el lote pasa a reservado
-                    quotation.Lot.Status = LotStatus.Reserved;
-                    break;
-
-                case QuotationStatus.CANCELED:
-                    // Si se cancela la cotización, el lote vuelve a disponible
-                    quotation.Lot.Status = LotStatus.Available;
-                    break;
-
-                case QuotationStatus.ISSUED:
-                    // Si vuelve a emitida desde cancelada, el lote pasa a cotizado
-                    quotation.Lot.Status = LotStatus.Quoted;
-                    break;
-            }
-
-            quotation.Lot.ModifiedAt = DateTime.UtcNow;
-        }
-
         await _context.SaveChangesAsync();
 
         // Recargar la cotización con relaciones incluidas
