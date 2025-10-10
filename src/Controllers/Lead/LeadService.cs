@@ -694,7 +694,9 @@ public class LeadService : ILeadService
         string? search = null,
         string? orderBy = null,
         string? orderDirection = "asc",
-        string? preselectedId = null
+        string? preselectedId = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null
     )
     {
         // Diccionario para traducción de roles de español a inglés
@@ -722,6 +724,50 @@ public class LeadService : ILeadService
                     select role.Name
                 ).ToList(),
             });
+
+        // FILTRO ESPECIAL PARA SALESADVISOR Y SUPERVISOR
+        if (currentUserRoles != null && currentUserId.HasValue)
+        {
+            if (currentUserRoles.Contains("SalesAdvisor"))
+            {
+                _logger.LogInformation(
+                    "Usuario es SalesAdvisor, aplicando filtro para mostrar solo a sí mismo: {UserId}",
+                    currentUserId.Value
+                );
+
+                // SalesAdvisor solo ve a sí mismo
+                query = query.Where(u => u.Id == currentUserId.Value);
+            }
+            else if (currentUserRoles.Contains("Supervisor"))
+            {
+                _logger.LogInformation(
+                    "Usuario es Supervisor, aplicando filtro para mostrar a sí mismo y sus SalesAdvisors asignados: {UserId}",
+                    currentUserId.Value
+                );
+
+                // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+                var assignedSalesAdvisorIds = await _context
+                    .SupervisorSalesAdvisors.Where(ssa =>
+                        ssa.SupervisorId == currentUserId.Value && ssa.IsActive
+                    )
+                    .Select(ssa => ssa.SalesAdvisorId)
+                    .ToListAsync();
+
+                // Incluir también el propio ID del supervisor
+                assignedSalesAdvisorIds.Add(currentUserId.Value);
+
+                _logger.LogInformation(
+                    "Supervisor {SupervisorId} tiene {Count} SalesAdvisors asignados: {SalesAdvisorIds}",
+                    currentUserId.Value,
+                    assignedSalesAdvisorIds.Count,
+                    string.Join(", ", assignedSalesAdvisorIds)
+                );
+
+                // Filtrar usuarios que están asignados a este supervisor + el supervisor mismo
+                query = query.Where(u => assignedSalesAdvisorIds.Contains(u.Id));
+            }
+            // Para otros roles (Admin, Manager, etc.) no se aplica filtro - ven todos los usuarios
+        }
 
         // Lógica para preselectedId - incluir en la query base
         Guid? preselectedLeadGuid = null;

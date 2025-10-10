@@ -1338,13 +1338,24 @@ public class ClientsController : ControllerBase
     {
         try
         {
-            var excelBytes = await _excelTemplateService.GenerateClientImportTemplateAsync();
+            // Obtener el usuario actual y sus roles usando UserExtensions
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            var excelBytes = await _excelTemplateService.GenerateClientImportTemplateAsync(
+                currentUserId,
+                currentUserRoles
+            );
 
             return File(
                 excelBytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "PlantillaImportacionClientes.xlsx"
             );
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
         }
         catch (Exception ex)
         {

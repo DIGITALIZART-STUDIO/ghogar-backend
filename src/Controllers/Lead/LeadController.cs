@@ -482,16 +482,32 @@ public class LeadsController : ControllerBase
             if (pageSize < 1 || pageSize > 100)
                 pageSize = 10;
 
+            // Obtener el usuario actual y sus roles usando UserExtensions
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            _logger.LogInformation(
+                "Obteniendo usuarios summary paginados para usuario: {UserId} con roles: {Roles}",
+                currentUserId,
+                string.Join(", ", currentUserRoles)
+            );
+
             var result = await _leadService.GetUsersSummaryPaginatedAsync(
                 page,
                 pageSize,
                 search,
                 orderBy,
                 orderDirection,
-                preselectedId
+                preselectedId,
+                currentUserId,
+                currentUserRoles
             );
 
             return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
         }
         catch (Exception ex)
         {
@@ -503,10 +519,8 @@ public class LeadsController : ControllerBase
         }
     }
 
-    [HttpGet("assigned/{assignedToId:guid}/summary")]
-    public async Task<ActionResult<IEnumerable<LeadSummaryDto>>> GetAssignedLeadsSummary(
-        Guid assignedToId
-    )
+    [HttpGet("assigned/summary")]
+    public async Task<ActionResult<IEnumerable<LeadSummaryDto>>> GetAssignedLeadsSummary()
     {
         try
         {

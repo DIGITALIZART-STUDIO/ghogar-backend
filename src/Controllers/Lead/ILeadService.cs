@@ -68,7 +68,9 @@ public interface ILeadService
         string? search = null,
         string? orderBy = null,
         string? orderDirection = "asc",
-        string? preselectedId = null
+        string? preselectedId = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null
     );
     Task<IEnumerable<UserSummaryDto>> GetUsersWithLeadsSummaryAsync(
         Guid? projectId = null,

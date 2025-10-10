@@ -10,7 +10,10 @@ namespace GestionHogar.Services
 {
     public interface IExcelTemplateService
     {
-        Task<byte[]> GenerateClientImportTemplateAsync();
+        Task<byte[]> GenerateClientImportTemplateAsync(
+            Guid? currentUserId = null,
+            IList<string>? currentUserRoles = null
+        );
     }
 
     public class ExcelTemplateService : IExcelTemplateService
@@ -24,7 +27,10 @@ namespace GestionHogar.Services
             _leadService = leadService;
         }
 
-        public async Task<byte[]> GenerateClientImportTemplateAsync()
+        public async Task<byte[]> GenerateClientImportTemplateAsync(
+            Guid? currentUserId = null,
+            IList<string>? currentUserRoles = null
+        )
         {
             // Crear stream en memoria para el documento Excel
             var stream = new MemoryStream();
@@ -144,8 +150,46 @@ namespace GestionHogar.Services
                     }
                 );
 
-                // Obtener la lista de usuarios
-                var users = await _leadService.GetUsersSummaryAsync();
+                // Obtener la lista de usuarios con filtrado basado en roles
+                IEnumerable<UserSummaryDto> users;
+                if (currentUserRoles != null && currentUserId.HasValue)
+                {
+                    if (currentUserRoles.Contains("SalesAdvisor"))
+                    {
+                        // SalesAdvisor solo ve a sí mismo
+                        users = await _leadService.GetUsersSummaryAsync();
+                        users = users.Where(u => u.Id == currentUserId.Value);
+                    }
+                    else if (currentUserRoles.Contains("Supervisor"))
+                    {
+                        // Supervisor ve a sí mismo + sus SalesAdvisors asignados
+                        var allUsers = await _leadService.GetUsersSummaryAsync();
+
+                        // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+                        var assignedSalesAdvisorIds = await _context
+                            .SupervisorSalesAdvisors.Where(ssa =>
+                                ssa.SupervisorId == currentUserId.Value && ssa.IsActive
+                            )
+                            .Select(ssa => ssa.SalesAdvisorId)
+                            .ToListAsync();
+
+                        // Incluir también el propio ID del supervisor
+                        assignedSalesAdvisorIds.Add(currentUserId.Value);
+
+                        // Filtrar usuarios que están asignados a este supervisor + el supervisor mismo
+                        users = allUsers.Where(u => assignedSalesAdvisorIds.Contains(u.Id));
+                    }
+                    else
+                    {
+                        // Para otros roles (Admin, Manager, etc.) - ver todos los usuarios
+                        users = await _leadService.GetUsersSummaryAsync();
+                    }
+                }
+                else
+                {
+                    // Si no se proporcionan roles, usar comportamiento por defecto (todos los usuarios)
+                    users = await _leadService.GetUsersSummaryAsync();
+                }
 
                 // Obtener proyectos activos
                 var projects = await _context.Projects.Where(p => p.IsActive).ToListAsync();
