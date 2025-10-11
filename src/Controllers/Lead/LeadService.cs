@@ -71,11 +71,182 @@ public class LeadService : ILeadService
     public async Task<PaginatedResponseV2<Lead>> GetAllLeadsPaginatedAsync(
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        LeadStatus[]? status = null,
+        LeadCaptureSource[]? captureSource = null,
+        LeadCompletionReason[]? completionReason = null,
+        Guid? clientId = null,
+        Guid? userId = null,
+        string? orderBy = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     )
     {
-        var query = _context
-            .Leads.OrderByDescending(l => l.CreatedAt)
+        // Construir consulta base
+        var query = _context.Leads.AsQueryable();
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar leads de sus SalesAdvisors asignados
+        if (isSupervisor && currentUserId.HasValue)
+        {
+            _logger.LogInformation(
+                "Aplicando filtro de supervisor para usuario: {UserId}",
+                currentUserId.Value
+            );
+
+            // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+            var assignedSalesAdvisorIds = await _context
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SupervisorId == currentUserId.Value && ssa.IsActive
+                )
+                .Select(ssa => ssa.SalesAdvisorId)
+                .ToListAsync();
+
+            _logger.LogInformation(
+                "Supervisor {SupervisorId} tiene {Count} SalesAdvisors asignados: {SalesAdvisorIds}",
+                currentUserId.Value,
+                assignedSalesAdvisorIds.Count,
+                string.Join(", ", assignedSalesAdvisorIds)
+            );
+
+            // Incluir también el propio ID del supervisor para que vea sus propios leads
+            assignedSalesAdvisorIds.Add(currentUserId.Value);
+
+            // Filtrar leads de los SalesAdvisors asignados O del propio supervisor
+            query = query.Where(l =>
+                l.AssignedToId.HasValue && assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
+            );
+        }
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(l =>
+                (l.Code != null && l.Code.ToLower().Contains(searchTerm))
+                || (
+                    l.Client != null
+                    && l.Client.Name != null
+                    && l.Client.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.Email != null
+                    && l.Client.Email.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.PhoneNumber != null
+                    && l.Client.PhoneNumber.Contains(searchTerm)
+                )
+                || (l.Client != null && l.Client.Dni != null && l.Client.Dni.Contains(searchTerm))
+                || (l.Client != null && l.Client.Ruc != null && l.Client.Ruc.Contains(searchTerm))
+                || (
+                    l.AssignedTo != null
+                    && l.AssignedTo.Name != null
+                    && l.AssignedTo.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Project != null
+                    && l.Project.Name != null
+                    && l.Project.Name.ToLower().Contains(searchTerm)
+                )
+            );
+        }
+
+        // Aplicar filtro de status si se proporciona
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(l => status.Contains(l.Status));
+        }
+
+        // Aplicar filtro de captureSource si se proporciona
+        if (captureSource != null && captureSource.Length > 0)
+        {
+            query = query.Where(l => captureSource.Contains(l.CaptureSource));
+        }
+
+        // Aplicar filtro de completionReason si se proporciona
+        if (completionReason != null && completionReason.Length > 0)
+        {
+            query = query.Where(l =>
+                l.CompletionReason.HasValue && completionReason.Contains(l.CompletionReason.Value)
+            );
+        }
+
+        // Aplicar filtro de clientId si se proporciona
+        if (clientId.HasValue)
+        {
+            query = query.Where(l => l.ClientId == clientId.Value);
+        }
+
+        // Aplicar filtro de userId si se proporciona
+        if (userId.HasValue)
+        {
+            query = query.Where(l => l.AssignedToId == userId.Value);
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "code" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Code)
+                    : query.OrderBy(l => l.Code),
+                "status" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Status)
+                    : query.OrderBy(l => l.Status),
+                "capturesource" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CaptureSource)
+                    : query.OrderBy(l => l.CaptureSource),
+                "completionreason" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CompletionReason)
+                    : query.OrderBy(l => l.CompletionReason),
+                "entrydate" => direction == "desc"
+                    ? query.OrderByDescending(l => l.EntryDate)
+                    : query.OrderBy(l => l.EntryDate),
+                "expirationdate" => direction == "desc"
+                    ? query.OrderByDescending(l => l.ExpirationDate)
+                    : query.OrderBy(l => l.ExpirationDate),
+                "recyclecount" => direction == "desc"
+                    ? query.OrderByDescending(l => l.RecycleCount)
+                    : query.OrderBy(l => l.RecycleCount),
+                "clientname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Client != null ? l.Client.Name : "")
+                    : query.OrderBy(l => l.Client != null ? l.Client.Name : ""),
+                "assignedtoname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.AssignedTo != null ? l.AssignedTo.Name : "")
+                    : query.OrderBy(l => l.AssignedTo != null ? l.AssignedTo.Name : ""),
+                "projectname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Project != null ? l.Project.Name : "")
+                    : query.OrderBy(l => l.Project != null ? l.Project.Name : ""),
+                "isactive" => direction == "desc"
+                    ? query.OrderByDescending(l => l.IsActive)
+                    : query.OrderBy(l => l.IsActive),
+                "createdat" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CreatedAt)
+                    : query.OrderBy(l => l.CreatedAt),
+                "modifiedat" => direction == "desc"
+                    ? query.OrderByDescending(l => l.ModifiedAt)
+                    : query.OrderBy(l => l.ModifiedAt),
+                _ => query.OrderByDescending(l => l.CreatedAt), // Ordenamiento por defecto
+            };
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            query = query.OrderByDescending(l => l.CreatedAt);
+        }
+
+        // Incluir las relaciones necesarias
+        query = query
             .Include(l => l.Client)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
@@ -232,12 +403,190 @@ public class LeadService : ILeadService
         Guid userId,
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        LeadStatus[]? status = null,
+        LeadCaptureSource[]? captureSource = null,
+        LeadCompletionReason[]? completionReason = null,
+        Guid? clientId = null,
+        string? orderBy = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     )
     {
-        var query = _context
-            .Leads.Where(l => l.IsActive && l.AssignedToId == userId)
-            .OrderByDescending(l => l.CreatedAt)
+        // Construir consulta base con filtro de usuario asignado
+        var query = _context.Leads.Where(l => l.IsActive && l.AssignedToId == userId);
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Verificar que el usuario consultado esté asignado al supervisor
+        if (isSupervisor && currentUserId.HasValue)
+        {
+            _logger.LogInformation(
+                "Verificando acceso de supervisor {SupervisorId} al usuario {TargetUserId}",
+                currentUserId.Value,
+                userId
+            );
+
+            // Verificar que el usuario consultado esté asignado a este supervisor
+            var isUserAssignedToSupervisor = await _context.SupervisorSalesAdvisors.AnyAsync(ssa =>
+                ssa.SupervisorId == currentUserId.Value
+                && ssa.SalesAdvisorId == userId
+                && ssa.IsActive
+            );
+
+            if (!isUserAssignedToSupervisor)
+            {
+                _logger.LogWarning(
+                    "Supervisor {SupervisorId} intentó acceder a leads del usuario {TargetUserId} que no está asignado",
+                    currentUserId.Value,
+                    userId
+                );
+
+                // Retornar resultado vacío si el supervisor no tiene acceso a este usuario
+                return new PaginatedResponseV2<Lead>
+                {
+                    Data = new List<Lead>(),
+                    Meta = new PaginationMetadata
+                    {
+                        Page = page,
+                        PageSize = pageSize,
+                        Total = 0,
+                        TotalPages = 0,
+                        HasPrevious = false,
+                        HasNext = false,
+                    },
+                };
+            }
+
+            _logger.LogInformation(
+                "Acceso autorizado: Supervisor {SupervisorId} puede ver leads del usuario {TargetUserId}",
+                currentUserId.Value,
+                userId
+            );
+        }
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(l =>
+                (l.Code != null && l.Code.ToLower().Contains(searchTerm))
+                || (
+                    l.Client != null
+                    && l.Client.Name != null
+                    && l.Client.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.Email != null
+                    && l.Client.Email.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Client != null
+                    && l.Client.PhoneNumber != null
+                    && l.Client.PhoneNumber.Contains(searchTerm)
+                )
+                || (l.Client != null && l.Client.Dni != null && l.Client.Dni.Contains(searchTerm))
+                || (l.Client != null && l.Client.Ruc != null && l.Client.Ruc.Contains(searchTerm))
+                || (
+                    l.AssignedTo != null
+                    && l.AssignedTo.Name != null
+                    && l.AssignedTo.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    l.Project != null
+                    && l.Project.Name != null
+                    && l.Project.Name.ToLower().Contains(searchTerm)
+                )
+            );
+        }
+
+        // Aplicar filtro de status si se proporciona
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(l => status.Contains(l.Status));
+        }
+
+        // Aplicar filtro de captureSource si se proporciona
+        if (captureSource != null && captureSource.Length > 0)
+        {
+            query = query.Where(l => captureSource.Contains(l.CaptureSource));
+        }
+
+        // Aplicar filtro de completionReason si se proporciona
+        if (completionReason != null && completionReason.Length > 0)
+        {
+            query = query.Where(l =>
+                l.CompletionReason.HasValue && completionReason.Contains(l.CompletionReason.Value)
+            );
+        }
+
+        // Aplicar filtro de clientId si se proporciona
+        if (clientId.HasValue)
+        {
+            query = query.Where(l => l.ClientId == clientId.Value);
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "code" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Code)
+                    : query.OrderBy(l => l.Code),
+                "status" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Status)
+                    : query.OrderBy(l => l.Status),
+                "capturesource" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CaptureSource)
+                    : query.OrderBy(l => l.CaptureSource),
+                "completionreason" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CompletionReason)
+                    : query.OrderBy(l => l.CompletionReason),
+                "entrydate" => direction == "desc"
+                    ? query.OrderByDescending(l => l.EntryDate)
+                    : query.OrderBy(l => l.EntryDate),
+                "expirationdate" => direction == "desc"
+                    ? query.OrderByDescending(l => l.ExpirationDate)
+                    : query.OrderBy(l => l.ExpirationDate),
+                "recyclecount" => direction == "desc"
+                    ? query.OrderByDescending(l => l.RecycleCount)
+                    : query.OrderBy(l => l.RecycleCount),
+                "clientname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Client != null ? l.Client.Name : "")
+                    : query.OrderBy(l => l.Client != null ? l.Client.Name : ""),
+                "assignedtoname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.AssignedTo != null ? l.AssignedTo.Name : "")
+                    : query.OrderBy(l => l.AssignedTo != null ? l.AssignedTo.Name : ""),
+                "projectname" => direction == "desc"
+                    ? query.OrderByDescending(l => l.Project != null ? l.Project.Name : "")
+                    : query.OrderBy(l => l.Project != null ? l.Project.Name : ""),
+                "isactive" => direction == "desc"
+                    ? query.OrderByDescending(l => l.IsActive)
+                    : query.OrderBy(l => l.IsActive),
+                "createdat" => direction == "desc"
+                    ? query.OrderByDescending(l => l.CreatedAt)
+                    : query.OrderBy(l => l.CreatedAt),
+                "modifiedat" => direction == "desc"
+                    ? query.OrderByDescending(l => l.ModifiedAt)
+                    : query.OrderBy(l => l.ModifiedAt),
+                _ => query.OrderByDescending(l => l.CreatedAt), // Ordenamiento por defecto
+            };
+        }
+        else
+        {
+            // Ordenamiento por defecto
+            query = query.OrderByDescending(l => l.CreatedAt);
+        }
+
+        // Incluir las relaciones necesarias
+        query = query
             .Include(l => l.Client)
             .Include(l => l.Project)
             .Include(l => l.Referral)
@@ -277,13 +626,77 @@ public class LeadService : ILeadService
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<UserSummaryDto>> GetUsersWithLeadsSummaryAsync(
+        Guid? projectId = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
+    )
+    {
+        var query = _context
+            .Users.Where(u => u.IsActive)
+            .Where(u => _context.Leads.Any(l => l.AssignedToId == u.Id))
+            .AsQueryable();
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar usuarios asignados al supervisor
+        if (isSupervisor && currentUserId.HasValue)
+        {
+            _logger.LogInformation(
+                "Aplicando filtro de supervisor en GetUsersWithLeadsSummaryAsync para usuario: {UserId}",
+                currentUserId.Value
+            );
+
+            // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+            var assignedSalesAdvisorIds = await _context
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SupervisorId == currentUserId.Value && ssa.IsActive
+                )
+                .Select(ssa => ssa.SalesAdvisorId)
+                .ToListAsync();
+
+            _logger.LogInformation(
+                "Supervisor {SupervisorId} tiene {Count} SalesAdvisors asignados en summary",
+                currentUserId.Value,
+                assignedSalesAdvisorIds.Count
+            );
+
+            // Filtrar usuarios que están asignados a este supervisor
+            query = query.Where(u => assignedSalesAdvisorIds.Contains(u.Id));
+        }
+
+        // Aplicar filtro por proyecto si se especifica
+        if (projectId.HasValue)
+        {
+            query = query.Where(u =>
+                _context.Leads.Any(l => l.AssignedToId == u.Id && l.ProjectId == projectId.Value)
+            );
+        }
+
+        return await query
+            .Select(u => new UserSummaryDto
+            {
+                Id = u.Id,
+                UserName = u.Name,
+                Email = u.Email,
+                Roles = (
+                    from userRole in _context.UserRoles
+                    join role in _context.Roles on userRole.RoleId equals role.Id
+                    where userRole.UserId == u.Id
+                    select role.Name
+                ).ToList(),
+            })
+            .ToListAsync();
+    }
+
     public async Task<PaginatedResponseV2<UserSummaryDto>> GetUsersSummaryPaginatedAsync(
         int page,
         int pageSize,
         string? search = null,
         string? orderBy = null,
         string? orderDirection = "asc",
-        string? preselectedId = null
+        string? preselectedId = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null
     )
     {
         // Diccionario para traducción de roles de español a inglés
@@ -311,6 +724,50 @@ public class LeadService : ILeadService
                     select role.Name
                 ).ToList(),
             });
+
+        // FILTRO ESPECIAL PARA SALESADVISOR Y SUPERVISOR
+        if (currentUserRoles != null && currentUserId.HasValue)
+        {
+            if (currentUserRoles.Contains("SalesAdvisor"))
+            {
+                _logger.LogInformation(
+                    "Usuario es SalesAdvisor, aplicando filtro para mostrar solo a sí mismo: {UserId}",
+                    currentUserId.Value
+                );
+
+                // SalesAdvisor solo ve a sí mismo
+                query = query.Where(u => u.Id == currentUserId.Value);
+            }
+            else if (currentUserRoles.Contains("Supervisor"))
+            {
+                _logger.LogInformation(
+                    "Usuario es Supervisor, aplicando filtro para mostrar a sí mismo y sus SalesAdvisors asignados: {UserId}",
+                    currentUserId.Value
+                );
+
+                // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+                var assignedSalesAdvisorIds = await _context
+                    .SupervisorSalesAdvisors.Where(ssa =>
+                        ssa.SupervisorId == currentUserId.Value && ssa.IsActive
+                    )
+                    .Select(ssa => ssa.SalesAdvisorId)
+                    .ToListAsync();
+
+                // Incluir también el propio ID del supervisor
+                assignedSalesAdvisorIds.Add(currentUserId.Value);
+
+                _logger.LogInformation(
+                    "Supervisor {SupervisorId} tiene {Count} SalesAdvisors asignados: {SalesAdvisorIds}",
+                    currentUserId.Value,
+                    assignedSalesAdvisorIds.Count,
+                    string.Join(", ", assignedSalesAdvisorIds)
+                );
+
+                // Filtrar usuarios que están asignados a este supervisor + el supervisor mismo
+                query = query.Where(u => assignedSalesAdvisorIds.Contains(u.Id));
+            }
+            // Para otros roles (Admin, Manager, etc.) no se aplica filtro - ven todos los usuarios
+        }
 
         // Lógica para preselectedId - incluir en la query base
         Guid? preselectedLeadGuid = null;

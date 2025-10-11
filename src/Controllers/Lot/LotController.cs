@@ -106,12 +106,54 @@ public class LotsController : ControllerBase
     }
 
     [HttpGet("project/{projectId:guid}")]
-    public async Task<ActionResult<IEnumerable<LotDTO>>> GetLotsByProject(Guid projectId)
+    public async Task<ActionResult<PaginatedResponseV2<LotDTO>>> GetLotsByProject(
+        Guid projectId,
+        [FromQuery] Guid? blockId = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] string? orderBy = null,
+        [FromQuery] string? orderDirection = "asc",
+        [FromQuery] string? preselectedId = null,
+        [FromQuery] string? status = null
+    )
     {
         try
         {
-            var lots = await _lotService.GetLotsByProjectIdAsync(projectId);
-            return Ok(lots);
+            // Validar parámetros
+            if (page < 1)
+                page = 1;
+            if (pageSize < 1 || pageSize > 100)
+                pageSize = 10;
+
+            _logger.LogInformation(
+                "Obteniendo lotes del proyecto {ProjectId} {BlockId} paginados, página: {Page}, tamaño: {PageSize}, búsqueda: {Search}, preselectedId: {PreselectedId}",
+                projectId,
+                blockId.HasValue ? $"y bloque {blockId}" : "",
+                page,
+                pageSize,
+                search ?? "null",
+                preselectedId ?? "null"
+            );
+
+            var result = await _lotService.GetLotsByProjectOrBlockAsync(
+                projectId,
+                blockId,
+                page,
+                pageSize,
+                search,
+                orderBy,
+                orderDirection,
+                preselectedId,
+                status
+            );
+
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Parámetros inválidos para obtener lotes");
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {

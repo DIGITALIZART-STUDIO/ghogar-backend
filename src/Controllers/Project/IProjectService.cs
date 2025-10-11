@@ -11,6 +11,14 @@ public interface IProjectService
 {
     Task<IEnumerable<ProjectDTO>> GetAllProjectsAsync();
     Task<IEnumerable<ProjectDTO>> GetActiveProjectsAsync();
+    Task<PaginatedResponseV2<ProjectDTO>> GetAllProjectsPaginatedAsync(
+        int page,
+        int pageSize,
+        string? search = null,
+        string? orderBy = null,
+        string? orderDirection = "asc",
+        string? preselectedId = null
+    );
     Task<PaginatedResponseV2<ProjectDTO>> GetActiveProjectsPaginatedAsync(
         int page,
         int pageSize,

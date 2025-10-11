@@ -26,4 +26,6 @@ public class ReservationUpdateDto
     public bool Notified { get; set; }
 
     public string? Schedule { get; set; }
+
+    public string? CoOwners { get; set; } // JSON con los copropietarios
 }

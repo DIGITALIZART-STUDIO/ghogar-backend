@@ -12,16 +12,22 @@ public class DashboardController : ControllerBase
     private readonly GetDashboardAdminDataUseCase _getDashboardAdminDataUseCase;
     private readonly GetAdvisorDashboardDataUseCase _getAdvisorDashboardDataUseCase;
     private readonly GetFinanceManagerDashboardDataUseCase _getFinanceManagerDashboardDataUseCase;
+    private readonly GetSupervisorDashboardDataUseCase _getSupervisorDashboardDataUseCase;
+    private readonly GetManagerDashboardDataUseCase _getManagerDashboardDataUseCase;
 
     public DashboardController(
         GetDashboardAdminDataUseCase getDashboardAdminDataUseCase,
         GetAdvisorDashboardDataUseCase getAdvisorDashboardDataUseCase,
-        GetFinanceManagerDashboardDataUseCase getFinanceManagerDashboardDataUseCase
+        GetFinanceManagerDashboardDataUseCase getFinanceManagerDashboardDataUseCase,
+        GetSupervisorDashboardDataUseCase getSupervisorDashboardDataUseCase,
+        GetManagerDashboardDataUseCase getManagerDashboardDataUseCase
     )
     {
         _getDashboardAdminDataUseCase = getDashboardAdminDataUseCase;
         _getAdvisorDashboardDataUseCase = getAdvisorDashboardDataUseCase;
         _getFinanceManagerDashboardDataUseCase = getFinanceManagerDashboardDataUseCase;
+        _getSupervisorDashboardDataUseCase = getSupervisorDashboardDataUseCase;
+        _getManagerDashboardDataUseCase = getManagerDashboardDataUseCase;
     }
 
     [HttpGet("admin")]
@@ -59,6 +65,40 @@ public class DashboardController : ControllerBase
         try
         {
             var result = await _getFinanceManagerDashboardDataUseCase.ExecuteAsync(year, projectId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
+        }
+    }
+
+    [HttpGet("supervisor")]
+    [AuthorizeCurrentUser("Supervisor", "Admin", "SuperAdmin")]
+    public async Task<ActionResult<SupervisorDashboardDto>> GetSupervisorDashboard(
+        [FromQuery] int? year
+    )
+    {
+        try
+        {
+            var result = await _getSupervisorDashboardDataUseCase.ExecuteAsync(year);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
+        }
+    }
+
+    [HttpGet("manager")]
+    [AuthorizeCurrentUser("Manager", "Admin", "SuperAdmin")]
+    public async Task<ActionResult<ManagerDashboardDto>> GetManagerDashboard(
+        [FromQuery] int? year
+    )
+    {
+        try
+        {
+            var result = await _getManagerDashboardDataUseCase.ExecuteAsync(year);
             return Ok(result);
         }
         catch (Exception ex)

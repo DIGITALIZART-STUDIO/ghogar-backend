@@ -9,7 +9,17 @@ public interface ILeadService
     Task<PaginatedResponseV2<Lead>> GetAllLeadsPaginatedAsync(
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        LeadStatus[]? status = null,
+        LeadCaptureSource[]? captureSource = null,
+        LeadCompletionReason[]? completionReason = null,
+        Guid? clientId = null,
+        Guid? userId = null,
+        string? orderBy = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     );
     Task<Lead?> GetLeadByIdAsync(Guid id);
     Task<Lead> CreateLeadAsync(Lead lead);
@@ -23,7 +33,16 @@ public interface ILeadService
         Guid userId,
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        LeadStatus[]? status = null,
+        LeadCaptureSource[]? captureSource = null,
+        LeadCompletionReason[]? completionReason = null,
+        Guid? clientId = null,
+        string? orderBy = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     );
     Task<IEnumerable<Lead>> GetLeadsByStatusAsync(LeadStatus status);
     Task<IEnumerable<LeadSummaryDto>> GetAssignedLeadsSummaryAsync(Guid assignedToId);
@@ -49,7 +68,15 @@ public interface ILeadService
         string? search = null,
         string? orderBy = null,
         string? orderDirection = "asc",
-        string? preselectedId = null
+        string? preselectedId = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null
+    );
+    Task<IEnumerable<UserSummaryDto>> GetUsersWithLeadsSummaryAsync(
+        Guid? projectId = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     );
     Task<Lead?> ChangeLeadStatusAsync(Guid id, LeadStatus status, LeadCompletionReason? reason);
 

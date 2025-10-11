@@ -54,10 +54,244 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
             .ToListAsync();
+    }
+
+    public async Task<PaginatedResponseV2<ReservationDto>> GetAllReservationsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        Guid? projectId = null,
+        string? orderBy = null
+    )
+    {
+        var query = _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(l => l.Block)
+            .ThenInclude(b => b.Project)
+            .Where(r => r.IsActive)
+            .AsQueryable();
+
+        // Aplicar filtro de búsqueda
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(r =>
+                (r.Client.Name != null && r.Client.Name.ToLower().Contains(searchTerm))
+                || (r.Client.Email != null && r.Client.Email.ToLower().Contains(searchTerm))
+                || (r.Client.PhoneNumber != null && r.Client.PhoneNumber.Contains(searchTerm))
+                || (r.Client.Dni != null && r.Client.Dni.Contains(searchTerm))
+                || (r.Client.Ruc != null && r.Client.Ruc.Contains(searchTerm))
+                || (
+                    r.Client.CompanyName != null
+                    && r.Client.CompanyName.ToLower().Contains(searchTerm)
+                )
+                || (r.Quotation.Code != null && r.Quotation.Code.ToLower().Contains(searchTerm))
+            );
+        }
+
+        // Aplicar filtro por estado
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(r => status.Contains(r.Status));
+        }
+
+        // Aplicar filtro por método de pago
+        if (paymentMethod != null && paymentMethod.Length > 0)
+        {
+            query = query.Where(r => paymentMethod.Contains(r.PaymentMethod));
+        }
+
+        // Aplicar filtro por proyecto
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.Project.Id == projectId.Value);
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "reservationdate" => direction == "desc"
+                    ? query.OrderByDescending(r => r.ReservationDate)
+                    : query.OrderBy(r => r.ReservationDate),
+                "amountpaid" => direction == "desc"
+                    ? query.OrderByDescending(r => r.AmountPaid)
+                    : query.OrderBy(r => r.AmountPaid),
+                "status" => direction == "desc"
+                    ? query.OrderByDescending(r => r.Status)
+                    : query.OrderBy(r => r.Status),
+                "paymentmethod" => direction == "desc"
+                    ? query.OrderByDescending(r => r.PaymentMethod)
+                    : query.OrderBy(r => r.PaymentMethod),
+                "client.name" => direction == "desc"
+                    ? query.OrderByDescending(r => r.Client.Name)
+                    : query.OrderBy(r => r.Client.Name),
+                _ => query.OrderByDescending(r => r.CreatedAt),
+            };
+        }
+        else
+        {
+            query = query.OrderByDescending(r => r.CreatedAt);
+        }
+
+        // Convertir a DTOs antes de paginar
+        var reservationDtos = query.Select(r => new ReservationDto
+        {
+            Id = r.Id,
+            ClientId = r.ClientId,
+            ClientName = r.Client.DisplayName,
+            QuotationId = r.QuotationId,
+            QuotationCode = r.Quotation.Code,
+            ReservationDate = r.ReservationDate,
+            AmountPaid = r.AmountPaid,
+            Currency = r.Currency,
+            Status = r.Status,
+            ContractValidationStatus = r.ContractValidationStatus,
+            PaymentMethod = r.PaymentMethod,
+            BankName = r.BankName,
+            ExchangeRate = r.ExchangeRate,
+            ExpiresAt = r.ExpiresAt,
+            Notified = r.Notified,
+            Schedule = r.Schedule,
+            CreatedAt = r.CreatedAt,
+            ModifiedAt = r.ModifiedAt,
+        });
+
+        return await paginationService.PaginateAsync(reservationDtos, page, pageSize);
+    }
+
+    public async Task<PaginatedResponseV2<ReservationDto>> GetReservationsByAdvisorIdPaginatedAsync(
+        Guid advisorId,
+        int page,
+        int pageSize,
+        PaginationService paginationService,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        Guid? projectId = null,
+        string? orderBy = null
+    )
+    {
+        var query = _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lead)
+            .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(l => l.Block)
+            .ThenInclude(b => b.Project)
+            .Where(r => r.IsActive && r.Quotation.Lead.AssignedToId == advisorId)
+            .AsQueryable();
+
+        // Aplicar filtro de búsqueda
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(r =>
+                (r.Client.Name != null && r.Client.Name.ToLower().Contains(searchTerm))
+                || (r.Client.Email != null && r.Client.Email.ToLower().Contains(searchTerm))
+                || (r.Client.PhoneNumber != null && r.Client.PhoneNumber.Contains(searchTerm))
+                || (r.Client.Dni != null && r.Client.Dni.Contains(searchTerm))
+                || (r.Client.Ruc != null && r.Client.Ruc.Contains(searchTerm))
+                || (
+                    r.Client.CompanyName != null
+                    && r.Client.CompanyName.ToLower().Contains(searchTerm)
+                )
+                || (r.Quotation.Code != null && r.Quotation.Code.ToLower().Contains(searchTerm))
+            );
+        }
+
+        // Aplicar filtro por estado
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(r => status.Contains(r.Status));
+        }
+
+        // Aplicar filtro por método de pago
+        if (paymentMethod != null && paymentMethod.Length > 0)
+        {
+            query = query.Where(r => paymentMethod.Contains(r.PaymentMethod));
+        }
+
+        // Aplicar filtro por proyecto
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.Project.Id == projectId.Value);
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "reservationdate" => direction == "desc"
+                    ? query.OrderByDescending(r => r.ReservationDate)
+                    : query.OrderBy(r => r.ReservationDate),
+                "amountpaid" => direction == "desc"
+                    ? query.OrderByDescending(r => r.AmountPaid)
+                    : query.OrderBy(r => r.AmountPaid),
+                "status" => direction == "desc"
+                    ? query.OrderByDescending(r => r.Status)
+                    : query.OrderBy(r => r.Status),
+                "paymentmethod" => direction == "desc"
+                    ? query.OrderByDescending(r => r.PaymentMethod)
+                    : query.OrderBy(r => r.PaymentMethod),
+                "client.name" => direction == "desc"
+                    ? query.OrderByDescending(r => r.Client.Name)
+                    : query.OrderBy(r => r.Client.Name),
+                _ => query.OrderByDescending(r => r.CreatedAt),
+            };
+        }
+        else
+        {
+            query = query.OrderByDescending(r => r.CreatedAt);
+        }
+
+        // Convertir a DTOs antes de paginar
+        var reservationDtos = query.Select(r => new ReservationDto
+        {
+            Id = r.Id,
+            ClientId = r.ClientId,
+            ClientName = r.Client.DisplayName,
+            QuotationId = r.QuotationId,
+            QuotationCode = r.Quotation.Code,
+            ReservationDate = r.ReservationDate,
+            AmountPaid = r.AmountPaid,
+            Currency = r.Currency,
+            Status = r.Status,
+            ContractValidationStatus = r.ContractValidationStatus,
+            PaymentMethod = r.PaymentMethod,
+            BankName = r.BankName,
+            ExchangeRate = r.ExchangeRate,
+            ExpiresAt = r.ExpiresAt,
+            Notified = r.Notified,
+            Schedule = r.Schedule,
+            CreatedAt = r.CreatedAt,
+            ModifiedAt = r.ModifiedAt,
+        });
+
+        return await paginationService.PaginateAsync(reservationDtos, page, pageSize);
     }
 
     public async Task<
@@ -139,6 +373,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
                 PaymentCount = r.Payments.Count(p => p.Paid), // Solo pagos realizados
@@ -191,6 +426,7 @@ public class ReservationService : IReservationService
             ExpiresAt = r.ExpiresAt,
             Notified = r.Notified,
             Schedule = r.Schedule,
+            CoOwners = r.CoOwners,
             CreatedAt = r.CreatedAt,
             ModifiedAt = r.ModifiedAt,
             PaymentCount = r.Payments.Count(p => p.Paid),
@@ -227,6 +463,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
@@ -279,6 +516,7 @@ public class ReservationService : IReservationService
             ExchangeRate = reservationDto.ExchangeRate,
             ExpiresAt = reservationDto.ExpiresAt,
             Schedule = reservationDto.Schedule,
+            CoOwners = reservationDto.CoOwners,
             Status = ReservationStatus.ISSUED,
             Notified = false,
             Client = client,
@@ -501,6 +739,7 @@ public class ReservationService : IReservationService
                 : DateTime.SpecifyKind(reservationDto.ExpiresAt, DateTimeKind.Utc);
         reservation.Notified = reservationDto.Notified;
         reservation.Schedule = reservationDto.Schedule;
+        reservation.CoOwners = reservationDto.CoOwners;
         reservation.ModifiedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -523,6 +762,7 @@ public class ReservationService : IReservationService
             ExpiresAt = reservation.ExpiresAt,
             Notified = reservation.Notified,
             Schedule = reservation.Schedule,
+            CoOwners = reservation.CoOwners,
             CreatedAt = reservation.CreatedAt,
             ModifiedAt = reservation.ModifiedAt,
         };
@@ -566,6 +806,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
@@ -597,6 +838,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
@@ -608,6 +850,7 @@ public class ReservationService : IReservationService
         var reservation = await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
 
         if (
@@ -619,6 +862,30 @@ public class ReservationService : IReservationService
         var previousStatus = reservation.Status;
         reservation.Status = statusEnum;
         reservation.ModifiedAt = DateTime.UtcNow;
+
+        // **NUEVO: Actualizar estado del lote según el cambio de estado de la reserva**
+        if (reservation.Quotation?.Lot != null)
+        {
+            switch (statusEnum)
+            {
+                case ReservationStatus.CANCELED:
+                    // Si se cancela la reserva, el lote pasa a reservado
+                    reservation.Quotation.Lot.Status = LotStatus.Reserved;
+                    break;
+
+                case ReservationStatus.ANULATED:
+                    // Si se anula la reserva, el lote pasa a disponible
+                    reservation.Quotation.Lot.Status = LotStatus.Available;
+                    break;
+
+                case ReservationStatus.ISSUED:
+                    // Si vuelve a emitida desde cancelada/anulada, el lote pasa a cotizado
+                    reservation.Quotation.Lot.Status = LotStatus.Quoted;
+                    break;
+            }
+
+            reservation.Quotation.Lot.ModifiedAt = DateTime.UtcNow;
+        }
 
         // Actualiza el estado de validación de contrato según el nuevo estado
         if (statusEnum == ReservationStatus.CANCELED)
@@ -656,6 +923,7 @@ public class ReservationService : IReservationService
             ExpiresAt = reservation.ExpiresAt,
             Notified = reservation.Notified,
             Schedule = reservation.Schedule,
+            CoOwners = reservation.CoOwners,
             CreatedAt = reservation.CreatedAt,
             ModifiedAt = reservation.ModifiedAt,
         };

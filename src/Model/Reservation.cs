@@ -64,6 +64,10 @@ public class Reservation : BaseModel
     // Cronograma de pagos (número de meses, fecha inicio de pago, monto que se tienen que dividir)
     public string? Schedule { get; set; }
 
+    // Datos de copropietarios de la separación de bienes
+    [Column(TypeName = "jsonb")]
+    public string? CoOwners { get; set; } // Opcional
+
     // Navegación hacia los pagos programados
     public ICollection<Payment> Payments { get; set; } = [];
 }

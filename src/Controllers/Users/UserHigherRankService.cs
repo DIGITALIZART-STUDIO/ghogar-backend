@@ -16,6 +16,7 @@ public class UserHigherRankService : IUserHigherRankService
 
     public async Task<IEnumerable<UserHigherRankDTO>> GetUsersWithHigherRankAsync(
         Guid currentUserId,
+        IList<string> currentUserRoles,
         string? name = null,
         int limit = 10
     )
@@ -56,6 +57,60 @@ public class UserHigherRankService : IUserHigherRankService
                 ).ToList(),
             });
 
+        // FILTRO ESPECIAL PARA SALESADVISOR: Mostrar todos los roles superiores + solo su supervisor asignado
+        if (currentUserRoles.Contains("SalesAdvisor"))
+        {
+            _logger.LogInformation(
+                "Usuario es SalesAdvisor, aplicando filtro para mostrar roles superiores + solo su supervisor asignado"
+            );
+
+            // Obtener el ID del supervisor asignado a este SalesAdvisor
+            var assignedSupervisorId = await _db
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SalesAdvisorId == currentUserId && ssa.IsActive
+                )
+                .Select(ssa => ssa.SupervisorId)
+                .FirstOrDefaultAsync();
+
+            if (assignedSupervisorId != Guid.Empty)
+            {
+                _logger.LogInformation(
+                    "SalesAdvisor {SalesAdvisorId} tiene supervisor asignado: {SupervisorId}",
+                    currentUserId,
+                    assignedSupervisorId
+                );
+
+                // Filtrar para mostrar:
+                // 1. Todos los usuarios con roles superiores (Admin, Manager, etc.) - excluyendo SalesAdvisor
+                // 2. Solo su supervisor asignado (incluso si es Supervisor)
+                query = query.Where(u =>
+                    // Roles superiores (Admin, Manager, etc.) - excluyendo SalesAdvisor
+                    (
+                        u.Roles.Any()
+                        && !u.Roles.Contains("SaleAdvisor")
+                        && !u.Roles.Contains("Supervisor")
+                    )
+                    ||
+                    // O su supervisor asignado específico
+                    u.User.Id == assignedSupervisorId
+                );
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "SalesAdvisor {SalesAdvisorId} no tiene supervisor asignado, mostrando solo roles superiores (sin supervisores)",
+                    currentUserId
+                );
+
+                // Si no tiene supervisor asignado, mostrar solo roles superiores (sin supervisores)
+                query = query.Where(u =>
+                    u.Roles.Any()
+                    && !u.Roles.Contains("SaleAdvisor")
+                    && !u.Roles.Contains("Supervisor")
+                );
+            }
+        }
+
         // Debug: Verificar usuarios con roles
         var usersWithRoles = await query.ToListAsync();
         _logger.LogInformation(
@@ -75,7 +130,11 @@ public class UserHigherRankService : IUserHigherRankService
             );
         }
 
-        query = query.Where(u => u.Roles.Any() && !u.Roles.Contains("SaleAdvisor"));
+        // Aplicar filtro general de roles (solo si no es SalesAdvisor, ya que SalesAdvisor tiene lógica especial)
+        if (!currentUserRoles.Contains("SalesAdvisor"))
+        {
+            query = query.Where(u => u.Roles.Any() && !u.Roles.Contains("SaleAdvisor"));
+        }
 
         // Debug: Verificar usuarios después del filtro de roles
         var usersAfterRoleFilter = await query.ToListAsync();
@@ -128,6 +187,7 @@ public class UserHigherRankService : IUserHigherRankService
 
     public async Task<PaginatedResponseV2<UserHigherRankDTO>> GetUsersWithHigherRankPaginatedAsync(
         Guid currentUserId,
+        IList<string> currentUserRoles,
         int page = 1,
         int pageSize = 10,
         string? search = null,
@@ -156,8 +216,67 @@ public class UserHigherRankService : IUserHigherRankService
                     where userRole.UserId == user.Id
                     select role.Name
                 ).ToList(),
-            })
-            .Where(u => u.Roles.Any() && !u.Roles.Contains("SaleAdvisor"));
+            });
+
+        // FILTRO ESPECIAL PARA SALESADVISOR: Mostrar todos los roles superiores + solo su supervisor asignado
+        if (currentUserRoles.Contains("SalesAdvisor"))
+        {
+            _logger.LogInformation(
+                "Usuario es SalesAdvisor, aplicando filtro para mostrar roles superiores + solo su supervisor asignado (paginado)"
+            );
+
+            // Obtener el ID del supervisor asignado a este SalesAdvisor
+            var assignedSupervisorId = await _db
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SalesAdvisorId == currentUserId && ssa.IsActive
+                )
+                .Select(ssa => ssa.SupervisorId)
+                .FirstOrDefaultAsync();
+
+            if (assignedSupervisorId != Guid.Empty)
+            {
+                _logger.LogInformation(
+                    "SalesAdvisor {SalesAdvisorId} tiene supervisor asignado: {SupervisorId} (paginado)",
+                    currentUserId,
+                    assignedSupervisorId
+                );
+
+                // Filtrar para mostrar:
+                // 1. Todos los usuarios con roles superiores (Admin, Manager, etc.) - excluyendo SalesAdvisor
+                // 2. Solo su supervisor asignado (incluso si es Supervisor)
+                query = query.Where(u =>
+                    // Roles superiores (Admin, Manager, etc.) - excluyendo SalesAdvisor
+                    (
+                        u.Roles.Any()
+                        && !u.Roles.Contains("SaleAdvisor")
+                        && !u.Roles.Contains("Supervisor")
+                    )
+                    ||
+                    // O su supervisor asignado específico
+                    u.User.Id == assignedSupervisorId
+                );
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "SalesAdvisor {SalesAdvisorId} no tiene supervisor asignado, mostrando solo roles superiores (sin supervisores) (paginado)",
+                    currentUserId
+                );
+
+                // Si no tiene supervisor asignado, mostrar solo roles superiores (sin supervisores)
+                query = query.Where(u =>
+                    u.Roles.Any()
+                    && !u.Roles.Contains("SaleAdvisor")
+                    && !u.Roles.Contains("Supervisor")
+                );
+            }
+        }
+
+        // Aplicar filtro general de roles (solo si no es SalesAdvisor, ya que SalesAdvisor tiene lógica especial)
+        if (!currentUserRoles.Contains("SalesAdvisor"))
+        {
+            query = query.Where(u => u.Roles.Any() && !u.Roles.Contains("SaleAdvisor"));
+        }
 
         // Lógica para preselectedId - incluir en la query base
         Guid? preselectedGuid = null;

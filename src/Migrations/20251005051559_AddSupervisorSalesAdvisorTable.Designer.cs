@@ -3,6 +3,7 @@ using System;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestionHogar.Migrations
 {
     [DbContext(typeof(DatabaseContext))]
-    partial class DatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20251005051559_AddSupervisorSalesAdvisorTable")]
+    partial class AddSupervisorSalesAdvisorTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -629,9 +632,6 @@ namespace GestionHogar.Migrations
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("CoOwners")
-                        .HasColumnType("jsonb");
-
                     b.Property<int>("ContractValidationStatus")
                         .HasColumnType("integer");
 
@@ -682,39 +682,6 @@ namespace GestionHogar.Migrations
                     b.HasIndex("QuotationId");
 
                     b.ToTable("Reservations");
-                });
-
-            modelBuilder.Entity("GestionHogar.Model.SupervisorSalesAdvisor", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("SalesAdvisorId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SupervisorId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SalesAdvisorId");
-
-                    b.HasIndex("SupervisorId");
-
-                    b.HasIndex("SupervisorId", "SalesAdvisorId")
-                        .IsUnique();
-
-                    b.ToTable("SupervisorSalesAdvisors");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.User", b =>
@@ -1147,25 +1114,6 @@ namespace GestionHogar.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("Quotation");
-                });
-
-            modelBuilder.Entity("GestionHogar.Model.SupervisorSalesAdvisor", b =>
-                {
-                    b.HasOne("GestionHogar.Model.User", "SalesAdvisor")
-                        .WithMany()
-                        .HasForeignKey("SalesAdvisorId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("GestionHogar.Model.User", "Supervisor")
-                        .WithMany()
-                        .HasForeignKey("SupervisorId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("SalesAdvisor");
-
-                    b.Navigation("Supervisor");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
