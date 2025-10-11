@@ -40,7 +40,7 @@ public class QuotationCreateDTO
 
         // Cálculos financieros
         var discount = Discount ?? 0;
-        var totalPrice = lot.Area * lot.PricePerSquareMeter; // Calcular precio total correctamente
+        var totalPrice = lot.Price; // Precio total del lote
         var finalPrice = totalPrice - discount;
         var downPaymentPercentage = DownPayment ?? project.DefaultDownPayment ?? 10;
         var monthsFinanced = MonthsFinanced ?? project.DefaultFinancingMonths ?? 36;
@@ -65,7 +65,7 @@ public class QuotationCreateDTO
 
             // Datos históricos del lote al momento de cotización
             AreaAtQuotation = lot.Area,
-            PricePerM2AtQuotation = lot.PricePerSquareMeter,
+            PricePerM2AtQuotation = lot.Price / lot.Area,
 
             // Información financiera
             Currency = project.Currency,
