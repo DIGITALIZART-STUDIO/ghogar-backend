@@ -50,6 +50,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<SupervisorSalesAdvisor> SupervisorSalesAdvisors { get; set; } = null!;
 
+    public DbSet<Notification> Notifications { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
