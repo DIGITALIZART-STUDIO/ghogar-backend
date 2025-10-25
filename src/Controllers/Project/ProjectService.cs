@@ -65,10 +65,10 @@ public class ProjectService : IProjectService
         )
         {
             preselectedGuid = parsedGuid;
-            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+
             if (page == 1)
             {
-                // Crear una query que incluya el proyecto preseleccionado al inicio
+                // En la primera página: incluir el proyecto preseleccionado al inicio
                 var preselectedProject = await _context
                     .Projects.Include(p => p.Blocks)
                     .ThenInclude(b => b.Lots)
@@ -79,6 +79,11 @@ public class ProjectService : IProjectService
                     // Modificar la query para que el proyecto preseleccionado aparezca primero
                     query = query.OrderBy(p => p.Id == preselectedGuid ? 0 : 1);
                 }
+            }
+            else
+            {
+                // En páginas siguientes: excluir el proyecto preseleccionado para evitar duplicados
+                query = query.Where(p => p.Id != preselectedGuid);
             }
         }
 
@@ -189,10 +194,10 @@ public class ProjectService : IProjectService
         )
         {
             preselectedGuid = parsedGuid;
-            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+
             if (page == 1)
             {
-                // Crear una query que incluya el proyecto preseleccionado al inicio
+                // En la primera página: incluir el proyecto preseleccionado al inicio
                 var preselectedProject = await _context
                     .Projects.Include(p => p.Blocks)
                     .ThenInclude(b => b.Lots)
@@ -203,6 +208,11 @@ public class ProjectService : IProjectService
                     // Modificar la query para que el proyecto preseleccionado aparezca primero
                     query = query.OrderBy(p => p.Id == preselectedGuid ? 0 : 1);
                 }
+            }
+            else
+            {
+                // En páginas siguientes: excluir el proyecto preseleccionado para evitar duplicados
+                query = query.Where(p => p.Id != preselectedGuid);
             }
         }
 

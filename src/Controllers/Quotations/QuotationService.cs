@@ -515,27 +515,41 @@ public class QuotationService(
             }
         }
 
-        // Aplicar lógica de desplazamiento del preselectedId (como en GetUsersSummaryPaginatedAsync)
-        if (preselectedQuotationGuid.HasValue && page == 1)
+        // Lógica para preselectedId - incluir en la query base
+        if (preselectedQuotationGuid.HasValue)
         {
-            // Verificar que la cotización preseleccionada existe en los resultados
-            var preselectedQuotation = query.FirstOrDefault(q => q.Id == preselectedQuotationGuid);
-            if (preselectedQuotation != null)
+            if (page == 1)
             {
-                // Reordenar para que la cotización preseleccionada aparezca primero
-                query = query.OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1);
+                // En la primera página: incluir la cotización preseleccionada al inicio
+                var preselectedQuotation = await _context
+                    .Quotations.Include(q => q.Lead)
+                    .ThenInclude(l => l!.Client)
+                    .Include(q => q.Lot)
+                    .ThenInclude(l => l!.Block)
+                    .ThenInclude(b => b.Project)
+                    .FirstOrDefaultAsync(q =>
+                        q.Id == preselectedQuotationGuid
+                        && q.Status == QuotationStatus.ACCEPTED
+                        && q.AdvisorId == currentUserId
+                        && !_context.Reservations.Any(r => r.QuotationId == q.Id && r.IsActive)
+                    );
+
+                if (preselectedQuotation != null)
+                {
+                    // Modificar la query para que la cotización preseleccionada aparezca primero
+                    query = query.OrderBy(q => q.Id == preselectedQuotationGuid ? 0 : 1);
+                }
+            }
+            else
+            {
+                // En páginas siguientes: excluir la cotización preseleccionada para evitar duplicados
+                query = query.Where(q => q.Id != preselectedQuotationGuid);
             }
         }
 
         // Aplicar paginación
         var totalCount = await query.CountAsync();
         var quotations = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
-
-        // Si hay preselectedId y NO estamos en la primera página, remover la cotización preseleccionada
-        if (preselectedQuotationGuid.HasValue && page > 1)
-        {
-            quotations = quotations.Where(q => q.Id != preselectedQuotationGuid.Value).ToList();
-        }
 
         // Convertir a DTOs
         var quotationDtos = quotations.Select(QuotationSummaryDTO.FromEntity).ToList();

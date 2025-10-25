@@ -517,10 +517,10 @@ public class ClientsController : ControllerBase
             )
             {
                 preselectedGuid = parsedGuid;
-                // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+
                 if (page == 1)
                 {
-                    // Verificar que el cliente preseleccionado existe
+                    // En la primera página: incluir el cliente preseleccionado al inicio
                     var preselectedClient = await _context.Clients.FirstOrDefaultAsync(c =>
                         c.Id == preselectedGuid
                     );
@@ -530,6 +530,11 @@ public class ClientsController : ControllerBase
                         // Modificar la query para que el cliente preseleccionado aparezca primero
                         query = query.OrderBy(c => c.Id == preselectedGuid ? 0 : 1);
                     }
+                }
+                else
+                {
+                    // En páginas siguientes: excluir el cliente preseleccionado para evitar duplicados
+                    query = query.Where(c => c.Id != preselectedGuid);
                 }
             }
 
