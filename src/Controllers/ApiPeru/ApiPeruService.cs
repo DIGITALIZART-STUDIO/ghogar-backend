@@ -30,7 +30,25 @@ public class ApiPeruService
 
     public async Task<ResponseApiRucFull> GetDataByRucAsync(string ruc)
     {
-        // 1. Buscar en la base de datos
+        // 1. Buscar consulta previa en la base de datos
+        var existingConsultation = await _context.ApiPeruConsultations.FirstOrDefaultAsync(c =>
+            c.DocumentNumber == ruc && c.DocumentType == "RUC"
+        );
+
+        if (existingConsultation != null)
+        {
+            // Si existe una consulta previa, devolver los datos guardados
+            var cachedData = existingConsultation.GetResponseData<ResponseApiRucFull>();
+            if (cachedData != null)
+            {
+                Console.WriteLine(
+                    $"Devolviendo datos de RUC {ruc} desde caché (consultado el {existingConsultation.ConsultedAt})"
+                );
+                return cachedData;
+            }
+        }
+
+        // 2. Buscar en la base de datos de clientes
         var client = await _context.Clients.FirstOrDefaultAsync(c => c.Ruc == ruc);
         if (client != null)
         {
@@ -45,7 +63,7 @@ public class ApiPeruService
                     }
                 );
             }
-            return new ResponseApiRucFull
+            var clientData = new ResponseApiRucFull
             {
                 Ruc = client.Ruc!,
                 NombreORazonSocial = client.CompanyName!,
@@ -53,6 +71,10 @@ public class ApiPeruService
                 // Mapea otros campos si los tienes en tu modelo
                 Representantes = reps,
             };
+
+            // Guardar consulta en la base de datos
+            await SaveConsultationAsync(ruc, "RUC", clientData);
+            return clientData;
         }
 
         // 2. Scraping SUNAT para datos principales
@@ -113,13 +135,18 @@ public class ApiPeruService
         );
 
         // 6. Armar respuesta
-        return new ResponseApiRucFull
+        var response = new ResponseApiRucFull
         {
             Ruc = ruc,
             NombreORazonSocial = sunatData.RazonSocial!,
             Direccion = sunatData.FiscalAddress!,
             Representantes = todosLosRepresentantes,
         };
+
+        // 7. Guardar consulta en la base de datos
+        await SaveConsultationAsync(ruc, "RUC", response, sunatData);
+
+        return response;
     }
 
     public async Task<SunatQueryResponse> ScrapSunat(string ruc)
@@ -374,6 +401,109 @@ public class ApiPeruService
     }
 
     /// <summary>
+    /// Web scraping de eldni.com para obtener datos de DNI
+    /// </summary>
+    public async Task<ResponseApiDni> ScrapEldni(string dni)
+    {
+        try
+        {
+            var handler = new HttpClientHandler
+            {
+                UseCookies = true,
+                CookieContainer = new CookieContainer(),
+                AllowAutoRedirect = true,
+            };
+            using var client = new HttpClient(handler);
+            client.DefaultRequestHeaders.Add(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+            );
+            client.DefaultRequestHeaders.Add("Host", "eldni.com");
+
+            // Primera request para obtener cookies y token CSRF
+            var initialUrl = "https://eldni.com/pe/buscar-datos-por-dni";
+            var initialResponse = await client.GetAsync(initialUrl);
+            initialResponse.EnsureSuccessStatusCode();
+
+            var initialHtml = await initialResponse.Content.ReadAsStringAsync();
+            var doc = new HtmlDocument();
+            doc.LoadHtml(initialHtml);
+
+            // Extraer token CSRF
+            var tokenNode = doc.DocumentNode.SelectSingleNode("//input[@name='_token']");
+            var csrfToken = tokenNode?.GetAttributeValue("value", "") ?? "";
+
+            if (string.IsNullOrEmpty(csrfToken))
+            {
+                throw new Exception("No se pudo obtener el token CSRF de eldni.com");
+            }
+
+            // Preparar datos del formulario
+            var formData = new Dictionary<string, string>
+            {
+                { "_token", csrfToken },
+                { "dni", dni },
+            };
+
+            // Enviar POST request con el DNI
+            var postResponse = await client.PostAsync(
+                "https://eldni.com/pe/buscar-datos-por-dni",
+                new FormUrlEncodedContent(formData)
+            );
+            postResponse.EnsureSuccessStatusCode();
+
+            var finalHtml = await postResponse.Content.ReadAsStringAsync();
+            var resultDoc = new HtmlDocument();
+            resultDoc.LoadHtml(finalHtml);
+
+            // Buscar si hay resultados
+            var resultHeader = resultDoc.DocumentNode.SelectSingleNode(
+                "//h3[contains(text(), 'Resultados')]"
+            );
+            if (resultHeader == null)
+            {
+                throw new Exception("DNI no encontrado en eldni.com");
+            }
+
+            // Extraer datos de la tabla
+            var tableRows = resultDoc.DocumentNode.SelectNodes(
+                "//table[@class='table table-striped table-scroll']//tbody//tr"
+            );
+            if (tableRows == null || !tableRows.Any())
+            {
+                throw new Exception("No se encontraron datos en la tabla de resultados");
+            }
+
+            var dataRow = tableRows.First();
+            var cells = dataRow.SelectNodes(".//td");
+            if (cells == null || cells.Count < 4)
+            {
+                throw new Exception("Estructura de datos inválida en eldni.com");
+            }
+
+            var dniResult = TrimInsideAndAround(cells[0].InnerText);
+            var nombres = TrimInsideAndAround(cells[1].InnerText);
+            var apellidoPaterno = TrimInsideAndAround(cells[2].InnerText);
+            var apellidoMaterno = TrimInsideAndAround(cells[3].InnerText);
+
+            // Verificar que los datos no estén vacíos
+            if (string.IsNullOrEmpty(nombres) || string.IsNullOrEmpty(apellidoPaterno))
+            {
+                throw new Exception("Datos incompletos en eldni.com");
+            }
+
+            // Construir nombre completo
+            var nombreCompleto = $"{nombres} {apellidoPaterno} {apellidoMaterno}".Trim();
+
+            return new ResponseApiDni { Numero = dniResult, NombreCompleto = nombreCompleto };
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error obteniendo datos de eldni.com: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Obtener representantes legales directamente de SUNAT
     /// </summary>
     public async Task<List<ResponseApiRucRepresentante>> GetRepresentantesSunat(string ruc)
@@ -613,32 +743,86 @@ public class ApiPeruService
 
     public async Task<ResponseApiDni> GetDataByDniAsync(string dni)
     {
-        // 1. Buscar en la base de datos
+        // 1. Buscar consulta previa en la base de datos (ApiPeruConsultation)
+        var existingConsultation = await _context.ApiPeruConsultations.FirstOrDefaultAsync(c =>
+            c.DocumentNumber == dni && c.DocumentType == "DNI"
+        );
+
+        if (existingConsultation != null)
+        {
+            // Si existe una consulta previa, devolver los datos guardados
+            var cachedData = existingConsultation.GetResponseData<ResponseApiDni>();
+            if (cachedData != null)
+            {
+                return cachedData;
+            }
+        }
+
+        // 2. Buscar en la base de datos de clientes
         var client = await _context.Clients.FirstOrDefaultAsync(c => c.Dni == dni);
         if (client != null && !string.IsNullOrWhiteSpace(client.Name))
         {
-            return new ResponseApiDni { Numero = client.Dni!, NombreCompleto = client.Name };
+            var clientData = new ResponseApiDni
+            {
+                Numero = client.Dni!,
+                NombreCompleto = client.Name,
+            };
+
+            // Guardar consulta en la base de datos
+            await SaveConsultationAsync(dni, "DNI", clientData);
+            return clientData;
         }
 
-        // 2. Consultar API Perú solo si no existe en la base de datos
+        // 3. Web scraping de eldni.com
+        try
+        {
+            var eldniData = await ScrapEldni(dni);
+
+            // Guardar consulta en la base de datos
+            await SaveConsultationAsync(dni, "DNI", eldniData);
+            return eldniData;
+        }
+        catch { }
+
+        // 4. Como última opción, consultar API Perú
         if (string.IsNullOrWhiteSpace(_config.Token))
+        {
             throw new Exception("API Peru token is not configured");
+        }
 
-        var url = $"{_config.BaseUrl}/dni/{dni}?api_token={_config.Token}";
-        var response = await _httpClient.GetAsync(url);
-        response.EnsureSuccessStatusCode();
+        try
+        {
+            var url = $"{_config.BaseUrl}/dni/{dni}?api_token={_config.Token}";
 
-        var json = await response.Content.ReadFromJsonAsync<ApiPeruDniResponse>();
-        var data = json?.data;
+            var httpResponse = await _httpClient.GetAsync(url);
+            httpResponse.EnsureSuccessStatusCode();
 
-        if (
-            data == null
-            || string.IsNullOrWhiteSpace(data.numero)
-            || string.IsNullOrWhiteSpace(data.nombre_completo)
-        )
-            throw new Exception("DNI no encontrado o inválido.");
+            var json = await httpResponse.Content.ReadFromJsonAsync<ApiPeruDniResponse>();
+            var data = json?.data;
 
-        return new ResponseApiDni { Numero = data.numero, NombreCompleto = data.nombre_completo };
+            if (
+                data == null
+                || string.IsNullOrWhiteSpace(data.numero)
+                || string.IsNullOrWhiteSpace(data.nombre_completo)
+            )
+            {
+                throw new Exception("DNI no encontrado en API Perú.");
+            }
+
+            var response = new ResponseApiDni
+            {
+                Numero = data.numero,
+                NombreCompleto = data.nombre_completo,
+            };
+
+            // Guardar consulta en la base de datos
+            await SaveConsultationAsync(dni, "DNI", response);
+            return response;
+        }
+        catch
+        {
+            throw new Exception($"DNI {dni} no encontrado en ninguna fuente disponible.");
+        }
     }
 
     // Clase interna para deserializar la respuesta del DNI
@@ -651,5 +835,105 @@ public class ApiPeruService
             public required string numero { get; set; }
             public required string nombre_completo { get; set; }
         }
+    }
+
+    /// <summary>
+    /// Guarda una consulta de API Perú en la base de datos
+    /// </summary>
+    private async Task SaveConsultationAsync<T>(
+        string documentNumber,
+        string documentType,
+        T responseData,
+        SunatQueryResponse? sunatData = null
+    )
+    {
+        try
+        {
+            var consultation = new ApiPeruConsultation
+            {
+                DocumentNumber = documentNumber,
+                DocumentType = documentType,
+                ConsultedAt = DateTime.UtcNow,
+            };
+
+            // Serializar la respuesta
+            consultation.SetResponseData(responseData);
+
+            // Extraer información adicional para facilitar búsquedas
+            if (responseData is ResponseApiRucFull rucData)
+            {
+                consultation.CompanyName = rucData.NombreORazonSocial;
+                consultation.Address = rucData.Direccion;
+                consultation.Status = rucData.Estado;
+                consultation.Condition = rucData.Condicion;
+            }
+            else if (responseData is ResponseApiDni dniData)
+            {
+                consultation.PersonName = dniData.NombreCompleto;
+            }
+
+            // Agregar información adicional de SUNAT si está disponible
+            if (sunatData != null)
+            {
+                if (string.IsNullOrEmpty(consultation.CompanyName))
+                    consultation.CompanyName = sunatData.RazonSocial;
+                if (string.IsNullOrEmpty(consultation.Address))
+                    consultation.Address = sunatData.FiscalAddress;
+                if (string.IsNullOrEmpty(consultation.Status))
+                    consultation.Status = sunatData.Estado;
+                if (string.IsNullOrEmpty(consultation.Condition))
+                    consultation.Condition = sunatData.Condicion;
+            }
+
+            _context.ApiPeruConsultations.Add(consultation);
+            await _context.SaveChangesAsync();
+
+            Console.WriteLine(
+                $"Consulta de {documentType} {documentNumber} guardada en la base de datos"
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"Error guardando consulta de {documentType} {documentNumber}: {ex.Message}"
+            );
+            // No lanzar excepción para no interrumpir el flujo principal
+        }
+    }
+
+    /// <summary>
+    /// Obtiene el historial de consultas para un documento
+    /// </summary>
+    public async Task<List<ApiPeruConsultation>> GetConsultationHistoryAsync(
+        string documentNumber,
+        string documentType
+    )
+    {
+        return await _context
+            .ApiPeruConsultations.Where(c =>
+                c.DocumentNumber == documentNumber && c.DocumentType == documentType
+            )
+            .OrderByDescending(c => c.ConsultedAt)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Limpia consultas antiguas (más de 30 días)
+    /// </summary>
+    public async Task<int> CleanOldConsultationsAsync(int daysOld = 30)
+    {
+        var cutoffDate = DateTime.UtcNow.AddDays(-daysOld);
+        var oldConsultations = await _context
+            .ApiPeruConsultations.Where(c => c.ConsultedAt < cutoffDate)
+            .ToListAsync();
+
+        if (oldConsultations.Any())
+        {
+            _context.ApiPeruConsultations.RemoveRange(oldConsultations);
+            await _context.SaveChangesAsync();
+            Console.WriteLine($"Se eliminaron {oldConsultations.Count} consultas antiguas");
+        }
+
+        return oldConsultations.Count;
     }
 }
