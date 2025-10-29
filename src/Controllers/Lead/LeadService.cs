@@ -1,5 +1,8 @@
 using System.Linq.Expressions;
+using System.Text.Json;
+using GestionHogar.Controllers;
 using GestionHogar.Controllers.Dtos;
+using GestionHogar.Controllers.Notifications.Dto;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -278,6 +281,17 @@ public class LeadService : ILeadService
 
         _context.Leads.Add(lead);
         await _context.SaveChangesAsync();
+
+        // Enviar notificación de asignación si tiene AssignedToId
+        if (lead.AssignedToId.HasValue)
+        {
+            await SendLeadAssignmentNotificationAsync(
+                lead,
+                "Lead asignado",
+                "Se te ha asignado un nuevo lead"
+            );
+        }
+
         return lead;
     }
 
@@ -286,6 +300,10 @@ public class LeadService : ILeadService
         var lead = await _context.Leads.FirstOrDefaultAsync(l => l.Id == id && l.IsActive);
         if (lead == null)
             return null;
+
+        // Verificar si cambió la asignación
+        var previousAssignedToId = lead.AssignedToId;
+        var newAssignedToId = updatedLead.AssignedToId;
 
         lead.ClientId = updatedLead.ClientId;
         lead.AssignedToId = updatedLead.AssignedToId;
@@ -306,6 +324,17 @@ public class LeadService : ILeadService
         lead.ModifiedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
+        // Enviar notificación solo si cambió la asignación
+        if (previousAssignedToId != newAssignedToId && newAssignedToId.HasValue)
+        {
+            await SendLeadAssignmentNotificationAsync(
+                lead,
+                "Lead reasignado",
+                "Se te ha reasignado un lead"
+            );
+        }
+
         return lead;
     }
 
@@ -1650,5 +1679,478 @@ public class LeadService : ILeadService
         {
             translatedTerms.Add("financemanager");
         }
+    }
+
+    /// <summary>
+    /// Envía notificación personalizada para un lead específico
+    /// Analiza el estado del lead, tareas y tiempo restante para crear mensaje contextual
+    /// </summary>
+    public async Task<object> SendPersonalizedLeadNotificationAsync(Guid leadId, Guid currentUserId)
+    {
+        try
+        {
+            // Obtener el lead con todas sus relaciones
+            var lead = await _context
+                .Leads.Include(l => l.Client)
+                .Include(l => l.AssignedTo)
+                .Include(l => l.Project)
+                .FirstOrDefaultAsync(l => l.Id == leadId && l.IsActive);
+
+            if (lead == null)
+            {
+                return new { success = false, message = "Lead no encontrado" };
+            }
+
+            // Verificar que el usuario actual tenga permisos para notificar sobre este lead
+            if (lead.AssignedToId != currentUserId)
+            {
+                return new
+                {
+                    success = false,
+                    message = "No tienes permisos para notificar sobre este lead",
+                };
+            }
+
+            // Obtener el usuario que envía la notificación
+            var senderUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == currentUserId);
+
+            if (senderUser == null)
+            {
+                return new { success = false, message = "Usuario no encontrado" };
+            }
+
+            // Analizar el estado del lead y crear mensaje personalizado
+            var notificationData = await AnalyzeLeadAndCreateNotification(lead, senderUser);
+
+            // Crear la notificación
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = lead.AssignedToId!.Value,
+                Type = NotificationType.Custom,
+                Priority = notificationData.Priority,
+                Channel = NotificationChannel.InApp,
+                Title = notificationData.Title,
+                Message = notificationData.Message,
+                Data = notificationData.Data,
+                IsRead = false,
+                ReadAt = null,
+                SentAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(1),
+                RelatedEntityId = lead.Id,
+                RelatedEntityType = "Lead",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                ModifiedAt = DateTime.UtcNow,
+            };
+
+            // Guardar notificación
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // Enviar via SSE
+            var notificationDto = new NotificationDto
+            {
+                Id = notification.Id,
+                UserId = notification.UserId,
+                UserName = senderUser.Name ?? "",
+                Type = notification.Type,
+                Priority = notification.Priority,
+                Channel = notification.Channel,
+                Title = notification.Title,
+                Message = notification.Message,
+                Data = notification.Data,
+                IsRead = notification.IsRead,
+                ReadAt = notification.ReadAt,
+                SentAt = notification.SentAt,
+                ExpiresAt = notification.ExpiresAt,
+                RelatedEntityId = notification.RelatedEntityId,
+                RelatedEntityType = notification.RelatedEntityType,
+                CreatedAt = notification.CreatedAt,
+                ModifiedAt = notification.ModifiedAt,
+            };
+
+            // Enviar via SSE (usando el método estático)
+            NotificationStreamController.EnqueueNotificationForUser(
+                lead.AssignedToId.Value,
+                notificationDto
+            );
+
+            return new
+            {
+                success = true,
+                message = "Notificación enviada exitosamente",
+                notification = new
+                {
+                    id = notification.Id,
+                    title = notification.Title,
+                    message = notification.Message,
+                    priority = notification.Priority.ToString(),
+                    leadCode = lead.Code,
+                    clientName = lead.Client?.Name,
+                },
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error enviando notificación personalizada para lead {LeadId}",
+                leadId
+            );
+            return new { success = false, message = "Error interno del servidor" };
+        }
+    }
+
+    /// <summary>
+    /// Analiza el lead y sus tareas para crear una notificación contextual
+    /// </summary>
+    private async Task<NotificationData> AnalyzeLeadAndCreateNotification(
+        Lead lead,
+        User senderUser
+    )
+    {
+        var now = DateTime.UtcNow;
+        var timeRemaining = lead.ExpirationDate - now;
+        var daysRemaining = (int)timeRemaining.TotalDays;
+
+        // Obtener tareas del lead
+        var tasks = await _context
+            .LeadTasks.Where(t => t.LeadId == lead.Id && t.IsActive)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+
+        var hasCallTask = tasks.Any(t => t.Type == TaskType.Call);
+        var hasFollowUpTask = tasks.Any(t => t.Type != TaskType.Call);
+        var totalTasks = tasks.Count;
+
+        // Determinar tipo de notificación basado en el estado y tiempo
+        if (daysRemaining <= 0)
+        {
+            // Lead expirado
+            var statusMessage = GetLeadStatusMessage(lead, hasCallTask, hasFollowUpTask);
+            return new NotificationData
+            {
+                Priority = NotificationPriority.High,
+                Title = "Lead Expirado",
+                Message =
+                    $"El lead {lead.Code} del cliente {lead.Client?.Name} ha expirado. "
+                    + statusMessage,
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        LeadId = lead.Id,
+                        LeadCode = lead.Code,
+                        ClientName = lead.Client?.Name,
+                        Status = lead.Status.ToString(),
+                        DaysRemaining = daysRemaining,
+                        TotalTasks = totalTasks,
+                        HasCallTask = hasCallTask,
+                        HasFollowUpTask = hasFollowUpTask,
+                        ExpiredAt = lead.ExpirationDate,
+                        SenderName = senderUser.Name,
+                    }
+                ),
+            };
+        }
+        else if (daysRemaining <= 1)
+        {
+            // Lead a punto de expirar
+            var statusMessage = GetLeadStatusMessage(lead, hasCallTask, hasFollowUpTask);
+            var urgencyMessage = GetUrgencyMessage(lead, hasCallTask, hasFollowUpTask);
+            return new NotificationData
+            {
+                Priority = NotificationPriority.High,
+                Title = "Lead por Expirar",
+                Message =
+                    $"El lead {lead.Code} del cliente {lead.Client?.Name} expira en {daysRemaining} día(s). "
+                    + statusMessage
+                    + " "
+                    + urgencyMessage,
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        LeadId = lead.Id,
+                        LeadCode = lead.Code,
+                        ClientName = lead.Client?.Name,
+                        Status = lead.Status.ToString(),
+                        DaysRemaining = daysRemaining,
+                        TotalTasks = totalTasks,
+                        HasCallTask = hasCallTask,
+                        HasFollowUpTask = hasFollowUpTask,
+                        ExpiresAt = lead.ExpirationDate,
+                        SenderName = senderUser.Name,
+                    }
+                ),
+            };
+        }
+        else if (daysRemaining <= 3)
+        {
+            // Lead con poco tiempo
+            var statusMessage = GetLeadStatusMessage(lead, hasCallTask, hasFollowUpTask);
+            var suggestionMessage = GetSuggestionMessage(lead, hasCallTask, hasFollowUpTask);
+            return new NotificationData
+            {
+                Priority = NotificationPriority.Normal,
+                Title = "Lead Requiere Atención",
+                Message =
+                    $"El lead {lead.Code} del cliente {lead.Client?.Name} expira en {daysRemaining} días. "
+                    + statusMessage
+                    + " "
+                    + suggestionMessage,
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        LeadId = lead.Id,
+                        LeadCode = lead.Code,
+                        ClientName = lead.Client?.Name,
+                        Status = lead.Status.ToString(),
+                        DaysRemaining = daysRemaining,
+                        TotalTasks = totalTasks,
+                        HasCallTask = hasCallTask,
+                        HasFollowUpTask = hasFollowUpTask,
+                        ExpiresAt = lead.ExpirationDate,
+                        SenderName = senderUser.Name,
+                    }
+                ),
+            };
+        }
+        else
+        {
+            // Lead con tiempo suficiente
+            var statusMessage = GetLeadStatusMessage(lead, hasCallTask, hasFollowUpTask);
+            var reminderMessage = GetReminderMessage(lead, hasCallTask, hasFollowUpTask);
+            return new NotificationData
+            {
+                Priority = NotificationPriority.Low,
+                Title = "Recordatorio de Lead",
+                Message =
+                    $"Recordatorio: Lead {lead.Code} del cliente {lead.Client?.Name}. "
+                    + $"Expira en {daysRemaining} días. "
+                    + statusMessage
+                    + " "
+                    + reminderMessage,
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        LeadId = lead.Id,
+                        LeadCode = lead.Code,
+                        ClientName = lead.Client?.Name,
+                        Status = lead.Status.ToString(),
+                        DaysRemaining = daysRemaining,
+                        TotalTasks = totalTasks,
+                        HasCallTask = hasCallTask,
+                        HasFollowUpTask = hasFollowUpTask,
+                        ExpiresAt = lead.ExpirationDate,
+                        SenderName = senderUser.Name,
+                    }
+                ),
+            };
+        }
+    }
+
+    /// <summary>
+    /// Obtiene descripción amigable del estado del lead
+    /// </summary>
+    private static string GetStatusDescription(LeadStatus status)
+    {
+        return status switch
+        {
+            LeadStatus.Registered => "Registrado (sin atender)",
+            LeadStatus.Attended => "Atendido",
+            LeadStatus.InFollowUp => "En seguimiento",
+            LeadStatus.Completed => "Completado",
+            LeadStatus.Canceled => "Cancelado",
+            LeadStatus.Expired => "Expirado",
+            _ => status.ToString(),
+        };
+    }
+
+    /// <summary>
+    /// Analiza el estado del lead y sus tareas para crear un mensaje contextual inteligente
+    /// </summary>
+    private static string GetLeadStatusMessage(Lead lead, bool hasCallTask, bool hasFollowUpTask)
+    {
+        return lead.Status switch
+        {
+            LeadStatus.Registered =>
+                "El lead está registrado pero no se ha realizado ninguna llamada de contacto inicial.",
+            LeadStatus.Attended when !hasFollowUpTask =>
+                "El lead ha sido atendido pero no se han creado tareas de seguimiento.",
+            LeadStatus.Attended when hasFollowUpTask =>
+                "El lead ha sido atendido y se están realizando tareas de seguimiento.",
+            LeadStatus.InFollowUp => "El lead está en proceso de seguimiento activo.",
+            LeadStatus.Completed => "El lead ha sido completado exitosamente.",
+            LeadStatus.Canceled => "El lead ha sido cancelado.",
+            LeadStatus.Expired => "El lead ha expirado.",
+            _ => $"Estado actual: {GetStatusDescription(lead.Status)}.",
+        };
+    }
+
+    /// <summary>
+    /// Genera mensaje de urgencia basado en el estado y tareas del lead
+    /// </summary>
+    private static string GetUrgencyMessage(Lead lead, bool hasCallTask, bool hasFollowUpTask)
+    {
+        return lead.Status switch
+        {
+            LeadStatus.Registered => "URGENTE: Realizar llamada de contacto inmediatamente.",
+            LeadStatus.Attended when !hasFollowUpTask =>
+                "URGENTE: Crear tareas de seguimiento para no perder el lead.",
+            LeadStatus.Attended when hasFollowUpTask =>
+                "URGENTE: Intensificar seguimiento para cerrar la venta.",
+            LeadStatus.InFollowUp => "URGENTE: Evaluar progreso y tomar acción decisiva.",
+            _ => "Requiere atención inmediata.",
+        };
+    }
+
+    /// <summary>
+    /// Genera sugerencias basadas en el estado y tareas del lead
+    /// </summary>
+    private static string GetSuggestionMessage(Lead lead, bool hasCallTask, bool hasFollowUpTask)
+    {
+        return lead.Status switch
+        {
+            LeadStatus.Registered =>
+                "Sugerencia: Programar llamada de contacto para establecer comunicación inicial.",
+            LeadStatus.Attended when !hasFollowUpTask =>
+                "Sugerencia: Crear tareas de seguimiento como envío de cotización o visita.",
+            LeadStatus.Attended when hasFollowUpTask =>
+                "Sugerencia: Revisar progreso de las tareas de seguimiento activas.",
+            LeadStatus.InFollowUp =>
+                "Sugerencia: Evaluar si el lead está listo para avanzar a la siguiente etapa.",
+            _ => "Sugerencia: Revisar el estado actual y planificar próximas acciones.",
+        };
+    }
+
+    /// <summary>
+    /// Genera mensaje de recordatorio basado en el estado y tareas del lead
+    /// </summary>
+    private static string GetReminderMessage(Lead lead, bool hasCallTask, bool hasFollowUpTask)
+    {
+        return lead.Status switch
+        {
+            LeadStatus.Registered =>
+                "Recordatorio: Este lead necesita contacto inicial mediante llamada.",
+            LeadStatus.Attended when !hasFollowUpTask =>
+                "Recordatorio: Considerar crear tareas de seguimiento para mantener el interés.",
+            LeadStatus.Attended when hasFollowUpTask =>
+                "Recordatorio: Revisar el progreso de las tareas de seguimiento activas.",
+            LeadStatus.InFollowUp =>
+                "Recordatorio: Mantener el momentum del seguimiento para cerrar la venta.",
+            _ => "Recordatorio: Mantener comunicación activa con el cliente.",
+        };
+    }
+
+    /// <summary>
+    /// Envía notificación de asignación de lead
+    /// </summary>
+    private async Task SendLeadAssignmentNotificationAsync(Lead lead, string title, string message)
+    {
+        try
+        {
+            // Obtener el lead con sus relaciones para la notificación
+            var leadWithRelations = await _context
+                .Leads.Include(l => l.Client)
+                .Include(l => l.AssignedTo)
+                .Include(l => l.Project)
+                .FirstOrDefaultAsync(l => l.Id == lead.Id);
+
+            if (leadWithRelations?.AssignedToId == null)
+                return;
+
+            // Crear la notificación
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = leadWithRelations.AssignedToId.Value,
+                Type = NotificationType.Custom,
+                Priority = NotificationPriority.Normal,
+                Channel = NotificationChannel.InApp,
+                Title = title,
+                Message = $"{message}: {leadWithRelations.Code} - {leadWithRelations.Client?.Name}",
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        LeadId = leadWithRelations.Id,
+                        LeadCode = leadWithRelations.Code,
+                        ClientName = leadWithRelations.Client?.Name,
+                        ProjectName = leadWithRelations.Project?.Name,
+                        AssignedToName = leadWithRelations.AssignedTo?.Name,
+                        Status = leadWithRelations.Status.ToString(),
+                        ExpirationDate = leadWithRelations.ExpirationDate,
+                        AssignmentType = title.Contains("reasignado")
+                            ? "Reasignación"
+                            : "Asignación",
+                    }
+                ),
+                IsRead = false,
+                ReadAt = null,
+                SentAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
+                RelatedEntityId = leadWithRelations.Id,
+                RelatedEntityType = "Lead",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                ModifiedAt = DateTime.UtcNow,
+            };
+
+            // Guardar notificación
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // Enviar via SSE
+            var notificationDto = new NotificationDto
+            {
+                Id = notification.Id,
+                UserId = notification.UserId,
+                UserName = leadWithRelations.AssignedTo?.Name ?? "",
+                Type = notification.Type,
+                Priority = notification.Priority,
+                Channel = notification.Channel,
+                Title = notification.Title,
+                Message = notification.Message,
+                Data = notification.Data,
+                IsRead = notification.IsRead,
+                ReadAt = notification.ReadAt,
+                SentAt = notification.SentAt,
+                ExpiresAt = notification.ExpiresAt,
+                RelatedEntityId = notification.RelatedEntityId,
+                RelatedEntityType = notification.RelatedEntityType,
+                CreatedAt = notification.CreatedAt,
+                ModifiedAt = notification.ModifiedAt,
+            };
+
+            // Enviar via SSE (usando el método estático)
+            NotificationStreamController.EnqueueNotificationForUser(
+                leadWithRelations.AssignedToId.Value,
+                notificationDto
+            );
+
+            _logger.LogInformation(
+                "Notificación de asignación enviada para lead {LeadCode} al usuario {UserId}",
+                leadWithRelations.Code,
+                leadWithRelations.AssignedToId.Value
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error enviando notificación de asignación para lead {LeadId}",
+                lead.Id
+            );
+        }
+    }
+
+    /// <summary>
+    /// Clase para datos de notificación
+    /// </summary>
+    private class NotificationData
+    {
+        public NotificationPriority Priority { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string Data { get; set; } = string.Empty;
     }
 }

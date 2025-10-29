@@ -41,9 +41,6 @@ public class ApiPeruService
             var cachedData = existingConsultation.GetResponseData<ResponseApiRucFull>();
             if (cachedData != null)
             {
-                Console.WriteLine(
-                    $"Devolviendo datos de RUC {ruc} desde caché (consultado el {existingConsultation.ConsultedAt})"
-                );
                 return cachedData;
             }
         }
@@ -651,14 +648,10 @@ public class ApiPeruService
                 }
             }
 
-            Console.WriteLine(
-                $"Encontrados {representantes.Count} representantes en SUNAT para RUC {ruc}"
-            );
             return representantes;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error obteniendo representantes de SUNAT: {ex.Message}");
             return new List<ResponseApiRucRepresentante>();
         }
     }
@@ -887,10 +880,6 @@ public class ApiPeruService
 
             _context.ApiPeruConsultations.Add(consultation);
             await _context.SaveChangesAsync();
-
-            Console.WriteLine(
-                $"Consulta de {documentType} {documentNumber} guardada en la base de datos"
-            );
         }
         catch (Exception ex)
         {
@@ -931,7 +920,6 @@ public class ApiPeruService
         {
             _context.ApiPeruConsultations.RemoveRange(oldConsultations);
             await _context.SaveChangesAsync();
-            Console.WriteLine($"Se eliminaron {oldConsultations.Count} consultas antiguas");
         }
 
         return oldConsultations.Count;

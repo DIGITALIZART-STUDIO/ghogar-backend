@@ -104,6 +104,9 @@ public class LeadsController : ControllerBase
     {
         try
         {
+            // Obtener el usuario actual para logging
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
             var lead = new Lead
             {
                 Code = "", // Valor temporal, será reemplazado en el service
@@ -117,6 +120,10 @@ public class LeadsController : ControllerBase
             var createdLead = await _leadService.CreateLeadAsync(lead);
             return CreatedAtAction(nameof(GetLead), new { id = createdLead.Id }, createdLead);
         }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
         catch (Exception ex)
         {
             return BadRequest(ex.Message);
@@ -129,6 +136,9 @@ public class LeadsController : ControllerBase
     {
         try
         {
+            // Obtener el usuario actual para logging
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
             var existingLead = await _leadService.GetLeadByIdAsync(id);
             if (existingLead == null)
                 return NotFound();
@@ -157,6 +167,10 @@ public class LeadsController : ControllerBase
 
             var updatedLead = await _leadService.UpdateLeadAsync(id, existingLead);
             return Ok(updatedLead);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
         }
         catch (Exception ex)
         {
@@ -664,5 +678,44 @@ public class LeadsController : ControllerBase
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "leads.xlsx"
         );
+    }
+
+    /// <summary>
+    /// Envía notificación personalizada para un lead específico
+    /// Analiza el estado del lead, tareas y tiempo restante para crear mensaje contextual
+    /// </summary>
+    [HttpPost("{leadId}/notify")]
+    public async Task<ActionResult<object>> SendPersonalizedLeadNotification(Guid leadId)
+    {
+        try
+        {
+            // Obtener el usuario actual usando UserExtensions
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
+            _logger.LogInformation(
+                "Enviando notificación personalizada para lead {LeadId} por usuario {UserId}",
+                leadId,
+                currentUserId
+            );
+
+            var result = await _leadService.SendPersonalizedLeadNotificationAsync(
+                leadId,
+                currentUserId
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error enviando notificación personalizada para lead {LeadId}",
+                leadId
+            );
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 }

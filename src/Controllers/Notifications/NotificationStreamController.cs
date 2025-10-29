@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.Json;
 using GestionHogar.Controllers.Notifications.Dto;
@@ -15,18 +16,26 @@ public class NotificationStreamController : ControllerBase
 {
     private readonly INotificationService _notificationService;
     private readonly ILogger<NotificationStreamController> _logger;
-    private static readonly Dictionary<Guid, List<NotificationDto>> _userNotificationQueues = new();
-    private static readonly object _queueLock = new object();
+    private static readonly ConcurrentDictionary<
+        Guid,
+        List<NotificationDto>
+    > _userNotificationQueues = new();
+    private static readonly ConcurrentDictionary<
+        Guid,
+        TaskCompletionSource<NotificationDto>
+    > _userEventSources = new();
 
-    // Método estático para que NotificationService pueda encolar notificaciones inmediatamente
+    // Método estático para enviar notificaciones inmediatamente via eventos
     public static void EnqueueNotificationForUser(Guid userId, NotificationDto notification)
     {
-        lock (_queueLock)
+
+        // Intentar enviar inmediatamente via evento
+        if (_userEventSources.TryGetValue(userId, out var eventSource))
         {
-            if (_userNotificationQueues.ContainsKey(userId))
-            {
-                _userNotificationQueues[userId].Add(notification);
-            }
+            eventSource.SetResult(notification);
+
+            // Crear nuevo TaskCompletionSource para futuras notificaciones
+            _userEventSources[userId] = new TaskCompletionSource<NotificationDto>();
         }
     }
 
@@ -56,14 +65,9 @@ public class NotificationStreamController : ControllerBase
         response.Headers["Cache-Control"] = "no-cache";
         response.Headers["Connection"] = "keep-alive";
 
-        // Inicializar cola de notificaciones para el usuario (thread-safe)
-        lock (_queueLock)
-        {
-            if (!_userNotificationQueues.ContainsKey(userId))
-            {
-                _userNotificationQueues[userId] = new List<NotificationDto>();
-            }
-        }
+        // Inicializar evento de notificaciones para el usuario
+        _userEventSources[userId] = new TaskCompletionSource<NotificationDto>();
+        _userNotificationQueues[userId] = new List<NotificationDto>();
 
         try
         {
@@ -78,41 +82,29 @@ public class NotificationStreamController : ControllerBase
                 }
             );
 
-            // Mantener la conexión abierta y enviar notificaciones
+            // Mantener la conexión abierta y esperar eventos de notificaciones
             while (!HttpContext.RequestAborted.IsCancellationRequested)
             {
-                // Verificar si hay notificaciones pendientes para este usuario (thread-safe)
-                List<NotificationDto> pendingNotifications;
-                lock (_queueLock)
+                try
                 {
-                    if (!_userNotificationQueues.ContainsKey(userId))
-                    {
-                        _userNotificationQueues[userId] = new List<NotificationDto>();
-                        pendingNotifications = new List<NotificationDto>();
-                    }
-                    else
-                    {
-                        pendingNotifications = _userNotificationQueues[userId].ToList();
-                        if (pendingNotifications.Any())
-                        {
-                            _userNotificationQueues[userId].Clear();
-                        }
-                    }
-                }
+                    // Esperar por una notificación via evento (sin polling)
+                    var notification = await _userEventSources[userId].Task;
 
-                if (pendingNotifications.Any())
+                    await SendSSEMessage("notification", notification);
+
+                    // Crear nuevo TaskCompletionSource para la siguiente notificación
+                    _userEventSources[userId] = new TaskCompletionSource<NotificationDto>();
+                }
+                catch (OperationCanceledException)
                 {
-                    foreach (var notification in pendingNotifications)
-                    {
-                        await SendSSEMessage("notification", notification);
-                    }
+                    break;
                 }
-
-                // Enviar heartbeat cada 30 segundos (polling como fallback)
-                await SendSSEMessage("heartbeat", new { timestamp = DateTime.UtcNow });
-
-                // 30 segundos: suficiente como fallback, emisión inmediata maneja el tiempo real
-                await Task.Delay(30000, HttpContext.RequestAborted);
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error procesando evento SSE para usuario {UserId}", userId);
+                    // Crear nuevo TaskCompletionSource en caso de error
+                    _userEventSources[userId] = new TaskCompletionSource<NotificationDto>();
+                }
             }
         }
         catch (OperationCanceledException)
@@ -125,14 +117,9 @@ public class NotificationStreamController : ControllerBase
         }
         finally
         {
-            // Limpiar la cola cuando se desconecta (thread-safe)
-            lock (_queueLock)
-            {
-                if (_userNotificationQueues.ContainsKey(userId))
-                {
-                    _userNotificationQueues.Remove(userId);
-                }
-            }
+            // Limpiar eventos y cola cuando se desconecta
+            _userEventSources.TryRemove(userId, out _);
+            _userNotificationQueues.TryRemove(userId, out _);
         }
     }
 
