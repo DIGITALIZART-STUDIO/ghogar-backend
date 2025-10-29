@@ -648,9 +648,20 @@ public class ReservationService : IReservationService
     > GetAllReservationsWithPendingPaymentsPaginatedAsync(
         int page,
         int pageSize,
-        Guid? projectId = null
+        PaginationService paginationService,
+        Guid currentUserId,
+        List<string> currentUserRoles,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        ContractValidationStatus[]? contractValidationStatus = null,
+        Guid? projectId = null,
+        string? orderBy = null
     )
     {
+        // Verificar si es Supervisor
+        var isSupervisor = currentUserRoles.Contains("Supervisor");
+
         var query = _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
@@ -663,24 +674,92 @@ public class ReservationService : IReservationService
                 && r.IsActive
             );
 
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar reservas que tienen leads asignados a sus SalesAdvisors o al propio supervisor
+        if (isSupervisor)
+        {
+            // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+            var assignedSalesAdvisorIds = await _context
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SupervisorId == currentUserId && ssa.IsActive
+                )
+                .Select(ssa => ssa.SalesAdvisorId)
+                .ToListAsync();
+
+            // Incluir también el propio ID del supervisor para que vea sus propios clientes
+            assignedSalesAdvisorIds.Add(currentUserId);
+
+            // Filtrar reservas que tienen leads asignados a estos usuarios
+            query = query.Where(r =>
+                _context.Leads.Any(l =>
+                    l.ClientId == r.ClientId
+                    && l.IsActive
+                    && (
+                        l.AssignedToId.HasValue
+                        && (
+                            assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
+                            || l.AssignedToId.Value == currentUserId
+                        )
+                    )
+                )
+            );
+        }
+
         // Aplicar filtro por proyecto si se proporciona
         if (projectId.HasValue)
         {
             query = query.Where(r => r.Quotation.Lot.Block.ProjectId == projectId.Value);
         }
 
-        var totalCount = await query.CountAsync();
-        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        // Aplicar filtros de status si se proporcionan
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(r => status.Contains(r.Status));
+        }
 
-        var reservations = await query
-            .OrderBy(r => r.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        // Aplicar filtros de paymentMethod si se proporcionan
+        if (paymentMethod != null && paymentMethod.Length > 0)
+        {
+            query = query.Where(r => paymentMethod.Contains(r.PaymentMethod));
+        }
 
-        var result = new List<ReservationWithPendingPaymentsDto>();
+        // Aplicar filtros de contractValidationStatus si se proporcionan
+        if (contractValidationStatus != null && contractValidationStatus.Length > 0)
+        {
+            query = query.Where(r => contractValidationStatus.Contains(r.ContractValidationStatus));
+        }
 
-        foreach (var reservation in reservations)
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(r =>
+                (r.Client.Name != null && r.Client.Name.ToLower().Contains(searchTerm))
+                || (r.Client.Email != null && r.Client.Email.ToLower().Contains(searchTerm))
+                || (r.Client.PhoneNumber != null && r.Client.PhoneNumber.Contains(searchTerm))
+                || (r.Client.Dni != null && r.Client.Dni.Contains(searchTerm))
+                || (r.Client.Ruc != null && r.Client.Ruc.Contains(searchTerm))
+                || (
+                    r.Client.CompanyName != null
+                    && r.Client.CompanyName.ToLower().Contains(searchTerm)
+                )
+                || (
+                    r.Quotation.Lot.Block.Project.Name != null
+                    && r.Quotation.Lot.Block.Project.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    r.Quotation.Lot.LotNumber != null
+                    && r.Quotation.Lot.LotNumber.Contains(searchTerm)
+                )
+            );
+        }
+
+        // Ejecutar paginación optimizada
+        var paginatedResult = await _paginationService.PaginateAsync(query, page, pageSize);
+
+        // Convertir el resultado paginado a ReservationWithPendingPaymentsDto
+        var dtoResult = new List<ReservationWithPendingPaymentsDto>();
+
+        foreach (var reservation in paginatedResult.Data)
         {
             // Obtener cuotas pendientes para esta reserva
             var pendingPayments = await GetPendingPaymentsForReservationAsync(reservation.Id);
@@ -695,7 +774,7 @@ public class ReservationService : IReservationService
                 .FirstOrDefault()
                 ?.DueDate;
 
-            result.Add(
+            dtoResult.Add(
                 new ReservationWithPendingPaymentsDto
                 {
                     Id = reservation.Id,
@@ -703,6 +782,7 @@ public class ReservationService : IReservationService
                     AmountPaid = reservation.AmountPaid,
                     PaymentMethod = reservation.PaymentMethod,
                     Status = reservation.Status,
+                    ContractValidationStatus = reservation.ContractValidationStatus,
                     Currency = reservation.Currency,
                     ExchangeRate = reservation.ExchangeRate,
                     ExpiresAt = reservation.ExpiresAt,
@@ -757,16 +837,8 @@ public class ReservationService : IReservationService
 
         return new PaginatedResponseV2<ReservationWithPendingPaymentsDto>
         {
-            Data = result,
-            Meta = new PaginationMetadata
-            {
-                Page = page,
-                PageSize = pageSize,
-                Total = totalCount,
-                TotalPages = totalPages,
-                HasNext = page < totalPages,
-                HasPrevious = page > 1,
-            },
+            Data = dtoResult,
+            Meta = paginatedResult.Meta,
         };
     }
 

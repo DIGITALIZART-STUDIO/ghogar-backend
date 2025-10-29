@@ -82,6 +82,14 @@ public interface IReservationService
     > GetAllReservationsWithPendingPaymentsPaginatedAsync(
         int page,
         int pageSize,
-        Guid? projectId = null
+        PaginationService paginationService,
+        Guid currentUserId,
+        List<string> currentUserRoles,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        ContractValidationStatus[]? contractValidationStatus = null,
+        Guid? projectId = null,
+        string? orderBy = null
     );
 }

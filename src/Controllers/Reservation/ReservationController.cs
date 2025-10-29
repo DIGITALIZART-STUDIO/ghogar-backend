@@ -161,18 +161,36 @@ public class ReservationsController : ControllerBase
     public async Task<
         ActionResult<PaginatedResponseV2<ReservationWithPendingPaymentsDto>>
     > GetAllReservationsWithPendingPaymentsPaginated(
+        [FromServices] PaginationService paginationService,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
-        [FromQuery] Guid? projectId = null
+        [FromQuery] string? search = null,
+        [FromQuery] ReservationStatus[]? status = null,
+        [FromQuery] PaymentMethod[]? paymentMethod = null,
+        [FromQuery] ContractValidationStatus[]? contractValidationStatus = null,
+        [FromQuery] Guid? projectId = null,
+        [FromQuery] string? orderBy = null
     )
     {
         try
         {
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
             var result =
                 await _reservationService.GetAllReservationsWithPendingPaymentsPaginatedAsync(
                     page,
                     pageSize,
-                    projectId
+                    paginationService,
+                    currentUserId,
+                    currentUserRoles,
+                    search,
+                    status,
+                    paymentMethod,
+                    contractValidationStatus,
+                    projectId,
+                    orderBy
                 );
             return Ok(result);
         }

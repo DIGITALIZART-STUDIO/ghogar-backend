@@ -28,7 +28,6 @@ public class NotificationStreamController : ControllerBase
     // Método estático para enviar notificaciones inmediatamente via eventos
     public static void EnqueueNotificationForUser(Guid userId, NotificationDto notification)
     {
-
         // Intentar enviar inmediatamente via evento
         if (_userEventSources.TryGetValue(userId, out var eventSource))
         {
@@ -101,7 +100,11 @@ public class NotificationStreamController : ControllerBase
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error procesando evento SSE para usuario {UserId}", userId);
+                    _logger.LogError(
+                        ex,
+                        "Error procesando evento SSE para usuario {UserId}",
+                        userId
+                    );
                     // Crear nuevo TaskCompletionSource en caso de error
                     _userEventSources[userId] = new TaskCompletionSource<NotificationDto>();
                 }
