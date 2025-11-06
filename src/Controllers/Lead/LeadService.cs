@@ -1640,16 +1640,6 @@ public class LeadService : ILeadService
                 return new { success = false, message = "Lead no encontrado" };
             }
 
-            // Solo el usuario asignado puede notificar sobre su lead
-            if (lead.AssignedToId != currentUserId)
-            {
-                return new
-                {
-                    success = false,
-                    message = "Solo puedes notificar sobre tus leads asignados",
-                };
-            }
-
             // Obtener el usuario que envía la notificación
             var senderUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == currentUserId);
 
