@@ -228,7 +228,7 @@ public class NotificationController : ControllerBase
     /// Crea una nueva notificación (solo para administradores)
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager,FinanceManager")]
     public async Task<ActionResult<NotificationDto>> CreateNotification(
         [FromBody] NotificationCreateDto dto
     )
@@ -255,7 +255,7 @@ public class NotificationController : ControllerBase
     /// Envía notificaciones pendientes (solo para administradores)
     /// </summary>
     [HttpPost("send-pending")]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager,FinanceManager")]
     public async Task<ActionResult> SendPendingNotifications()
     {
         try
@@ -277,7 +277,7 @@ public class NotificationController : ControllerBase
     /// Limpia notificaciones expiradas (solo para administradores)
     /// </summary>
     [HttpPost("clean-expired")]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager,FinanceManager")]
     public async Task<ActionResult> CleanExpiredNotifications()
     {
         try

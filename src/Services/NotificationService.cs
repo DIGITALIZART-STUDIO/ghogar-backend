@@ -90,7 +90,7 @@ public class NotificationService : INotificationService
         await _context.SaveChangesAsync();
 
         _logger.LogInformation(
-            "Notification created: {NotificationId} for user {UserId}",
+            "✅ [NotificationService] Notification created: {NotificationId} for user {UserId}",
             notification.Id,
             notification.UserId
         );

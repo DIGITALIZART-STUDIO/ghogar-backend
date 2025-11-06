@@ -57,7 +57,7 @@ public class NotificationStreamController : ControllerBase
         var userId = GetCurrentUserId();
         var response = Response;
 
-        _logger.LogInformation("SSE connection started for user {UserId}", userId);
+        _logger.LogInformation("🔵 [SSE] Connection started for user {UserId}", userId);
 
         // Configurar headers para SSE
         response.Headers["Content-Type"] = "text/event-stream";
@@ -81,18 +81,58 @@ public class NotificationStreamController : ControllerBase
                 }
             );
 
+            // 🚀 CARGAR NOTIFICACIONES PENDIENTES al conectar
+            await LoadAndSendPendingNotifications(userId);
+
             // Mantener la conexión abierta y esperar eventos de notificaciones
             while (!HttpContext.RequestAborted.IsCancellationRequested)
             {
                 try
                 {
+                    // Verificar que el usuario aún está conectado
+                    if (!_userEventSources.TryGetValue(userId, out var eventSource))
+                    {
+                        _logger.LogWarning(
+                            "⚠️ [SSE] User {UserId} event source removed, closing connection",
+                            userId
+                        );
+                        break;
+                    }
+
                     // Esperar por una notificación via evento (sin polling)
-                    var notification = await _userEventSources[userId].Task;
+                    // Usar CancellationToken para permitir timeout periódico para heartbeat
+                    using var cts = new CancellationTokenSource();
+                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30), cts.Token);
+                    var notificationTask = eventSource.Task;
 
-                    await SendSSEMessage("notification", notification);
+                    var completedTask = await Task.WhenAny(notificationTask, timeoutTask);
 
-                    // Crear nuevo TaskCompletionSource para la siguiente notificación
-                    _userEventSources[userId] = new TaskCompletionSource<NotificationDto>();
+                    if (completedTask == notificationTask)
+                    {
+                        // Notificación recibida
+                        cts.Cancel(); // Cancelar timeout
+                        var notification = await notificationTask;
+
+                        _logger.LogInformation(
+                            "📨 [SSE] Received new notification for user {UserId}: {NotificationId} - {Title}",
+                            userId,
+                            notification.Id,
+                            notification.Title
+                        );
+
+                        await SendSSEMessage("notification", notification);
+
+                        // Crear nuevo TaskCompletionSource para la siguiente notificación
+                        if (_userEventSources.TryGetValue(userId, out _))
+                        {
+                            _userEventSources[userId] = new TaskCompletionSource<NotificationDto>();
+                        }
+                    }
+                    else
+                    {
+                        // Timeout alcanzado - enviar heartbeat
+                        await SendSSEMessage("heartbeat", new { timestamp = DateTime.UtcNow });
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -105,24 +145,28 @@ public class NotificationStreamController : ControllerBase
                         "Error procesando evento SSE para usuario {UserId}",
                         userId
                     );
-                    // Crear nuevo TaskCompletionSource en caso de error
-                    _userEventSources[userId] = new TaskCompletionSource<NotificationDto>();
+                    // Crear nuevo TaskCompletionSource en caso de error si aún existe
+                    if (_userEventSources.TryGetValue(userId, out _))
+                    {
+                        _userEventSources[userId] = new TaskCompletionSource<NotificationDto>();
+                    }
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("SSE connection cancelled for user {UserId}", userId);
+            _logger.LogInformation("🔴 [SSE] Connection cancelled for user {UserId}", userId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in SSE stream for user {UserId}", userId);
+            _logger.LogError(ex, "❌ [SSE] Error in SSE stream for user {UserId}", userId);
         }
         finally
         {
             // Limpiar eventos y cola cuando se desconecta
             _userEventSources.TryRemove(userId, out _);
             _userNotificationQueues.TryRemove(userId, out _);
+            _logger.LogInformation("🧹 [SSE] Cleaned up resources for user {UserId}", userId);
         }
     }
 
@@ -130,7 +174,7 @@ public class NotificationStreamController : ControllerBase
     /// Endpoint para enviar notificación a un usuario específico (solo para administradores)
     /// </summary>
     [HttpPost("send-to-user/{targetUserId}")]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager,FinanceManager")]
     public async Task<ActionResult> SendNotificationToUser(
         Guid targetUserId,
         [FromBody] NotificationCreateDto dto
@@ -169,7 +213,7 @@ public class NotificationStreamController : ControllerBase
     /// Endpoint para enviar notificación a múltiples usuarios (solo para administradores)
     /// </summary>
     [HttpPost("send-to-multiple")]
-    [Authorize(Roles = "SuperAdmin,Admin,Manager")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager,FinanceManager")]
     public async Task<ActionResult> SendNotificationToMultiple(
         [FromBody] SendToMultipleRequest request
     )
@@ -301,7 +345,77 @@ public class NotificationStreamController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error sending SSE message");
+            _logger.LogError(ex, "❌ [SSE] Error sending SSE message");
+        }
+    }
+
+    /// <summary>
+    /// Carga y envía notificaciones pendientes no leídas cuando el usuario se conecta
+    /// </summary>
+    private async Task LoadAndSendPendingNotifications(Guid userId)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "📋 [LoadPending] Loading pending notifications for user {UserId}",
+                userId
+            );
+
+            // Cargar notificaciones pendientes no leídas del usuario
+            // Límite: últimas 50 notificaciones no leídas (para no saturar el stream)
+            var pendingNotifications = await _notificationService.GetUserNotificationsAsync(
+                userId,
+                page: 1,
+                pageSize: 50, // Límite razonable para carga inicial
+                isRead: false, // Solo no leídas
+                type: null,
+                priority: null
+            );
+
+            if (pendingNotifications?.Items != null && pendingNotifications.Items.Any())
+            {
+                var count = pendingNotifications.Items.Count;
+                _logger.LogInformation(
+                    "📤 [LoadPending] Sending {Count} pending notifications to user {UserId}",
+                    count,
+                    userId
+                );
+
+                // Enviar cada notificación pendiente por SSE
+                // Más recientes primero (ya vienen ordenadas por OrderByDescending)
+                foreach (var notification in pendingNotifications.Items)
+                {
+                    await SendSSEMessage("notification", notification);
+
+                    // Pequeño delay para no saturar el cliente
+                    await Task.Delay(50, HttpContext.RequestAborted);
+                }
+
+                _logger.LogInformation(
+                    "✅ [LoadPending] Successfully sent {Count} pending notifications to user {UserId}",
+                    count,
+                    userId
+                );
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "ℹ️ [LoadPending] No pending notifications for user {UserId}",
+                    userId
+                );
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation(
+                "Pending notifications loading cancelled for user {UserId}",
+                userId
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading pending notifications for user {UserId}", userId);
+            // No lanzar excepción - continuar con el stream aunque falle la carga inicial
         }
     }
 

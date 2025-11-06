@@ -7,6 +7,7 @@ using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using HtmlAgilityPack;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace GestionHogar.Services;
@@ -16,16 +17,19 @@ public class ApiPeruService
     private readonly ApiPeruConfiguration _config;
     private readonly HttpClient _httpClient;
     private readonly DatabaseContext _context;
+    private readonly ILogger<ApiPeruService> _logger;
 
     public ApiPeruService(
         IOptions<ApiPeruConfiguration> config,
         HttpClient httpClient,
-        DatabaseContext context
+        DatabaseContext context,
+        ILogger<ApiPeruService> logger
     )
     {
         _config = config.Value;
         _httpClient = httpClient;
         _context = context;
+        _logger = logger;
     }
 
     public async Task<ResponseApiRucFull> GetDataByRucAsync(string ruc)
@@ -109,7 +113,7 @@ public class ApiPeruService
             catch (Exception ex)
             {
                 // Log error but continue with SUNAT data
-                Console.WriteLine($"Error obteniendo representantes de API Perú: {ex.Message}");
+                _logger.LogError(ex, "Error obteniendo representantes de API Perú");
             }
         }
 
@@ -883,8 +887,11 @@ public class ApiPeruService
         }
         catch (Exception ex)
         {
-            Console.WriteLine(
-                $"Error guardando consulta de {documentType} {documentNumber}: {ex.Message}"
+            _logger.LogError(
+                ex,
+                "Error guardando consulta de {DocumentType} {DocumentNumber}",
+                documentType,
+                documentNumber
             );
             // No lanzar excepción para no interrumpir el flujo principal
         }
