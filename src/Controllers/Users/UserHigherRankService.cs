@@ -286,10 +286,10 @@ public class UserHigherRankService : IUserHigherRankService
         )
         {
             preselectedGuid = parsedGuid;
-            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+
             if (page == 1)
             {
-                // Verificar que el usuario preseleccionado existe y cumple los criterios
+                // En la primera página: incluir el usuario preseleccionado al inicio
                 var preselectedUser = await _db
                     .Users.Where(u =>
                         u.Id == preselectedGuid && u.Id != currentUserId && u.IsActive
@@ -312,6 +312,11 @@ public class UserHigherRankService : IUserHigherRankService
                     // Modificar la query para que el usuario preseleccionado aparezca primero
                     query = query.OrderBy(u => u.User.Id == preselectedGuid ? 0 : 1);
                 }
+            }
+            else
+            {
+                // En páginas siguientes: excluir el usuario preseleccionado para evitar duplicados
+                query = query.Where(u => u.User.Id != preselectedGuid);
             }
         }
 

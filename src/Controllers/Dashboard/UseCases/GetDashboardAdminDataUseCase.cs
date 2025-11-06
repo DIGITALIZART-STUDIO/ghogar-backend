@@ -518,7 +518,7 @@ public class GetDashboardAdminDataUseCase
         var totalReservations = allReservations.Count;
         var reservationStatusData = allReservations
             .GroupBy(r => r.Status)
-            .Select(g => new ReservationStatusDto
+            .Select(g => new DashboardReservationStatusDto
             {
                 Status = g.Key.ToString(),
                 Count = g.Count(),

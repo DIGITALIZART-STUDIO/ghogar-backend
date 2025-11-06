@@ -88,4 +88,7 @@ public interface ILeadService
     Task<IEnumerable<Lead>> GetExpiredLeadsAsync();
     Task<int> CheckAndUpdateExpiredLeadsAsync();
     Task<byte[]> ExportLeadsToExcelAsync(IExcelExportService excelExportService);
+
+    // Método para notificaciones personalizadas de leads
+    Task<object> SendPersonalizedLeadNotificationAsync(Guid leadId, Guid currentUserId);
 }

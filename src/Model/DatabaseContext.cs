@@ -50,6 +50,10 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<SupervisorSalesAdvisor> SupervisorSalesAdvisors { get; set; } = null!;
 
+    public DbSet<Notification> Notifications { get; set; } = null!;
+
+    public DbSet<ApiPeruConsultation> ApiPeruConsultations { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -139,6 +143,28 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
             entity.HasIndex(e => e.SupervisorId);
             entity.HasIndex(e => e.SalesAdvisorId);
             entity.HasIndex(e => new { e.SupervisorId, e.SalesAdvisorId }).IsUnique();
+        });
+
+        // Configuración de ApiPeruConsultation
+        builder.Entity<ApiPeruConsultation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            // Configurar propiedades
+            entity.Property(e => e.DocumentNumber).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.DocumentType).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.ResponseData).IsRequired();
+            entity.Property(e => e.CompanyName).HasMaxLength(500);
+            entity.Property(e => e.PersonName).HasMaxLength(500);
+            entity.Property(e => e.Address).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasMaxLength(50);
+            entity.Property(e => e.Condition).HasMaxLength(50);
+
+            // Índices para optimizar consultas
+            entity.HasIndex(e => new { e.DocumentNumber, e.DocumentType });
+            entity.HasIndex(e => e.ConsultedAt);
+            entity.HasIndex(e => e.CompanyName);
+            entity.HasIndex(e => e.PersonName);
         });
     }
 

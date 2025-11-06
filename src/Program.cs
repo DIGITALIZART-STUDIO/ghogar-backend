@@ -3,6 +3,7 @@ using GestionHogar.Configuration;
 using GestionHogar.Controllers;
 using GestionHogar.Controllers.ApiPeru;
 using GestionHogar.Controllers.ExcelExport;
+using GestionHogar.Controllers.Notifications;
 using GestionHogar.Model;
 using GestionHogar.Services;
 using GestionHogar.Utils;
@@ -208,6 +209,7 @@ var modules = new IModule[]
     new EmailModule(),
     new UserHigherRankModule(),
     new LandingModule(),
+    new NotificationModule(),
 };
 
 // Register dashboard services

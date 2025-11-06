@@ -9,6 +9,7 @@ public class ReservationWithPendingPaymentsDto
     public decimal AmountPaid { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public ReservationStatus Status { get; set; }
+    public ContractValidationStatus ContractValidationStatus { get; set; }
     public Currency Currency { get; set; }
     public decimal ExchangeRate { get; set; }
     public DateTime ExpiresAt { get; set; }

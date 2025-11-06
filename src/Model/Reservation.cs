@@ -24,10 +24,24 @@ public class Reservation : BaseModel
     [Required]
     public DateOnly ReservationDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
 
-    // Monto pagado para la separación
+    // Monto pagado para la separación (total acumulado)
     [Required]
     [Column(TypeName = "decimal(18,2)")]
     public decimal AmountPaid { get; set; }
+
+    // Monto total requerido para la separación
+    [Required]
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal TotalAmountRequired { get; set; }
+
+    // Monto pendiente por pagar
+    [Required]
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal RemainingAmount { get; set; }
+
+    // Historial de pagos parciales
+    [Column(TypeName = "jsonb")]
+    public string? PaymentHistory { get; set; }
 
     // Moneda (soles o dólares)
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -113,4 +127,14 @@ public enum ContractValidationStatus
     None, // Sin validación
     PendingValidation, // Pendiente de validación de contrato
     Validated, // Contrato validado
+}
+
+// Enum para estados de pagos individuales
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum PaymentStatus
+{
+    PENDING, // Pendiente de confirmación
+    CONFIRMED, // Confirmado
+    REJECTED, // Rechazado
+    CANCELLED, // Cancelado
 }

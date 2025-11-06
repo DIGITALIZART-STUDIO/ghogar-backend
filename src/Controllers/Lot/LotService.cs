@@ -65,10 +65,10 @@ public class LotService : ILotService
         )
         {
             preselectedGuid = parsedGuid;
-            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+
             if (page == 1)
             {
-                // Verificar que el lote preseleccionado existe
+                // En la primera página: incluir el lote preseleccionado al inicio
                 var preselectedLot = await _context
                     .Lots.Include(l => l.Block)
                     .ThenInclude(b => b.Project)
@@ -79,6 +79,11 @@ public class LotService : ILotService
                     // Modificar la query para que el lote preseleccionado aparezca primero
                     query = query.OrderBy(l => l.Id == preselectedGuid ? 0 : 1);
                 }
+            }
+            else
+            {
+                // En páginas siguientes: excluir el lote preseleccionado para evitar duplicados
+                query = query.Where(l => l.Id != preselectedGuid);
             }
         }
 
@@ -248,10 +253,10 @@ public class LotService : ILotService
         )
         {
             preselectedGuid = parsedGuid;
-            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+
             if (page == 1)
             {
-                // Verificar que el lote preseleccionado existe y cumple con los filtros
+                // En la primera página: incluir el lote preseleccionado al inicio
                 var preselectedLot = await _context
                     .Lots.Include(l => l.Block)
                     .ThenInclude(b => b.Project)
@@ -266,6 +271,11 @@ public class LotService : ILotService
                     // Modificar la query para que el lote preseleccionado aparezca primero
                     query = query.OrderBy(l => l.Id == preselectedGuid ? 0 : 1);
                 }
+            }
+            else
+            {
+                // En páginas siguientes: excluir el lote preseleccionado para evitar duplicados
+                query = query.Where(l => l.Id != preselectedGuid);
             }
         }
 

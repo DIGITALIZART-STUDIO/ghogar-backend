@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Cronos;
 using GestionHogar.Controllers;
+using GestionHogar.Controllers.Notifications.Dto;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +25,17 @@ public class LeadExpirationService : BackgroundService
     private readonly int _maxBackoffMinutes; // Delay máximo para backoff
     private DateTime? _lastErrorTime = null; // Tiempo del último error
     private TimeSpan _backoffDelay; // Delay actual para backoff
+
+    // Rate limiting para notificaciones
+    private const int MAX_NOTIFICATIONS_PER_BATCH = 50; // Máximo 50 notificaciones por lote
+    private const int MAX_NOTIFICATIONS_PER_USER = 10; // Máximo 10 leads por usuario
+    private const int NOTIFICATION_COOLDOWN_HOURS = 1; // 1 hora de cooldown
+    private const bool ENABLE_NOTIFICATION_GROUPING = true; // Agrupar notificaciones
+    private const int MAX_LEADS_PER_NOTIFICATION = 5; // Máximo 5 leads por notificación individual
+    private const int PRIORITY_LEAD_DAYS_OLD = 3; // Leads más antiguos tienen prioridad
+
+    // Clase para resultado del procesamiento
+    private record ProcessResult(List<Lead> Processed, List<Lead> Deferred);
 
     public LeadExpirationService(
         IServiceProvider serviceProvider,
@@ -396,6 +409,10 @@ public class LeadExpirationService : BackgroundService
             {
                 await context.SaveChangesAsync(cancellationToken);
                 _logger.LogDebug("💾 Lote guardado: {Count} leads actualizados", processedCount);
+
+                // Enviar notificaciones
+                using var scope = _serviceProvider.CreateScope();
+                await SendExpirationNotifications(leads, scope.ServiceProvider);
             }
 
             return processedCount;
@@ -404,6 +421,335 @@ public class LeadExpirationService : BackgroundService
         {
             _logger.LogError(ex, "❌ Error al procesar lote de {Count} leads", leads.Count);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Envía notificaciones de leads expirados con rate limiting robusto
+    /// </summary>
+    private async Task SendExpirationNotifications(
+        List<Lead> expiredLeads,
+        IServiceProvider serviceProvider
+    )
+    {
+        if (expiredLeads.Count == 0)
+            return;
+
+        try
+        {
+            _logger.LogInformation(
+                "Procesando notificaciones para {Count} leads expirados",
+                expiredLeads.Count
+            );
+
+            // 1. PRIORIZAR LEADS: Los más antiguos primero
+            var prioritizedLeads = expiredLeads
+                .OrderBy(l => l.ExpirationDate)
+                .ThenBy(l => l.CreatedAt)
+                .ToList();
+
+            // 2. AGRUPAR POR USUARIO
+            var leadsByUser = prioritizedLeads
+                .Where(l => l.AssignedToId.HasValue)
+                .GroupBy(l => l.AssignedToId!.Value);
+            var totalNotificationsSent = 0;
+            var totalLeadsProcessed = 0;
+            var leadsDeferred = new List<Lead>();
+
+            foreach (var userGroup in leadsByUser)
+            {
+                var userId = userGroup.Key;
+                var userLeads = userGroup.ToList();
+                var totalUserLeads = userLeads.Count;
+
+                _logger.LogDebug(
+                    "Procesando usuario {UserId} con {Count} leads expirados",
+                    userId,
+                    totalUserLeads
+                );
+
+                // 3. VERIFICAR COOLDOWN
+                if (await HasRecentExpirationNotification(userId, serviceProvider))
+                {
+                    _logger.LogDebug(
+                        "Usuario {UserId} tiene notificación reciente, diferiendo {Count} leads",
+                        userId,
+                        totalUserLeads
+                    );
+                    leadsDeferred.AddRange(userLeads);
+                    continue;
+                }
+
+                // 4. PROCESAR LEADS DEL USUARIO CON ESTRATEGIA INTELIGENTE
+                var result = await ProcessUserLeadsIntelligently(
+                    userId,
+                    userLeads,
+                    serviceProvider
+                );
+
+                totalLeadsProcessed += result.Processed.Count;
+                leadsDeferred.AddRange(result.Deferred);
+                totalNotificationsSent += result.Processed.Count > 0 ? 1 : 0;
+            }
+
+            // 5. MANEJAR LEADS DIFERIDOS
+            if (leadsDeferred.Count > 0)
+            {
+                _logger.LogInformation(
+                    "Diferidos {Count} leads para próxima verificación",
+                    leadsDeferred.Count
+                );
+                await MarkLeadsForDeferredNotification(leadsDeferred, serviceProvider);
+            }
+
+            _logger.LogInformation(
+                "Notificaciones completadas: {Processed} leads procesados, {Sent} notificaciones enviadas, {Deferred} diferidos",
+                totalLeadsProcessed,
+                totalNotificationsSent,
+                leadsDeferred.Count
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enviando notificaciones de expiración");
+        }
+    }
+
+    /// <summary>
+    /// Procesa leads de un usuario con estrategia inteligente
+    /// </summary>
+    private async Task<ProcessResult> ProcessUserLeadsIntelligently(
+        Guid userId,
+        List<Lead> userLeads,
+        IServiceProvider serviceProvider
+    )
+    {
+        var processed = new List<Lead>();
+        var deferred = new List<Lead>();
+
+        // Estrategia 1: Si hay pocos leads, procesar todos
+        if (userLeads.Count <= MAX_NOTIFICATIONS_PER_USER)
+        {
+            await SendGroupedNotificationForUser(
+                userId,
+                userLeads,
+                userLeads.Count,
+                serviceProvider
+            );
+            processed.AddRange(userLeads);
+            return new ProcessResult(processed, deferred);
+        }
+
+        // Estrategia 2: Muchos leads - dividir en notificaciones más pequeñas
+        var leadsToProcess = userLeads.Take(MAX_NOTIFICATIONS_PER_USER).ToList();
+        var leadsToDefer = userLeads.Skip(MAX_NOTIFICATIONS_PER_USER).ToList();
+
+        // Procesar los leads prioritarios
+        await SendGroupedNotificationForUser(
+            userId,
+            leadsToProcess,
+            userLeads.Count,
+            serviceProvider
+        );
+        processed.AddRange(leadsToProcess);
+
+        // Los restantes se difieren
+        deferred.AddRange(leadsToDefer);
+
+        _logger.LogInformation(
+            "Usuario {UserId}: {Processed} leads procesados, {Deferred} diferidos",
+            userId,
+            processed.Count,
+            deferred.Count
+        );
+
+        return new ProcessResult(processed, deferred);
+    }
+
+    /// <summary>
+    /// Marca leads para notificación diferida
+    /// </summary>
+    private async Task MarkLeadsForDeferredNotification(
+        List<Lead> leads,
+        IServiceProvider serviceProvider
+    )
+    {
+        using var scope = serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<DatabaseContext>();
+
+        try
+        {
+            // Crear notificación de sistema para recordar leads diferidos
+            var deferredNotification = new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = Guid.Empty, // Notificación de sistema
+                Type = NotificationType.SystemAlert,
+                Priority = NotificationPriority.Normal,
+                Channel = NotificationChannel.InApp,
+                Title = "Leads Diferidos",
+                Message =
+                    $"{leads.Count} leads expirados fueron diferidos para próxima verificación",
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        DeferredLeads = leads
+                            .Select(l => new
+                            {
+                                l.Id,
+                                l.Code,
+                                l.ExpirationDate,
+                            })
+                            .ToList(),
+                        DeferredAt = DateTime.UtcNow,
+                        Reason = "Rate limiting exceeded",
+                    }
+                ),
+                IsRead = false,
+                ReadAt = null,
+                SentAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(1),
+                RelatedEntityType = "System",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                ModifiedAt = DateTime.UtcNow,
+            };
+
+            context.Notifications.Add(deferredNotification);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Creada notificación de sistema para {Count} leads diferidos",
+                leads.Count
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error marcando leads para notificación diferida");
+        }
+    }
+
+    /// <summary>
+    /// Verifica si el usuario tiene una notificación reciente de expiración
+    /// </summary>
+    private async Task<bool> HasRecentExpirationNotification(
+        Guid userId,
+        IServiceProvider serviceProvider
+    )
+    {
+        using var scope = serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<DatabaseContext>();
+
+        var cooldownTime = DateTime.UtcNow.AddHours(-NOTIFICATION_COOLDOWN_HOURS);
+
+        return await context.Notifications.AnyAsync(n =>
+            n.UserId == userId
+            && n.Type == NotificationType.LeadExpired
+            && n.CreatedAt > cooldownTime
+            && !n.IsRead
+        );
+    }
+
+    /// <summary>
+    /// Envía notificación agrupada para un usuario siguiendo el modelo Notification
+    /// </summary>
+    private async Task SendGroupedNotificationForUser(
+        Guid userId,
+        List<Lead> userLeads,
+        int totalUserLeads,
+        IServiceProvider serviceProvider
+    )
+    {
+        using var scope = serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<DatabaseContext>();
+
+        // Crear notificación siguiendo el modelo
+        var notification = new Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Type = NotificationType.LeadExpired,
+            Priority = NotificationPriority.High,
+            Channel = NotificationChannel.InApp,
+            Title = totalUserLeads == 1 ? "Lead Expirado" : "Leads Expirados",
+            Message =
+                totalUserLeads == 1
+                    ? $"El lead '{userLeads.First().Code}' ha expirado"
+                    : $"{totalUserLeads} leads han expirado",
+            Data = JsonSerializer.Serialize(
+                new
+                {
+                    ExpiredCount = totalUserLeads,
+                    LeadIds = userLeads.Select(l => l.Id).ToList(),
+                    ExpiredAt = DateTime.UtcNow,
+                }
+            ),
+            IsRead = false,
+            ReadAt = null,
+            SentAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7), // Expira en 7 días
+            RelatedEntityId = totalUserLeads == 1 ? userLeads.First().Id : null,
+            RelatedEntityType = "Lead",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow,
+        };
+
+        // Guardar en base de datos
+        context.Notifications.Add(notification);
+        await context.SaveChangesAsync();
+
+        // Enviar via SSE
+        await EnqueueNotificationForUser(userId, notification, serviceProvider);
+    }
+
+    /// <summary>
+    /// Encola notificación para envío via SSE
+    /// </summary>
+    private async Task EnqueueNotificationForUser(
+        Guid userId,
+        Notification notification,
+        IServiceProvider serviceProvider
+    )
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var notificationStreamController =
+                scope.ServiceProvider.GetRequiredService<NotificationStreamController>();
+
+            // Crear DTO para SSE
+            var notificationDto = new NotificationDto
+            {
+                Id = notification.Id,
+                UserId = notification.UserId,
+                UserName = "Sistema",
+                Type = notification.Type,
+                Priority = notification.Priority,
+                Channel = notification.Channel,
+                Title = notification.Title,
+                Message = notification.Message,
+                Data = notification.Data,
+                IsRead = notification.IsRead,
+                ReadAt = notification.ReadAt,
+                SentAt = notification.SentAt,
+                ExpiresAt = notification.ExpiresAt,
+                RelatedEntityId = notification.RelatedEntityId,
+                RelatedEntityType = notification.RelatedEntityType,
+                CreatedAt = notification.CreatedAt,
+                ModifiedAt = notification.ModifiedAt,
+            };
+
+            // Enviar via SSE
+            NotificationStreamController.EnqueueNotificationForUser(userId, notificationDto);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error enviando notificación via SSE para usuario {UserId}",
+                userId
+            );
         }
     }
 

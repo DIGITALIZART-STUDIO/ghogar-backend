@@ -1,5 +1,8 @@
 using System.Linq.Expressions;
+using System.Text.Json;
+using GestionHogar.Controllers;
 using GestionHogar.Controllers.Dtos;
+using GestionHogar.Controllers.Notifications.Dto;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -10,11 +13,17 @@ public class LeadService : ILeadService
 {
     private readonly DatabaseContext _context;
     private readonly ILogger<LeadService> _logger;
+    private readonly INotificationService _notificationService;
 
-    public LeadService(DatabaseContext context, ILogger<LeadService> logger)
+    public LeadService(
+        DatabaseContext context,
+        ILogger<LeadService> logger,
+        INotificationService notificationService
+    )
     {
         _context = context;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     public async Task<string> GenerateLeadCodeAsync()
@@ -90,11 +99,6 @@ public class LeadService : ILeadService
         // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar leads de sus SalesAdvisors asignados
         if (isSupervisor && currentUserId.HasValue)
         {
-            _logger.LogInformation(
-                "Aplicando filtro de supervisor para usuario: {UserId}",
-                currentUserId.Value
-            );
-
             // Obtener los IDs de los SalesAdvisors asignados a este supervisor
             var assignedSalesAdvisorIds = await _context
                 .SupervisorSalesAdvisors.Where(ssa =>
@@ -102,13 +106,6 @@ public class LeadService : ILeadService
                 )
                 .Select(ssa => ssa.SalesAdvisorId)
                 .ToListAsync();
-
-            _logger.LogInformation(
-                "Supervisor {SupervisorId} tiene {Count} SalesAdvisors asignados: {SalesAdvisorIds}",
-                currentUserId.Value,
-                assignedSalesAdvisorIds.Count,
-                string.Join(", ", assignedSalesAdvisorIds)
-            );
 
             // Incluir también el propio ID del supervisor para que vea sus propios leads
             assignedSalesAdvisorIds.Add(currentUserId.Value);
@@ -278,6 +275,17 @@ public class LeadService : ILeadService
 
         _context.Leads.Add(lead);
         await _context.SaveChangesAsync();
+
+        // Enviar notificación de asignación si tiene AssignedToId
+        if (lead.AssignedToId.HasValue)
+        {
+            await SendLeadAssignmentNotificationAsync(
+                lead,
+                "Lead asignado",
+                "Se te ha asignado un nuevo lead"
+            );
+        }
+
         return lead;
     }
 
@@ -286,6 +294,10 @@ public class LeadService : ILeadService
         var lead = await _context.Leads.FirstOrDefaultAsync(l => l.Id == id && l.IsActive);
         if (lead == null)
             return null;
+
+        // Verificar si cambió la asignación
+        var previousAssignedToId = lead.AssignedToId;
+        var newAssignedToId = updatedLead.AssignedToId;
 
         lead.ClientId = updatedLead.ClientId;
         lead.AssignedToId = updatedLead.AssignedToId;
@@ -306,6 +318,17 @@ public class LeadService : ILeadService
         lead.ModifiedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
+        // Enviar notificación solo si cambió la asignación
+        if (previousAssignedToId != newAssignedToId && newAssignedToId.HasValue)
+        {
+            await SendLeadAssignmentNotificationAsync(
+                lead,
+                "Lead reasignado",
+                "Se te ha reasignado un lead"
+            );
+        }
+
         return lead;
     }
 
@@ -421,12 +444,6 @@ public class LeadService : ILeadService
         // FILTRO ESPECIAL PARA SUPERVISORES: Verificar que el usuario consultado esté asignado al supervisor
         if (isSupervisor && currentUserId.HasValue)
         {
-            _logger.LogInformation(
-                "Verificando acceso de supervisor {SupervisorId} al usuario {TargetUserId}",
-                currentUserId.Value,
-                userId
-            );
-
             // Verificar que el usuario consultado esté asignado a este supervisor
             var isUserAssignedToSupervisor = await _context.SupervisorSalesAdvisors.AnyAsync(ssa =>
                 ssa.SupervisorId == currentUserId.Value
@@ -436,12 +453,6 @@ public class LeadService : ILeadService
 
             if (!isUserAssignedToSupervisor)
             {
-                _logger.LogWarning(
-                    "Supervisor {SupervisorId} intentó acceder a leads del usuario {TargetUserId} que no está asignado",
-                    currentUserId.Value,
-                    userId
-                );
-
                 // Retornar resultado vacío si el supervisor no tiene acceso a este usuario
                 return new PaginatedResponseV2<Lead>
                 {
@@ -457,12 +468,6 @@ public class LeadService : ILeadService
                     },
                 };
             }
-
-            _logger.LogInformation(
-                "Acceso autorizado: Supervisor {SupervisorId} puede ver leads del usuario {TargetUserId}",
-                currentUserId.Value,
-                userId
-            );
         }
 
         // Aplicar filtro de búsqueda si se proporciona
@@ -641,11 +646,6 @@ public class LeadService : ILeadService
         // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar usuarios asignados al supervisor
         if (isSupervisor && currentUserId.HasValue)
         {
-            _logger.LogInformation(
-                "Aplicando filtro de supervisor en GetUsersWithLeadsSummaryAsync para usuario: {UserId}",
-                currentUserId.Value
-            );
-
             // Obtener los IDs de los SalesAdvisors asignados a este supervisor
             var assignedSalesAdvisorIds = await _context
                 .SupervisorSalesAdvisors.Where(ssa =>
@@ -653,12 +653,6 @@ public class LeadService : ILeadService
                 )
                 .Select(ssa => ssa.SalesAdvisorId)
                 .ToListAsync();
-
-            _logger.LogInformation(
-                "Supervisor {SupervisorId} tiene {Count} SalesAdvisors asignados en summary",
-                currentUserId.Value,
-                assignedSalesAdvisorIds.Count
-            );
 
             // Filtrar usuarios que están asignados a este supervisor
             query = query.Where(u => assignedSalesAdvisorIds.Contains(u.Id));
@@ -730,21 +724,11 @@ public class LeadService : ILeadService
         {
             if (currentUserRoles.Contains("SalesAdvisor"))
             {
-                _logger.LogInformation(
-                    "Usuario es SalesAdvisor, aplicando filtro para mostrar solo a sí mismo: {UserId}",
-                    currentUserId.Value
-                );
-
                 // SalesAdvisor solo ve a sí mismo
                 query = query.Where(u => u.Id == currentUserId.Value);
             }
             else if (currentUserRoles.Contains("Supervisor"))
             {
-                _logger.LogInformation(
-                    "Usuario es Supervisor, aplicando filtro para mostrar a sí mismo y sus SalesAdvisors asignados: {UserId}",
-                    currentUserId.Value
-                );
-
                 // Obtener los IDs de los SalesAdvisors asignados a este supervisor
                 var assignedSalesAdvisorIds = await _context
                     .SupervisorSalesAdvisors.Where(ssa =>
@@ -755,13 +739,6 @@ public class LeadService : ILeadService
 
                 // Incluir también el propio ID del supervisor
                 assignedSalesAdvisorIds.Add(currentUserId.Value);
-
-                _logger.LogInformation(
-                    "Supervisor {SupervisorId} tiene {Count} SalesAdvisors asignados: {SalesAdvisorIds}",
-                    currentUserId.Value,
-                    assignedSalesAdvisorIds.Count,
-                    string.Join(", ", assignedSalesAdvisorIds)
-                );
 
                 // Filtrar usuarios que están asignados a este supervisor + el supervisor mismo
                 query = query.Where(u => assignedSalesAdvisorIds.Contains(u.Id));
@@ -777,10 +754,10 @@ public class LeadService : ILeadService
         )
         {
             preselectedLeadGuid = parsedGuid;
-            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+
             if (page == 1)
             {
-                // Verificar que el usuario preseleccionado existe
+                // En la primera página: incluir el usuario preseleccionado al inicio
                 var preselectedUser = await _context.Users.FirstOrDefaultAsync(u =>
                     u.Id == preselectedLeadGuid && u.IsActive
                 );
@@ -790,6 +767,11 @@ public class LeadService : ILeadService
                     // Modificar la query para que el usuario preseleccionado aparezca primero
                     query = query.OrderBy(u => u.Id == preselectedLeadGuid ? 0 : 1);
                 }
+            }
+            else
+            {
+                // En páginas siguientes: excluir el usuario preseleccionado para evitar duplicados
+                query = query.Where(u => u.Id != preselectedLeadGuid);
             }
         }
 
@@ -1052,16 +1034,6 @@ public class LeadService : ILeadService
         string? preselectedId = null
     )
     {
-        _logger.LogInformation(
-            "Obteniendo leads disponibles para cotización paginados para usuario: {UserId} con roles: {Roles}, página: {Page}, tamaño: {PageSize}, búsqueda: {Search}, preselectedId: {PreselectedId}",
-            currentUserId,
-            string.Join(", ", currentUserRoles),
-            page,
-            pageSize,
-            search ?? "null",
-            preselectedId ?? "null"
-        );
-
         // Lógica para preselectedId - incluir en la query base
         Guid? preselectedLeadGuid = null;
         Guid? excludeQuotationId = null;
@@ -1347,15 +1319,15 @@ public class LeadService : ILeadService
             }
         }
 
+        // Aplicar lógica de exclusión del preselectedId para páginas 2+
+        if (preselectedLeadGuid.HasValue && page > 1)
+        {
+            query = query.Where(l => l.Id != preselectedLeadGuid.Value);
+        }
+
         // Aplicar paginación
         var totalCount = query.Count();
         var leads = query.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-
-        // Si hay preselectedId y NO estamos en la primera página, remover el lead preseleccionado
-        if (preselectedLeadGuid.HasValue && page > 1)
-        {
-            leads = leads.Where(l => l.Id != preselectedLeadGuid.Value).ToList();
-        }
 
         // Crear metadatos de paginación
         var paginationMetadata = new PaginationMetadata
@@ -1645,5 +1617,394 @@ public class LeadService : ILeadService
         {
             translatedTerms.Add("financemanager");
         }
+    }
+
+    /// <summary>
+    /// Envía notificación personalizada para un lead específico
+    /// Analiza el estado del lead, tareas y tiempo restante para crear mensaje contextual
+    /// Solo permite al usuario asignado notificar sobre su lead
+    /// </summary>
+    public async Task<object> SendPersonalizedLeadNotificationAsync(Guid leadId, Guid currentUserId)
+    {
+        try
+        {
+            // Obtener el lead con todas sus relaciones
+            var lead = await _context
+                .Leads.Include(l => l.Client)
+                .Include(l => l.AssignedTo)
+                .Include(l => l.Project)
+                .FirstOrDefaultAsync(l => l.Id == leadId && l.IsActive);
+
+            if (lead == null)
+            {
+                return new { success = false, message = "Lead no encontrado" };
+            }
+
+            // Solo el usuario asignado puede notificar sobre su lead
+            if (lead.AssignedToId != currentUserId)
+            {
+                return new
+                {
+                    success = false,
+                    message = "Solo puedes notificar sobre tus leads asignados",
+                };
+            }
+
+            // Obtener el usuario que envía la notificación
+            var senderUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == currentUserId);
+
+            if (senderUser == null)
+            {
+                return new { success = false, message = "Usuario no encontrado" };
+            }
+
+            // Analizar el estado del lead y crear mensaje personalizado
+            var notificationData = await AnalyzeLeadAndCreateNotification(lead, senderUser);
+
+            // Usar el servicio de notificaciones para crear y enviar automáticamente
+            var notification = await _notificationService.CreateNotificationAsync(
+                lead.AssignedToId!.Value,
+                NotificationType.Custom,
+                notificationData.Title,
+                notificationData.Message,
+                notificationData.Priority,
+                NotificationChannel.InApp,
+                notificationData.Data,
+                DateTime.UtcNow.AddDays(1), // ExpiresAt
+                lead.Id, // RelatedEntityId
+                "Lead" // RelatedEntityType
+            );
+
+            return new
+            {
+                success = true,
+                message = "Notificación enviada exitosamente",
+                notification = new
+                {
+                    id = notification.Id,
+                    title = notification.Title,
+                    message = notification.Message,
+                    priority = notification.Priority.ToString(),
+                    leadCode = lead.Code,
+                    clientName = lead.Client?.Name,
+                },
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error enviando notificación personalizada para lead {LeadId}",
+                leadId
+            );
+            return new { success = false, message = "Error interno del servidor" };
+        }
+    }
+
+    /// <summary>
+    /// Analiza el lead y sus tareas para crear una notificación contextual
+    /// </summary>
+    private async Task<NotificationData> AnalyzeLeadAndCreateNotification(
+        Lead lead,
+        User senderUser
+    )
+    {
+        var now = DateTime.UtcNow;
+        var timeRemaining = lead.ExpirationDate - now;
+        var daysRemaining = (int)timeRemaining.TotalDays;
+
+        // Obtener tareas del lead
+        var tasks = await _context
+            .LeadTasks.Where(t => t.LeadId == lead.Id && t.IsActive)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+
+        var hasCallTask = tasks.Any(t => t.Type == TaskType.Call);
+        var hasFollowUpTask = tasks.Any(t => t.Type != TaskType.Call);
+        var totalTasks = tasks.Count;
+
+        // Determinar tipo de notificación basado en el estado y tiempo
+        if (daysRemaining <= 0)
+        {
+            // Lead expirado
+            var statusMessage = GetLeadStatusMessage(lead, hasCallTask, hasFollowUpTask);
+            return new NotificationData
+            {
+                Priority = NotificationPriority.High,
+                Title = "Lead Expirado",
+                Message =
+                    $"El lead {lead.Code} del cliente {lead.Client?.Name} ha expirado. "
+                    + statusMessage,
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        LeadId = lead.Id,
+                        LeadCode = lead.Code,
+                        ClientName = lead.Client?.Name,
+                        Status = lead.Status.ToString(),
+                        DaysRemaining = daysRemaining,
+                        TotalTasks = totalTasks,
+                        HasCallTask = hasCallTask,
+                        HasFollowUpTask = hasFollowUpTask,
+                        ExpiredAt = lead.ExpirationDate,
+                        SenderName = senderUser.Name,
+                    }
+                ),
+            };
+        }
+        else if (daysRemaining <= 1)
+        {
+            // Lead a punto de expirar
+            var statusMessage = GetLeadStatusMessage(lead, hasCallTask, hasFollowUpTask);
+            var urgencyMessage = GetUrgencyMessage(lead, hasCallTask, hasFollowUpTask);
+            return new NotificationData
+            {
+                Priority = NotificationPriority.High,
+                Title = "Lead por Expirar",
+                Message =
+                    $"El lead {lead.Code} del cliente {lead.Client?.Name} expira en {daysRemaining} día(s). "
+                    + statusMessage
+                    + " "
+                    + urgencyMessage,
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        LeadId = lead.Id,
+                        LeadCode = lead.Code,
+                        ClientName = lead.Client?.Name,
+                        Status = lead.Status.ToString(),
+                        DaysRemaining = daysRemaining,
+                        TotalTasks = totalTasks,
+                        HasCallTask = hasCallTask,
+                        HasFollowUpTask = hasFollowUpTask,
+                        ExpiresAt = lead.ExpirationDate,
+                        SenderName = senderUser.Name,
+                    }
+                ),
+            };
+        }
+        else if (daysRemaining <= 3)
+        {
+            // Lead con poco tiempo
+            var statusMessage = GetLeadStatusMessage(lead, hasCallTask, hasFollowUpTask);
+            var suggestionMessage = GetSuggestionMessage(lead, hasCallTask, hasFollowUpTask);
+            return new NotificationData
+            {
+                Priority = NotificationPriority.Normal,
+                Title = "Lead Requiere Atención",
+                Message =
+                    $"El lead {lead.Code} del cliente {lead.Client?.Name} expira en {daysRemaining} días. "
+                    + statusMessage
+                    + " "
+                    + suggestionMessage,
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        LeadId = lead.Id,
+                        LeadCode = lead.Code,
+                        ClientName = lead.Client?.Name,
+                        Status = lead.Status.ToString(),
+                        DaysRemaining = daysRemaining,
+                        TotalTasks = totalTasks,
+                        HasCallTask = hasCallTask,
+                        HasFollowUpTask = hasFollowUpTask,
+                        ExpiresAt = lead.ExpirationDate,
+                        SenderName = senderUser.Name,
+                    }
+                ),
+            };
+        }
+        else
+        {
+            // Lead con tiempo suficiente
+            var statusMessage = GetLeadStatusMessage(lead, hasCallTask, hasFollowUpTask);
+            var reminderMessage = GetReminderMessage(lead, hasCallTask, hasFollowUpTask);
+            return new NotificationData
+            {
+                Priority = NotificationPriority.Low,
+                Title = "Recordatorio de Lead",
+                Message =
+                    $"Recordatorio: Lead {lead.Code} del cliente {lead.Client?.Name}. "
+                    + $"Expira en {daysRemaining} días. "
+                    + statusMessage
+                    + " "
+                    + reminderMessage,
+                Data = JsonSerializer.Serialize(
+                    new
+                    {
+                        LeadId = lead.Id,
+                        LeadCode = lead.Code,
+                        ClientName = lead.Client?.Name,
+                        Status = lead.Status.ToString(),
+                        DaysRemaining = daysRemaining,
+                        TotalTasks = totalTasks,
+                        HasCallTask = hasCallTask,
+                        HasFollowUpTask = hasFollowUpTask,
+                        ExpiresAt = lead.ExpirationDate,
+                        SenderName = senderUser.Name,
+                    }
+                ),
+            };
+        }
+    }
+
+    /// <summary>
+    /// Obtiene descripción amigable del estado del lead
+    /// </summary>
+    private static string GetStatusDescription(LeadStatus status)
+    {
+        return status switch
+        {
+            LeadStatus.Registered => "Registrado (sin atender)",
+            LeadStatus.Attended => "Atendido",
+            LeadStatus.InFollowUp => "En seguimiento",
+            LeadStatus.Completed => "Completado",
+            LeadStatus.Canceled => "Cancelado",
+            LeadStatus.Expired => "Expirado",
+            _ => status.ToString(),
+        };
+    }
+
+    /// <summary>
+    /// Analiza el estado del lead y sus tareas para crear un mensaje contextual inteligente
+    /// </summary>
+    private static string GetLeadStatusMessage(Lead lead, bool hasCallTask, bool hasFollowUpTask)
+    {
+        return lead.Status switch
+        {
+            LeadStatus.Registered =>
+                "El lead está registrado pero no se ha realizado ninguna llamada de contacto inicial.",
+            LeadStatus.Attended when !hasFollowUpTask =>
+                "El lead ha sido atendido pero no se han creado tareas de seguimiento.",
+            LeadStatus.Attended when hasFollowUpTask =>
+                "El lead ha sido atendido y se están realizando tareas de seguimiento.",
+            LeadStatus.InFollowUp => "El lead está en proceso de seguimiento activo.",
+            LeadStatus.Completed => "El lead ha sido completado exitosamente.",
+            LeadStatus.Canceled => "El lead ha sido cancelado.",
+            LeadStatus.Expired => "El lead ha expirado.",
+            _ => $"Estado actual: {GetStatusDescription(lead.Status)}.",
+        };
+    }
+
+    /// <summary>
+    /// Genera mensaje de urgencia basado en el estado y tareas del lead
+    /// </summary>
+    private static string GetUrgencyMessage(Lead lead, bool hasCallTask, bool hasFollowUpTask)
+    {
+        return lead.Status switch
+        {
+            LeadStatus.Registered => "URGENTE: Realizar llamada de contacto inmediatamente.",
+            LeadStatus.Attended when !hasFollowUpTask =>
+                "URGENTE: Crear tareas de seguimiento para no perder el lead.",
+            LeadStatus.Attended when hasFollowUpTask =>
+                "URGENTE: Intensificar seguimiento para cerrar la venta.",
+            LeadStatus.InFollowUp => "URGENTE: Evaluar progreso y tomar acción decisiva.",
+            _ => "Requiere atención inmediata.",
+        };
+    }
+
+    /// <summary>
+    /// Genera sugerencias basadas en el estado y tareas del lead
+    /// </summary>
+    private static string GetSuggestionMessage(Lead lead, bool hasCallTask, bool hasFollowUpTask)
+    {
+        return lead.Status switch
+        {
+            LeadStatus.Registered =>
+                "Sugerencia: Programar llamada de contacto para establecer comunicación inicial.",
+            LeadStatus.Attended when !hasFollowUpTask =>
+                "Sugerencia: Crear tareas de seguimiento como envío de cotización o visita.",
+            LeadStatus.Attended when hasFollowUpTask =>
+                "Sugerencia: Revisar progreso de las tareas de seguimiento activas.",
+            LeadStatus.InFollowUp =>
+                "Sugerencia: Evaluar si el lead está listo para avanzar a la siguiente etapa.",
+            _ => "Sugerencia: Revisar el estado actual y planificar próximas acciones.",
+        };
+    }
+
+    /// <summary>
+    /// Genera mensaje de recordatorio basado en el estado y tareas del lead
+    /// </summary>
+    private static string GetReminderMessage(Lead lead, bool hasCallTask, bool hasFollowUpTask)
+    {
+        return lead.Status switch
+        {
+            LeadStatus.Registered =>
+                "Recordatorio: Este lead necesita contacto inicial mediante llamada.",
+            LeadStatus.Attended when !hasFollowUpTask =>
+                "Recordatorio: Considerar crear tareas de seguimiento para mantener el interés.",
+            LeadStatus.Attended when hasFollowUpTask =>
+                "Recordatorio: Revisar el progreso de las tareas de seguimiento activas.",
+            LeadStatus.InFollowUp =>
+                "Recordatorio: Mantener el momentum del seguimiento para cerrar la venta.",
+            _ => "Recordatorio: Mantener comunicación activa con el cliente.",
+        };
+    }
+
+    /// <summary>
+    /// Envía notificación de asignación de lead
+    /// </summary>
+    private async Task SendLeadAssignmentNotificationAsync(Lead lead, string title, string message)
+    {
+        try
+        {
+            // Obtener el lead con sus relaciones para la notificación
+            var leadWithRelations = await _context
+                .Leads.Include(l => l.Client)
+                .Include(l => l.AssignedTo)
+                .Include(l => l.Project)
+                .FirstOrDefaultAsync(l => l.Id == lead.Id);
+
+            if (leadWithRelations?.AssignedToId == null)
+                return;
+
+            // Crear la notificación usando el servicio de notificaciones
+            var notificationData = JsonSerializer.Serialize(
+                new
+                {
+                    LeadId = leadWithRelations.Id,
+                    LeadCode = leadWithRelations.Code,
+                    ClientName = leadWithRelations.Client?.Name,
+                    ProjectName = leadWithRelations.Project?.Name,
+                    AssignedToName = leadWithRelations.AssignedTo?.Name,
+                    Status = leadWithRelations.Status.ToString(),
+                    ExpirationDate = leadWithRelations.ExpirationDate,
+                    AssignmentType = title.Contains("reasignado") ? "Reasignación" : "Asignación",
+                }
+            );
+
+            // Usar el servicio de notificaciones para crear y enviar automáticamente
+            var notification = await _notificationService.CreateNotificationAsync(
+                leadWithRelations.AssignedToId.Value,
+                NotificationType.LeadAssigned,
+                title,
+                $"{message}: {leadWithRelations.Code} - {leadWithRelations.Client?.Name}",
+                NotificationPriority.Normal,
+                NotificationChannel.InApp,
+                notificationData,
+                DateTime.UtcNow.AddDays(7), // ExpiresAt
+                leadWithRelations.Id, // RelatedEntityId
+                "Lead" // RelatedEntityType
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error enviando notificación de asignación para lead {LeadId}",
+                lead.Id
+            );
+        }
+    }
+
+    /// <summary>
+    /// Clase para datos de notificación
+    /// </summary>
+    private class NotificationData
+    {
+        public NotificationPriority Priority { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string Data { get; set; } = string.Empty;
     }
 }

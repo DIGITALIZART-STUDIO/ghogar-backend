@@ -52,10 +52,10 @@ public class BlockService : IBlockService
         )
         {
             preselectedGuid = parsedGuid;
-            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+
             if (page == 1)
             {
-                // Verificar que el bloque preseleccionado existe
+                // En la primera página: incluir el bloque preseleccionado al inicio
                 var preselectedBlock = await _context
                     .Blocks.Include(b => b.Project)
                     .Include(b => b.Lots)
@@ -66,6 +66,11 @@ public class BlockService : IBlockService
                     // Modificar la query para que el bloque preseleccionado aparezca primero
                     query = query.OrderBy(b => b.Id == preselectedGuid ? 0 : 1);
                 }
+            }
+            else
+            {
+                // En páginas siguientes: excluir el bloque preseleccionado para evitar duplicados
+                query = query.Where(b => b.Id != preselectedGuid);
             }
         }
 
@@ -181,10 +186,10 @@ public class BlockService : IBlockService
         )
         {
             preselectedGuid = parsedGuid;
-            // Si hay un preselectedId, modificar la query para incluirlo en la primera página
+
             if (page == 1)
             {
-                // Verificar que el bloque preseleccionado existe
+                // En la primera página: incluir el bloque preseleccionado al inicio
                 var preselectedBlock = await _context
                     .Blocks.Include(b => b.Project)
                     .Include(b => b.Lots)
@@ -197,6 +202,11 @@ public class BlockService : IBlockService
                     // Modificar la query para que el bloque preseleccionado aparezca primero
                     query = query.OrderBy(b => b.Id == preselectedGuid ? 0 : 1);
                 }
+            }
+            else
+            {
+                // En páginas siguientes: excluir el bloque preseleccionado para evitar duplicados
+                query = query.Where(b => b.Id != preselectedGuid);
             }
         }
 

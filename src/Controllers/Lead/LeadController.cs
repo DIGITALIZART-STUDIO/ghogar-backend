@@ -50,12 +50,6 @@ public class LeadsController : ControllerBase
             var currentUserId = User.GetCurrentUserIdOrThrow();
             var currentUserRoles = User.GetCurrentUserRoles().ToList();
 
-            _logger.LogInformation(
-                "Obteniendo leads paginados para usuario: {UserId} con roles: {Roles}",
-                currentUserId,
-                string.Join(", ", currentUserRoles)
-            );
-
             // Verificar si es Supervisor
             var isSupervisor = currentUserRoles.Contains("Supervisor");
 
@@ -104,6 +98,9 @@ public class LeadsController : ControllerBase
     {
         try
         {
+            // Obtener el usuario actual para logging
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
             var lead = new Lead
             {
                 Code = "", // Valor temporal, será reemplazado en el service
@@ -117,6 +114,10 @@ public class LeadsController : ControllerBase
             var createdLead = await _leadService.CreateLeadAsync(lead);
             return CreatedAtAction(nameof(GetLead), new { id = createdLead.Id }, createdLead);
         }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
         catch (Exception ex)
         {
             return BadRequest(ex.Message);
@@ -129,6 +130,9 @@ public class LeadsController : ControllerBase
     {
         try
         {
+            // Obtener el usuario actual para logging
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
             var existingLead = await _leadService.GetLeadByIdAsync(id);
             if (existingLead == null)
                 return NotFound();
@@ -157,6 +161,10 @@ public class LeadsController : ControllerBase
 
             var updatedLead = await _leadService.UpdateLeadAsync(id, existingLead);
             return Ok(updatedLead);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
         }
         catch (Exception ex)
         {
@@ -265,12 +273,6 @@ public class LeadsController : ControllerBase
             var currentUserId = User.GetCurrentUserIdOrThrow();
             var currentUserRoles = User.GetCurrentUserRoles().ToList();
 
-            _logger.LogInformation(
-                "Obteniendo leads paginados del usuario actual: {UserId} con roles: {Roles}",
-                currentUserId,
-                string.Join(", ", currentUserRoles)
-            );
-
             // Verificar si es Supervisor
             var isSupervisor = currentUserRoles.Contains("Supervisor");
 
@@ -358,7 +360,7 @@ public class LeadsController : ControllerBase
 
     // POST: api/leads/check-expired
     [HttpPost("check-expired")]
-    [Authorize(Roles = "SuperAdmin,Manager, Admin")]
+    [Authorize(Roles = "SuperAdmin,Admin,Manager,FinanceManager")]
     public async Task<ActionResult<object>> CheckAndUpdateExpiredLeads()
     {
         var count = await _leadService.CheckAndUpdateExpiredLeadsAsync();
@@ -436,12 +438,6 @@ public class LeadsController : ControllerBase
             var currentUserId = User.GetCurrentUserIdOrThrow();
             var currentUserRoles = User.GetCurrentUserRoles().ToList();
 
-            _logger.LogInformation(
-                "Obteniendo usuarios con leads summary para usuario: {UserId} con roles: {Roles}",
-                currentUserId,
-                string.Join(", ", currentUserRoles)
-            );
-
             // Verificar si es Supervisor
             var isSupervisor = currentUserRoles.Contains("Supervisor");
 
@@ -485,12 +481,6 @@ public class LeadsController : ControllerBase
             // Obtener el usuario actual y sus roles usando UserExtensions
             var currentUserId = User.GetCurrentUserIdOrThrow();
             var currentUserRoles = User.GetCurrentUserRoles().ToList();
-
-            _logger.LogInformation(
-                "Obteniendo usuarios summary paginados para usuario: {UserId} con roles: {Roles}",
-                currentUserId,
-                string.Join(", ", currentUserRoles)
-            );
 
             var result = await _leadService.GetUsersSummaryPaginatedAsync(
                 page,
@@ -552,12 +542,6 @@ public class LeadsController : ControllerBase
             var currentUserId = User.GetCurrentUserIdOrThrow();
             var currentUserRoles = User.GetCurrentUserRoles().ToList();
 
-            _logger.LogInformation(
-                "Obteniendo leads disponibles para cotización para usuario: {UserId} con roles: {Roles}",
-                currentUserId,
-                string.Join(", ", currentUserRoles)
-            );
-
             // Verificar si el usuario tiene roles mayores a SalesAdvisor
             var hasHigherRole = currentUserRoles.Any(role =>
                 role != "SalesAdvisor"
@@ -618,16 +602,6 @@ public class LeadsController : ControllerBase
             var currentUserId = User.GetCurrentUserIdOrThrow();
             var currentUserRoles = User.GetCurrentUserRoles().ToList();
 
-            _logger.LogInformation(
-                "Obteniendo leads disponibles para cotización paginados para usuario: {UserId} con roles: {Roles}, página: {Page}, tamaño: {PageSize}, búsqueda: {Search}, preselectedId: {PreselectedId}",
-                currentUserId,
-                string.Join(", ", currentUserRoles),
-                page,
-                pageSize,
-                search ?? "null",
-                preselectedId ?? "null"
-            );
-
             // Obtener leads paginados
             var result = await _leadService.GetAvailableLeadsForQuotationPaginatedAsync(
                 currentUserId,
@@ -664,5 +638,39 @@ public class LeadsController : ControllerBase
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "leads.xlsx"
         );
+    }
+
+    /// <summary>
+    /// Envía notificación personalizada para un lead específico
+    /// Analiza el estado del lead, tareas y tiempo restante para crear mensaje contextual
+    /// Solo permite al usuario asignado notificar sobre su lead
+    /// </summary>
+    [HttpPost("{leadId}/notify")]
+    [Authorize]
+    public async Task<ActionResult<object>> SendPersonalizedLeadNotification(Guid leadId)
+    {
+        try
+        {
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
+            var result = await _leadService.SendPersonalizedLeadNotificationAsync(
+                leadId,
+                currentUserId
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error enviando notificación personalizada para lead {LeadId}",
+                leadId
+            );
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 }

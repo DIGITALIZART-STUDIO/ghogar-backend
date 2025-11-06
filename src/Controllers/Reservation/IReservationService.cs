@@ -41,14 +41,19 @@ public interface IReservationService
     Task<IEnumerable<ReservationDto>> GetReservationsByQuotationIdAsync(Guid quotationId);
 
     Task<
-        PaginatedResponseV2<ReservationDto>
+        PaginatedResponseV2<ReservationPendingValidationDto>
     > GetAllCanceledPendingValidationReservationsPaginatedAsync(
         int page,
         int pageSize,
         PaginationService paginationService,
-        Guid? projectId = null
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        ContractValidationStatus[]? contractValidationStatus = null,
+        Guid? projectId = null,
+        string? orderBy = null
     );
-    Task<ReservationDto?> ChangeStatusAsync(Guid id, string status);
+    Task<ReservationDto?> ChangeStatusAsync(Guid id, ReservationStatusDto statusDto);
     Task<byte[]> GenerateReservationPdfAsync(Guid reservationId);
     Task<byte[]> GenerateSchedulePdfAsync(Guid reservationId);
     Task<byte[]> GenerateProcessedPaymentsPdfAsync(Guid reservationId);
@@ -56,6 +61,18 @@ public interface IReservationService
     Task<byte[]> GenerateContractPdfAsync(Guid reservationId);
     Task<byte[]> GenerateContractDocxAsync(Guid reservationId);
     Task<bool> ToggleContractValidationStatusAsync(Guid reservationId);
+
+    // Payment History Management
+    Task<List<PaymentHistoryDto>> GetPaymentHistoryAsync(Guid reservationId);
+    Task<PaymentHistoryDto> AddPaymentToHistoryAsync(
+        Guid reservationId,
+        AddPaymentHistoryDto paymentDto
+    );
+    Task<PaymentHistoryDto> UpdatePaymentInHistoryAsync(
+        Guid reservationId,
+        UpdatePaymentHistoryDto paymentDto
+    );
+    Task<bool> RemovePaymentFromHistoryAsync(Guid reservationId, string paymentId);
 
     /// <summary>
     /// Obtiene todas las reservas con cuotas pendientes y paginación
@@ -65,6 +82,14 @@ public interface IReservationService
     > GetAllReservationsWithPendingPaymentsPaginatedAsync(
         int page,
         int pageSize,
-        Guid? projectId = null
+        PaginationService paginationService,
+        Guid currentUserId,
+        List<string> currentUserRoles,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        ContractValidationStatus[]? contractValidationStatus = null,
+        Guid? projectId = null,
+        string? orderBy = null
     );
 }
