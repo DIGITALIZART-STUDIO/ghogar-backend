@@ -60,7 +60,6 @@ RUN adduser -D -s /bin/sh appuser
 COPY --from=build-env /app/out ./
 COPY Templates ./Templates
 COPY Fonts /usr/local/share/fonts/
-COPY Deployment/docker-entrypoint.sh ./
 
 # Make scripts executable
 RUN chmod +x ./docker-entrypoint.sh ./efbundle
