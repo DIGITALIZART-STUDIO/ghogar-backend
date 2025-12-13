@@ -6,7 +6,7 @@ pipeline {
 	stages {
 		stage('Build backend') {
 			steps {
-				sh "docker build -t gestionhogar-backend-ci-${BUILD_REF} -f +devops/docker/Dockerfile ."
+				sh "docker build -t gestionhogar-backend-ci-${BUILD_REF} -f +devops/docker/Dockerfile ./src"
 			}
 		}
 	}
