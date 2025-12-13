@@ -2,12 +2,12 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine AS build-env
 WORKDIR /app
 
-# Install EF tools
-RUN dotnet tool install --global dotnet-ef
-ENV PATH="${PATH}:/root/.dotnet/tools"
-
-# Copy project file first for better layer caching
+COPY *.sln ./
+COPY dotnet-tools.json ./
 COPY GestionHogar.csproj .
+
+# Install EF tools
+RUN dotnet tool restore
 
 # Restore packages for the target runtime - this layer gets cached unless project files change
 RUN HUSKY=0 dotnet restore --locked-mode -r linux-musl-x64
@@ -29,7 +29,7 @@ RUN HUSKY=0 dotnet publish GestionHogar.csproj -c Release -r linux-musl-x64 \
     -o /app/out
 
 # Create EF migrations bundle (self-contained)
-RUN HUSKY=0 dotnet-ef migrations bundle \
+RUN HUSKY=0 dotnet ef migrations bundle \
     -r linux-musl-x64 \
     --configuration Release \
     --self-contained \
