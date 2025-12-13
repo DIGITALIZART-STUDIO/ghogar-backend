@@ -17,9 +17,35 @@ namespace GestionHogar.Controllers;
 public class LeadTasksController : ControllerBase
 {
     private readonly ILeadTaskService _taskService;
-    private static readonly TimeZoneInfo peruTimeZone = TimeZoneInfo.FindSystemTimeZoneById(
-        "SA Pacific Standard Time"
-    ); // Lima, Perú (UTC-5)
+    private static readonly TimeZoneInfo peruTimeZone = GetPeruTimeZone();
+
+    // Método helper para obtener la zona horaria de Perú de manera compatible entre plataformas
+    private static TimeZoneInfo GetPeruTimeZone()
+    {
+        // Intentar primero con el nombre de Windows
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("SA Pacific Standard Time");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            // Si falla, intentar con el nombre de Linux/Unix
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("America/Lima");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                // Si ambos fallan, crear una zona horaria personalizada para UTC-5 (Perú)
+                return TimeZoneInfo.CreateCustomTimeZone(
+                    "Peru Time",
+                    TimeSpan.FromHours(-5),
+                    "Peru Time",
+                    "Peru Time"
+                );
+            }
+        }
+    }
 
     public LeadTasksController(ILeadTaskService taskService)
     {
