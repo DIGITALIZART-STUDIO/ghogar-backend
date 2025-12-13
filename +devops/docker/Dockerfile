@@ -3,7 +3,7 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine AS build-env
 WORKDIR /app
 
 COPY *.sln ./
-COPY dotnet-tools.json ./
+COPY .config ./.config
 COPY GestionHogar.csproj .
 
 # Install EF tools

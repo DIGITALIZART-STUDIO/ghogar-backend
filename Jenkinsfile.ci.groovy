@@ -6,9 +6,7 @@ pipeline {
 	stages {
 		stage('Build backend') {
 			steps {
-				dir("src") {
-					sh "docker build -t gestionhogar-backend-ci-${BUILD_REF} -f Deployment/Dockerfile.alpine ."
-				}
+				sh "docker build -t gestionhogar-backend-ci-${BUILD_REF} -f +devops/docker/Dockerfile ./src"
 			}
 		}
 	}
