@@ -1,0 +1,32 @@
+using System.ComponentModel.DataAnnotations;
+using GestionHogar.Model;
+
+namespace GestionHogar.Dtos;
+
+public class PaymentTransactionUpdateDTO
+{
+    [Required]
+    public DateTime PaymentDate { get; set; }
+
+    [Required]
+    [Range(0.01, double.MaxValue, ErrorMessage = "El monto debe ser mayor a 0")]
+    public decimal AmountPaid { get; set; }
+
+    public Guid? ReservationId { get; set; }
+
+    [Required]
+    public PaymentMethod PaymentMethod { get; set; }
+
+    [StringLength(100)]
+    public string? ReferenceNumber { get; set; }
+
+    [StringLength(500)]
+    public string? ComprobanteUrl { get; set; }
+
+    /// <summary>
+    /// Lista de IDs de cuotas específicas a pagar.
+    /// Si no se proporciona, el sistema asignará automáticamente las cuotas
+    /// desde la última hacia atrás (fecha más lejana a más temprana).
+    /// </summary>
+    public List<Guid>? PaymentIds { get; set; }
+}

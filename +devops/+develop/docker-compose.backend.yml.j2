@@ -1,0 +1,32 @@
+services:
+  {{ project_name }}-backend-{{ project_stage }}:
+    image: ${{ project_name | upper }}_BACKEND_REGISTRY_URL:${{ project_name | upper }}_BACKEND_VERSION
+    container_name: {{ project_name }}-backend-{{ project_stage }}
+    restart: unless-stopped
+    depends_on:
+      {{ project_name }}-db-{{ project_stage }}:
+        condition: service_healthy
+    environment:
+      - TZ=America/Lima
+    env_file:
+      - .env.database
+      - .env.backend
+    networks:
+      - proxy
+      - {{ project_name }}-network-{{ project_stage}}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gestionhogar-backend-develop.rule=Host(`gestionhogar-backend-develop.araozu.dev`)"
+      - "traefik.http.routers.gestionhogar-backend-develop.entrypoints=websecure"
+      - "traefik.http.routers.gestionhogar-backend-develop.tls=true"
+      - "traefik.http.routers.gestionhogar-backend-develop.tls.certresolver=dns-cloudflare"
+      - "traefik.http.routers.gestionhogar-backend-develop.tls.domains[0].main=araozu.dev"
+      - "traefik.http.routers.gestionhogar-backend-develop.tls.domains[0].sans=*.araozu.dev"
+      - "traefik.http.services.gestionhogar-backend-develop.loadbalancer.server.port=8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 2
+      start_period: 5s
+
