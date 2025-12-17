@@ -3,6 +3,8 @@ services:
     build:
       context: ./src
       dockerfile: Deployment/Dockerfile.alpine
+      no_cache: true
+      pull: true
     container_name: gestionhogar-backend
     restart: unless-stopped
     expose:

@@ -29,7 +29,10 @@ RUN HUSKY=0 dotnet publish GestionHogar.csproj -c Release -r linux-musl-x64 \
     -o /app/out
 
 # Create EF migrations bundle (self-contained)
-RUN HUSKY=0 dotnet ef migrations bundle \
+# Force regeneration to avoid cached bundles with problematic connection strings
+RUN rm -f /app/out/efbundle && \
+    HUSKY=0 dotnet ef migrations bundle \
+    --force \
     -r linux-musl-x64 \
     --configuration Release \
     --self-contained \
