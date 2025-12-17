@@ -285,7 +285,6 @@ using (var scope = app.Services.CreateScope())
             ? connectionString.Substring(0, connectionString.IndexOf("Password=")) + "Password=***"
             : connectionString;
         logger.LogInformation("📡 Connection string: {ConnectionString}", safeConnectionString);
-    }
 
         // Extract host for DNS resolution test
         var host = "db"; // Default Docker service name
