@@ -76,7 +76,9 @@ services:
       # Zona horaria
       - TZ=America/Lima
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+        restart: true
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/api/healthz || exit 1"]
       interval: 30s

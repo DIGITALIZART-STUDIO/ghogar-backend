@@ -265,36 +265,78 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// Apply database migrations automatically
+// Apply database migrations automatically with retry logic
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var logger = services.GetRequiredService<ILogger<Program>>();
+    var context = services.GetRequiredService<DatabaseContext>();
 
-    try
+    // Retry configuration
+    const int maxRetries = 10;
+    const int initialDelayMs = 1000;
+    var currentDelay = initialDelayMs;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++)
     {
-        var context = services.GetRequiredService<DatabaseContext>();
-
-        logger.LogInformation("🔍 Checking for pending migrations...");
-
-        var pendingMigrations = context.Database.GetPendingMigrations();
-        if (pendingMigrations.Any())
+        try
         {
             logger.LogInformation(
-                $"📦 Applying {pendingMigrations.Count()} pending migrations: {string.Join(", ", pendingMigrations)}"
+                $"🔍 Checking database connection (attempt {attempt}/{maxRetries})..."
             );
-            context.Database.Migrate();
-            logger.LogInformation("✅ Migrations applied successfully");
+
+            // Test connection
+            var canConnect = context.Database.CanConnect();
+            if (!canConnect)
+            {
+                throw new Exception("Cannot connect to database");
+            }
+
+            logger.LogInformation("✅ Database connection established");
+            logger.LogInformation("🔍 Checking for pending migrations...");
+
+            var pendingMigrations = context.Database.GetPendingMigrations();
+            if (pendingMigrations.Any())
+            {
+                logger.LogInformation(
+                    $"📦 Applying {pendingMigrations.Count()} pending migrations: {string.Join(", ", pendingMigrations)}"
+                );
+                context.Database.Migrate();
+                logger.LogInformation("✅ Migrations applied successfully");
+            }
+            else
+            {
+                logger.LogInformation("✅ Database is up to date - no pending migrations");
+            }
+
+            // Success - break out of retry loop
+            break;
         }
-        else
+        catch (Exception ex)
         {
-            logger.LogInformation("✅ Database is up to date - no pending migrations");
+            if (attempt == maxRetries)
+            {
+                logger.LogError(
+                    ex,
+                    "❌ Failed to connect to database after {MaxRetries} attempts",
+                    maxRetries
+                );
+                throw;
+            }
+
+            logger.LogWarning(
+                ex,
+                "⚠️  Database connection failed (attempt {Attempt}/{MaxRetries}). Retrying in {Delay}ms...",
+                attempt,
+                maxRetries,
+                currentDelay
+            );
+
+            Thread.Sleep(currentDelay);
+
+            // Exponential backoff: double the delay for next attempt
+            currentDelay = Math.Min(currentDelay * 2, 30000); // Max 30 seconds
         }
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "❌ Error occurred while migrating database");
-        throw; // Re-throw para que el contenedor falle y Dokploy lo detecte
     }
 }
 
