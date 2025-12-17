@@ -285,6 +285,17 @@ using (var scope = app.Services.CreateScope())
             ? connectionString.Substring(0, connectionString.IndexOf("Password=")) + "Password=***"
             : connectionString;
         logger.LogInformation("📡 Connection string: {ConnectionString}", safeConnectionString);
+
+        // Extract host for DNS resolution test
+        var host = "db"; // Default Docker service name
+        if (connectionString.Contains("Host="))
+        {
+            var hostStart = connectionString.IndexOf("Host=") + 5;
+            var hostEnd = connectionString.IndexOf(";", hostStart);
+            if (hostEnd == -1) hostEnd = connectionString.Length;
+            host = connectionString.Substring(hostStart, hostEnd - hostStart);
+        }
+        logger.LogInformation("🔍 Target database host: {Host}", host);
     }
 
     for (int attempt = 1; attempt <= maxRetries; attempt++)
@@ -296,11 +307,14 @@ using (var scope = app.Services.CreateScope())
             );
 
             // Test connection
+            logger.LogInformation("🔗 Testing database connection...");
             var canConnect = context.Database.CanConnect();
             if (!canConnect)
             {
+                logger.LogWarning("❌ Database connection test failed");
                 throw new Exception("Cannot connect to database");
             }
+            logger.LogInformation("✅ Database connection test passed");
 
             logger.LogInformation("✅ Database connection established");
             logger.LogInformation("🔍 Checking for pending migrations...");

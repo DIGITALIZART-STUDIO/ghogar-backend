@@ -75,10 +75,15 @@ services:
 
       # Zona horaria
       - TZ=America/Lima
+
+      # Debug (opcional)
+      - DEBUG_DB=${DEBUG_DB:-false}
     depends_on:
       db:
         condition: service_healthy
         restart: true
+    networks:
+      - gestionhogar-network
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/api/healthz || exit 1"]
       interval: 30s
@@ -96,8 +101,10 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gestionhogar-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} && psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c 'SELECT 1' > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
