@@ -67,6 +67,10 @@ COPY Templates ./Templates
 COPY Fonts /usr/local/share/fonts/
 COPY Deployment/docker-entrypoint.sh ./
 
+# Copy debug script
+COPY debug-db.sh ./
+RUN chmod +x ./debug-db.sh
+
 # Verify DLL was copied correctly
 RUN echo "=== Verifying files in runtime stage ===" && \
     ls -lh /app/GestionHogar.dll && \

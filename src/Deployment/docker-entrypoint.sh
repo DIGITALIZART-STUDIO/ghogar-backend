@@ -17,14 +17,8 @@ echo "✅ Starting application with dotnet runtime..."
 
 # Optional: Debug database connectivity before starting app
 if [ "${DEBUG_DB:-false}" = "true" ]; then
-    echo "🐛 Debug mode: Testing database connectivity..."
-    echo "   Host: db"
-    echo "   Port: 5432"
-    if command -v nc >/dev/null 2>&1; then
-        nc -zv db 5432 2>&1 | head -1
-    else
-        echo "   nc not available, skipping connectivity test"
-    fi
+    echo "🐛 Debug mode: Running comprehensive database connectivity test..."
+    ./debug-db.sh
     echo "🐛 Debug mode: Done"
 fi
 
