@@ -28,15 +28,8 @@ RUN HUSKY=0 dotnet publish GestionHogar.csproj -c Release -r linux-musl-x64 \
     --self-contained true \
     -o /app/out
 
-# Create EF migrations bundle (self-contained)
-# Force regeneration to avoid cached bundles with problematic connection strings
-RUN rm -f /app/out/efbundle && \
-    HUSKY=0 dotnet ef migrations bundle \
-    --force \
-    -r linux-musl-x64 \
-    --configuration Release \
-    --self-contained \
-    -o /app/out/efbundle
+# NOTE: EF migrations are now applied programmatically in Program.cs
+# No need to generate the bundle anymore - this avoids connection string issues
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/runtime-deps:9.0-alpine AS runtime
@@ -66,7 +59,7 @@ COPY Fonts /usr/local/share/fonts/
 COPY Deployment/docker-entrypoint.sh ./
 
 # Make scripts executable
-RUN chmod +x ./docker-entrypoint.sh ./efbundle
+RUN chmod +x ./docker-entrypoint.sh
 
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app

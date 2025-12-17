@@ -265,6 +265,39 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// Apply database migrations automatically
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+
+    try
+    {
+        var context = services.GetRequiredService<DatabaseContext>();
+
+        logger.LogInformation("🔍 Checking for pending migrations...");
+
+        var pendingMigrations = context.Database.GetPendingMigrations();
+        if (pendingMigrations.Any())
+        {
+            logger.LogInformation(
+                $"📦 Applying {pendingMigrations.Count()} pending migrations: {string.Join(", ", pendingMigrations)}"
+            );
+            context.Database.Migrate();
+            logger.LogInformation("✅ Migrations applied successfully");
+        }
+        else
+        {
+            logger.LogInformation("✅ Database is up to date - no pending migrations");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "❌ Error occurred while migrating database");
+        throw; // Re-throw para que el contenedor falle y Dokploy lo detecte
+    }
+}
+
 // Seed the database
 using (var scope = app.Services.CreateScope())
 {
