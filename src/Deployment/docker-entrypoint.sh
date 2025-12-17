@@ -5,16 +5,11 @@ echo "🚀 Starting GestionHogar Application..."
 echo "ℹ️  Migrations will be applied automatically by the application"
 echo ""
 
-# Debug: Verificar el entorno
-echo "=== Debug Information ==="
-echo "Current directory: $(pwd)"
-echo "Files in directory:"
-ls -lah
-echo ""
-
 # Verificar que la aplicación existe
 if [ ! -f "./GestionHogar" ]; then
     echo "❌ Error: GestionHogar executable not found!"
+    echo "Files in current directory:"
+    ls -lah | head -20
     exit 1
 fi
 
@@ -24,9 +19,5 @@ if [ ! -x "./GestionHogar" ]; then
     chmod +x ./GestionHogar
 fi
 
-# Verificar el tipo de archivo
-echo "File type: $(file ./GestionHogar)"
-echo ""
-
-echo "✅ Starting application..."
+echo "✅ GestionHogar found, starting application..."
 ./GestionHogar
