@@ -5,8 +5,8 @@ services:
       dockerfile: Deployment/Dockerfile.alpine
     container_name: gestionhogar-backend
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
       # Base de datos
       - ConnectionStrings__DefaultConnection=${DATABASE_URL}
@@ -93,8 +93,6 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
       interval: 10s
