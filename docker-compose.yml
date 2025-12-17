@@ -8,69 +8,69 @@ services:
     expose:
       - "8080"
     environment:
-      # Base de datos
-      - ConnectionStrings__DefaultConnection=${DATABASE_URL}
+      # Base de datos (Environment-level)
+      - ConnectionStrings__DefaultConnection=${{environment.DATABASE_URL}}
 
-      # JWT
-      - Jwt__SecretKey=${JWT_SECRET_KEY}
-      - Jwt__Issuer=${JWT_ISSUER}
-      - Jwt__Audience=${JWT_AUDIENCE}
-      - Jwt__ExpirationSeconds=${JWT_EXPIRATION_SECONDS}
-      - Jwt__RefreshExpirationSeconds=${JWT_REFRESH_EXPIRATION_SECONDS}
+      # JWT - Keys (Environment-level) + Timing (Service-level)
+      - Jwt__SecretKey=${{environment.JWT_SECRET_KEY}}
+      - Jwt__Issuer=${{environment.JWT_ISSUER}}
+      - Jwt__Audience=${{environment.JWT_AUDIENCE}}
+      - Jwt__ExpirationSeconds=${{JWT_EXPIRATION_SECONDS}}
+      - Jwt__RefreshExpirationSeconds=${{JWT_REFRESH_EXPIRATION_SECONDS}}
 
-      # CORS
-      - Cors__AllowedOrigins__0=${CORS_ALLOWED_ORIGIN_1}
-      - Cors__AllowedOrigins__1=${CORS_ALLOWED_ORIGIN_2}
-      - Cors__ExpirationSeconds=${CORS_EXPIRATION_SECONDS}
-      - Cors__RefreshExpirationSeconds=${CORS_REFRESH_EXPIRATION_SECONDS}
-      - Cors__CookieName=${CORS_COOKIE_NAME}
-      - Cors__CookieDomain=${CORS_COOKIE_DOMAIN}
+      # CORS - Origins (Environment-level) + Config (Service-level)
+      - Cors__AllowedOrigins__0=${{environment.CORS_ALLOWED_ORIGIN_1}}
+      - Cors__AllowedOrigins__1=${{environment.CORS_ALLOWED_ORIGIN_2}}
+      - Cors__ExpirationSeconds=${{CORS_EXPIRATION_SECONDS}}
+      - Cors__RefreshExpirationSeconds=${{CORS_REFRESH_EXPIRATION_SECONDS}}
+      - Cors__CookieName=${{CORS_COOKIE_NAME}}
+      - Cors__CookieDomain=${{CORS_COOKIE_DOMAIN}}
 
-      # API Peru
-      - ApiPeru__Token=${API_PERU_TOKEN}
-      - ApiPeru__BaseUrl=${API_PERU_BASE_URL}
+      # API Peru - Token (Environment-level) + BaseUrl (Service-level)
+      - ApiPeru__Token=${{environment.API_PERU_TOKEN}}
+      - ApiPeru__BaseUrl=${{API_PERU_BASE_URL}}
 
-      # Email
-      - Email__Host=${EMAIL_HOST}
-      - Email__Port=${EMAIL_PORT}
-      - Email__Username=${EMAIL_USERNAME}
-      - Email__Password=${EMAIL_PASSWORD}
-      - Email__EnableSsl=${EMAIL_ENABLE_SSL}
-      - Email__UseDefaultCredentials=${EMAIL_USE_DEFAULT_CREDENTIALS}
+      # Email - Credentials (Environment-level) + Config (Service-level)
+      - Email__Host=${{EMAIL_HOST}}
+      - Email__Port=${{EMAIL_PORT}}
+      - Email__Username=${{environment.EMAIL_USERNAME}}
+      - Email__Password=${{environment.EMAIL_PASSWORD}}
+      - Email__EnableSsl=${{EMAIL_ENABLE_SSL}}
+      - Email__UseDefaultCredentials=${{EMAIL_USE_DEFAULT_CREDENTIALS}}
 
-      # Cloudflare R2
-      - CloudflareR2__AccessKeyId=${CLOUDFLARE_R2_ACCESS_KEY_ID}
-      - CloudflareR2__SecretAccessKey=${CLOUDFLARE_R2_SECRET_ACCESS_KEY}
-      - CloudflareR2__AccountId=${CLOUDFLARE_R2_ACCOUNT_ID}
-      - CloudflareR2__ApiS3=${CLOUDFLARE_R2_API_S3}
-      - CloudflareR2__BucketName=${CLOUDFLARE_R2_BUCKET_NAME}
-      - CloudflareR2__PublicUrlImage=${CLOUDFLARE_R2_PUBLIC_URL_IMAGE}
+      # Cloudflare R2 - Credentials (Environment-level) + Config (Service-level)
+      - CloudflareR2__AccessKeyId=${{environment.CLOUDFLARE_R2_ACCESS_KEY_ID}}
+      - CloudflareR2__SecretAccessKey=${{environment.CLOUDFLARE_R2_SECRET_ACCESS_KEY}}
+      - CloudflareR2__AccountId=${{CLOUDFLARE_R2_ACCOUNT_ID}}
+      - CloudflareR2__ApiS3=${{CLOUDFLARE_R2_API_S3}}
+      - CloudflareR2__BucketName=${{environment.CLOUDFLARE_R2_BUCKET_NAME}}
+      - CloudflareR2__PublicUrlImage=${{environment.CLOUDFLARE_R2_PUBLIC_URL_IMAGE}}
 
-      # Información del negocio
-      - BusinessInfo__Business=${BUSINESS_NAME}
-      - BusinessInfo__Url=${BUSINESS_URL}
-      - BusinessInfo__Phone=${BUSINESS_PHONE}
-      - BusinessInfo__Address=${BUSINESS_ADDRESS}
-      - BusinessInfo__Contact=${BUSINESS_CONTACT}
-      - BusinessInfo__LogoUrl=${BUSINESS_LOGO_URL}
+      # Información del negocio (Project-level compartidas + Environment-level específicas)
+      - BusinessInfo__Business=${{project.BUSINESS_NAME}}
+      - BusinessInfo__Url=${{environment.BUSINESS_URL}}
+      - BusinessInfo__Phone=${{project.BUSINESS_PHONE}}
+      - BusinessInfo__Address=${{project.BUSINESS_ADDRESS}}
+      - BusinessInfo__Contact=${{project.BUSINESS_CONTACT}}
+      - BusinessInfo__LogoUrl=${{project.BUSINESS_LOGO_URL}}
 
-      # Logging
-      - Logging__LogLevel__Default=${LOG_LEVEL_DEFAULT}
-      - Logging__LogLevel__Microsoft.AspNetCore=${LOG_LEVEL_ASPNETCORE}
+      # Logging (Service-level)
+      - Logging__LogLevel__Default=${{LOG_LEVEL_DEFAULT}}
+      - Logging__LogLevel__Microsoft.AspNetCore=${{LOG_LEVEL_ASPNETCORE}}
 
-      # Lead Expiration
-      - LeadExpiration__Enabled=${LEAD_EXPIRATION_ENABLED}
-      - LeadExpiration__CronSchedule=${LEAD_EXPIRATION_CRON_SCHEDULE}
-      - LeadExpiration__MaxConsecutiveErrors=${LEAD_EXPIRATION_MAX_ERRORS}
-      - LeadExpiration__InitialBackoffMinutes=${LEAD_EXPIRATION_INITIAL_BACKOFF}
-      - LeadExpiration__MaxBackoffMinutes=${LEAD_EXPIRATION_MAX_BACKOFF}
-      - LeadExpiration__EdgeCaseValidation__MaxFutureExpirationDays=${LEAD_EXPIRATION_MAX_FUTURE_DAYS}
-      - LeadExpiration__EdgeCaseValidation__MaxPastExpirationYears=${LEAD_EXPIRATION_MAX_PAST_YEARS}
-      - LeadExpiration__EdgeCaseValidation__MaxRecycleCount=${LEAD_EXPIRATION_MAX_RECYCLE_COUNT}
-      - LeadExpiration__EdgeCaseValidation__MinCreationAgeHours=${LEAD_EXPIRATION_MIN_CREATION_AGE}
+      # Lead Expiration (Service-level)
+      - LeadExpiration__Enabled=${{LEAD_EXPIRATION_ENABLED}}
+      - LeadExpiration__CronSchedule=${{LEAD_EXPIRATION_CRON_SCHEDULE}}
+      - LeadExpiration__MaxConsecutiveErrors=${{LEAD_EXPIRATION_MAX_ERRORS}}
+      - LeadExpiration__InitialBackoffMinutes=${{LEAD_EXPIRATION_INITIAL_BACKOFF}}
+      - LeadExpiration__MaxBackoffMinutes=${{LEAD_EXPIRATION_MAX_BACKOFF}}
+      - LeadExpiration__EdgeCaseValidation__MaxFutureExpirationDays=${{LEAD_EXPIRATION_MAX_FUTURE_DAYS}}
+      - LeadExpiration__EdgeCaseValidation__MaxPastExpirationYears=${{LEAD_EXPIRATION_MAX_PAST_YEARS}}
+      - LeadExpiration__EdgeCaseValidation__MaxRecycleCount=${{LEAD_EXPIRATION_MAX_RECYCLE_COUNT}}
+      - LeadExpiration__EdgeCaseValidation__MinCreationAgeHours=${{LEAD_EXPIRATION_MIN_CREATION_AGE}}
 
-      # Hosts permitidos
-      - AllowedHosts=${ALLOWED_HOSTS}
+      # Hosts permitidos (Project-level)
+      - AllowedHosts=${{project.ALLOWED_HOSTS}}
 
       # Zona horaria
       - TZ=America/Lima
@@ -88,13 +88,13 @@ services:
     container_name: gestionhogar-db
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${{environment.POSTGRES_DB}}
+      - POSTGRES_USER=${{environment.POSTGRES_USER}}
+      - POSTGRES_PASSWORD=${{environment.POSTGRES_PASSWORD}}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      test: ["CMD", "pg_isready", "-U", "${{environment.POSTGRES_USER}}", "-d", "${{environment.POSTGRES_DB}}"]
       interval: 10s
       timeout: 5s
       retries: 5
