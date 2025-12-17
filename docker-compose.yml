@@ -3,6 +3,7 @@ services:
     build:
       context: ./src
       dockerfile: Deployment/Dockerfile.alpine
+      no_cache: true  # Force complete rebuild to avoid cached corrupted executables
     container_name: gestionhogar-backend
     restart: unless-stopped
     expose:

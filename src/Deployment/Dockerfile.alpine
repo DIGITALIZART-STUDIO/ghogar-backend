@@ -28,6 +28,12 @@ RUN HUSKY=0 dotnet publish GestionHogar.csproj -c Release -r linux-musl-x64 \
     --self-contained true \
     -o /app/out
 
+# Verify the build was successful
+RUN ls -lah /app/out/ && \
+    echo "Verifying GestionHogar executable..." && \
+    file /app/out/GestionHogar && \
+    test -f /app/out/GestionHogar || (echo "ERROR: GestionHogar not found!" && exit 1)
+
 # NOTE: EF migrations are now applied programmatically in Program.cs
 # No need to generate the bundle anymore - this avoids connection string issues
 
@@ -58,8 +64,15 @@ COPY Templates ./Templates
 COPY Fonts /usr/local/share/fonts/
 COPY Deployment/docker-entrypoint.sh ./
 
+# Verify executable was copied correctly
+RUN echo "=== Verifying files in runtime stage ===" && \
+    ls -lah /app/ && \
+    echo "=== Checking GestionHogar executable ===" && \
+    file /app/GestionHogar && \
+    test -f /app/GestionHogar || (echo "ERROR: GestionHogar not found in runtime!" && exit 1)
+
 # Make scripts executable
-RUN chmod +x ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh ./GestionHogar
 
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app
