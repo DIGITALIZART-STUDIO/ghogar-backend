@@ -5,19 +5,13 @@ echo "🚀 Starting GestionHogar Application..."
 echo "ℹ️  Migrations will be applied automatically by the application"
 echo ""
 
-# Verificar que la aplicación existe
-if [ ! -f "./GestionHogar" ]; then
-    echo "❌ Error: GestionHogar executable not found!"
+# Verificar que la DLL existe
+if [ ! -f "./GestionHogar.dll" ]; then
+    echo "❌ Error: GestionHogar.dll not found!"
     echo "Files in current directory:"
     ls -lah | head -20
     exit 1
 fi
 
-# Verificar que el archivo es ejecutable
-if [ ! -x "./GestionHogar" ]; then
-    echo "⚠️  GestionHogar is not executable, fixing permissions..."
-    chmod +x ./GestionHogar
-fi
-
-echo "✅ GestionHogar found, starting application..."
-./GestionHogar
+echo "✅ Starting application with dotnet runtime..."
+exec dotnet GestionHogar.dll
