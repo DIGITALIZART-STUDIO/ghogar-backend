@@ -274,8 +274,18 @@ using (var scope = app.Services.CreateScope())
 
     // Retry configuration
     const int maxRetries = 10;
-    const int initialDelayMs = 1000;
+    const int initialDelayMs = 2000; // Start with 2 seconds
     var currentDelay = initialDelayMs;
+
+    // Log connection string (without password) for debugging
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (!string.IsNullOrEmpty(connectionString))
+    {
+        var safeConnectionString = connectionString.Contains("Password=")
+            ? connectionString.Substring(0, connectionString.IndexOf("Password=")) + "Password=***"
+            : connectionString;
+        logger.LogInformation("📡 Connection string: {ConnectionString}", safeConnectionString);
+    }
 
     for (int attempt = 1; attempt <= maxRetries; attempt++)
     {
