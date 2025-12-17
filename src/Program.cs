@@ -265,100 +265,55 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// Apply database migrations automatically with retry logic
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    var logger = services.GetRequiredService<ILogger<Program>>();
-    var context = services.GetRequiredService<DatabaseContext>();
-
-    // Retry configuration
-    const int maxRetries = 10;
-    const int initialDelayMs = 2000; // Start with 2 seconds
-    var currentDelay = initialDelayMs;
-
-    // Log connection string (without password) for debugging
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    if (!string.IsNullOrEmpty(connectionString))
+    // Apply database migrations automatically with retry logic
+    using (var scope = app.Services.CreateScope())
     {
-        var safeConnectionString = connectionString.Contains("Password=")
-            ? connectionString.Substring(0, connectionString.IndexOf("Password=")) + "Password=***"
-            : connectionString;
-        logger.LogInformation("📡 Connection string: {ConnectionString}", safeConnectionString);
+        var services = scope.ServiceProvider;
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        var context = services.GetRequiredService<DatabaseContext>();
 
-        // Extract host for DNS resolution test
-        var host = "db"; // Default Docker service name
-        if (connectionString.Contains("Host="))
+        // Retry configuration
+        const int maxRetries = 10;
+        const int initialDelayMs = 2000;
+        var currentDelay = initialDelayMs;
+
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            var hostStart = connectionString.IndexOf("Host=") + 5;
-            var hostEnd = connectionString.IndexOf(";", hostStart);
-            if (hostEnd == -1) hostEnd = connectionString.Length;
-            host = connectionString.Substring(hostStart, hostEnd - hostStart);
-        }
-        logger.LogInformation("🔍 Target database host: {Host}", host);
-    }
-
-    for (int attempt = 1; attempt <= maxRetries; attempt++)
-    {
-        try
-        {
-            logger.LogInformation(
-                $"🔍 Checking database connection (attempt {attempt}/{maxRetries})..."
-            );
-
-            // Test connection
-            logger.LogInformation("🔗 Testing database connection...");
-            context.Database.OpenConnection();
-            context.Database.CloseConnection();
-            logger.LogInformation("✅ Database connection test passed");
-
-            logger.LogInformation("✅ Database connection established");
-            logger.LogInformation("🔍 Checking for pending migrations...");
-
-            var pendingMigrations = context.Database.GetPendingMigrations();
-            if (pendingMigrations.Any())
+            try
             {
-                logger.LogInformation(
-                    $"📦 Applying {pendingMigrations.Count()} pending migrations: {string.Join(", ", pendingMigrations)}"
-                );
-                context.Database.Migrate();
-                logger.LogInformation("✅ Migrations applied successfully");
+                logger.LogInformation($"🔍 Checking database connection (attempt {attempt}/{maxRetries})...");
+
+                context.Database.OpenConnection();
+                context.Database.CloseConnection();
+
+                var pendingMigrations = context.Database.GetPendingMigrations();
+                if (pendingMigrations.Any())
+                {
+                    logger.LogInformation($"📦 Applying {pendingMigrations.Count()} pending migrations...");
+                    context.Database.Migrate();
+                    logger.LogInformation("✅ Migrations applied successfully");
+                }
+                else
+                {
+                    logger.LogInformation("✅ Database is up to date");
+                }
+
+                break;
             }
-            else
+            catch (Exception ex)
             {
-                logger.LogInformation("✅ Database is up to date - no pending migrations");
+                if (attempt == maxRetries)
+                {
+                    logger.LogError(ex, "❌ Failed to connect to database after {MaxRetries} attempts", maxRetries);
+                    throw;
+                }
+
+                logger.LogWarning("⚠️ Connection failed, retrying in {Delay}ms...", currentDelay);
+                Thread.Sleep(currentDelay);
+                currentDelay = Math.Min(currentDelay * 2, 30000);
             }
-
-            // Success - break out of retry loop
-            break;
-        }
-        catch (Exception ex)
-        {
-            if (attempt == maxRetries)
-            {
-                logger.LogError(
-                    ex,
-                    "❌ Failed to connect to database after {MaxRetries} attempts",
-                    maxRetries
-                );
-                throw;
-            }
-
-            logger.LogWarning(
-                ex,
-                "⚠️  Database connection failed (attempt {Attempt}/{MaxRetries}). Retrying in {Delay}ms...",
-                attempt,
-                maxRetries,
-                currentDelay
-            );
-
-            Thread.Sleep(currentDelay);
-
-            // Exponential backoff: double the delay for next attempt
-            currentDelay = Math.Min(currentDelay * 2, 30000); // Max 30 seconds
         }
     }
-}
 
 // Seed the database
 using (var scope = app.Services.CreateScope())

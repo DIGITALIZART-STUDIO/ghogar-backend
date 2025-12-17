@@ -76,6 +76,8 @@ services:
 
       # Zona horaria
       - TZ=America/Lima
+      - DOTNET_SYSTEM_NET_DISABLEIPV6=1
+
     depends_on:
       db:
         condition: service_healthy
