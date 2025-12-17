@@ -2,7 +2,7 @@ services:
   gestionhogar-backend:
     build:
       context: ./src
-      dockerfile: Deployment/Dockerfile.alpine
+      dockerfile: Deployment/Dockerfile
     container_name: gestionhogar-backend
     restart: unless-stopped
     expose:
