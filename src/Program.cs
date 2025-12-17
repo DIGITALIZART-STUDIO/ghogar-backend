@@ -308,12 +308,8 @@ using (var scope = app.Services.CreateScope())
 
             // Test connection
             logger.LogInformation("🔗 Testing database connection...");
-            var canConnect = context.Database.CanConnect();
-            if (!canConnect)
-            {
-                logger.LogWarning("❌ Database connection test failed");
-                throw new Exception("Cannot connect to database");
-            }
+            context.Database.OpenConnection();
+            context.Database.CloseConnection();
             logger.LogInformation("✅ Database connection test passed");
 
             logger.LogInformation("✅ Database connection established");
