@@ -5,11 +5,14 @@ echo "Running migrations..."
 
 # Debug: mostrar información del environment
 echo "Debug: Current working directory: $(pwd)"
-echo "Debug: Files in directory: $(ls -la)"
 echo "Debug: Connection string length: ${#ConnectionStrings__DefaultConnection}"
 
-# Método más robusto: usar printf %q para escapar todos los caracteres especiales
-export ConnectionStrings__DefaultConnection=$(printf '%q' "$ConnectionStrings__DefaultConnection")
+# Método compatible con sh: escapar caracteres problemáticos específicos
+# Escapamos: comillas simples, dobles, backticks, dólar, y caracteres de control
+export ConnectionStrings__DefaultConnection=$(
+    printf '%s\n' "$ConnectionStrings__DefaultConnection" | \
+    sed "s/'/'\\\\''/g; s/^\(.*\)$/'\1'/"
+)
 
 echo "Debug: Escaped connection string: $ConnectionStrings__DefaultConnection"
 
