@@ -10,6 +10,8 @@ services:
     environment:
       # Base de datos
       - ConnectionStrings__DefaultConnection=${DATABASE_URL}
+      - DOTNET_SYSTEM_NET_DISABLEIPV6=1
+      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 
       # JWT
       - Jwt__SecretKey=${JWT_SECRET_KEY}
