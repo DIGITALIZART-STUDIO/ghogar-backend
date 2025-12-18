@@ -1520,91 +1520,137 @@ public class ReservationService : IReservationService
                                         .Text("");
                                 }
 
-                                // Co-propietario
+                                // Representantes legales (copropietarios) de la reserva
                                 {
-                                    table
-                                        .Cell()
-                                        .ColumnSpan(2)
-                                        .AlignLeft()
-                                        .PaddingVertical(5)
-                                        .Text("Nombre del Co-propietario:");
-
-                                    string coOwnerName = "";
-                                    string coOwnerDni = "";
-
-                                    // Procesar el JSON de co-owners para extraer solo el primero
-                                    if (!string.IsNullOrEmpty(client?.CoOwners))
+                                    // Procesar TODOS los representantes legales de la reserva
+                                    var coOwnersList = new List<(string name, string dni)>();
+                                    if (!string.IsNullOrEmpty(reservation.CoOwners))
                                     {
                                         try
                                         {
-                                            // Deserializar el JSON a una lista de objetos anónimos
                                             var coOwners =
                                                 System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
-                                                    client.CoOwners
+                                                    reservation.CoOwners
                                                 );
 
-                                            // Verificar que sea un array y tenga al menos un elemento
                                             if (
                                                 coOwners.ValueKind
                                                     == System.Text.Json.JsonValueKind.Array
                                                 && coOwners.GetArrayLength() > 0
                                             )
                                             {
-                                                // Obtener el primer elemento
-                                                var firstCoOwner = coOwners[0];
-
-                                                // Intentar obtener la propiedad "name" del primer co-owner
-                                                if (
-                                                    firstCoOwner.TryGetProperty(
-                                                        "name",
-                                                        out var nameElement
-                                                    )
-                                                )
+                                                for (int i = 0; i < coOwners.GetArrayLength(); i++)
                                                 {
-                                                    coOwnerName = nameElement.GetString() ?? "";
-                                                }
+                                                    var coOwner = coOwners[i];
+                                                    string coOwnerName = "";
+                                                    string coOwnerDni = "";
 
-                                                // Intentar obtener la propiedad "dni" del primer co-owner
-                                                if (
-                                                    firstCoOwner.TryGetProperty(
-                                                        "dni",
-                                                        out var dniElement
+                                                    if (
+                                                        coOwner.TryGetProperty(
+                                                            "name",
+                                                            out var nameElement
+                                                        )
                                                     )
-                                                )
-                                                {
-                                                    coOwnerDni = dniElement.GetString() ?? "";
+                                                    {
+                                                        coOwnerName = nameElement.GetString() ?? "";
+                                                    }
+
+                                                    if (
+                                                        coOwner.TryGetProperty(
+                                                            "dni",
+                                                            out var dniElement
+                                                        )
+                                                    )
+                                                    {
+                                                        coOwnerDni = dniElement.GetString() ?? "";
+                                                    }
+
+                                                    if (
+                                                        !string.IsNullOrEmpty(coOwnerName)
+                                                        || !string.IsNullOrEmpty(coOwnerDni)
+                                                    )
+                                                    {
+                                                        coOwnersList.Add((coOwnerName, coOwnerDni));
+                                                    }
                                                 }
                                             }
                                         }
                                         catch
                                         {
-                                            // En caso de error al procesar el JSON, dejar los campos vacíos
-                                            coOwnerName = "";
-                                            coOwnerDni = "";
+                                            // En caso de error, dejar la lista vacía
                                         }
                                     }
 
-                                    table
-                                        .Cell()
-                                        .ColumnSpan(3)
-                                        .PaddingVertical(5)
-                                        .BorderBottom(1)
-                                        .BorderColor(Colors.Black)
-                                        .Text(coOwnerName);
+                                    // Mostrar todos los representantes legales
+                                    if (coOwnersList.Count > 0)
+                                    {
+                                        for (int i = 0; i < coOwnersList.Count; i++)
+                                        {
+                                            var (coOwnerName, coOwnerDni) = coOwnersList[i];
+                                            var labelText = i == 0 ? "Representantes legales:" : "";
 
-                                    table
-                                        .Cell()
-                                        .AlignLeft()
-                                        .PaddingVertical(5)
-                                        .PaddingLeft(10)
-                                        .Text("D.N.I.");
+                                            table
+                                                .Cell()
+                                                .ColumnSpan(2)
+                                                .AlignLeft()
+                                                .PaddingVertical(5)
+                                                .Text(labelText);
 
-                                    table
-                                        .Cell()
-                                        .PaddingVertical(5)
-                                        .BorderBottom(1)
-                                        .BorderColor(Colors.Black)
-                                        .Text(coOwnerDni);
+                                            table
+                                                .Cell()
+                                                .ColumnSpan(3)
+                                                .PaddingVertical(5)
+                                                .BorderBottom(1)
+                                                .BorderColor(Colors.Black)
+                                                .Text(coOwnerName);
+
+                                            table
+                                                .Cell()
+                                                .AlignLeft()
+                                                .PaddingVertical(5)
+                                                .PaddingLeft(10)
+                                                .Text("D.N.I.");
+
+                                            table
+                                                .Cell()
+                                                .PaddingVertical(5)
+                                                .BorderBottom(1)
+                                                .BorderColor(Colors.Black)
+                                                .Text(coOwnerDni);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // Si no hay representantes, mostrar una fila vacía
+                                        table
+                                            .Cell()
+                                            .ColumnSpan(2)
+                                            .AlignLeft()
+                                            .PaddingVertical(5)
+                                            .Text("Representantes legales:");
+
+                                        table
+                                            .Cell()
+                                            .ColumnSpan(3)
+                                            .PaddingVertical(5)
+                                            .BorderBottom(1)
+                                            .BorderColor(Colors.Black)
+                                            .Text("");
+
+                                        table
+                                            .Cell()
+                                            .AlignLeft()
+                                            .PaddingVertical(5)
+                                            .PaddingLeft(10)
+                                            .Text("D.N.I.");
+
+                                        table
+                                            .Cell()
+                                            .PaddingVertical(5)
+                                            .BorderBottom(1)
+                                            .BorderColor(Colors.Black)
+                                            .Text("");
+                                    }
                                 }
                                 // Razon social
                                 {
@@ -2404,6 +2450,95 @@ public class ReservationService : IReservationService
         // Format client title (honorific)
         var clientTitle = client?.Type == ClientType.Natural ? "Sr./Sra." : "Empresa";
 
+        // Procesar todos los representantes legales (copropietarios) de la reserva
+        var allCoOwnersText = "";
+        if (!string.IsNullOrEmpty(reservation.CoOwners))
+        {
+            try
+            {
+                // Deserializar el JSON string que contiene el array de copropietarios
+                // Formato esperado: "[{""dni"": ""..."", ""name"": ""..."", ...}, ...]"
+                var coOwners =
+                    System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
+                        reservation.CoOwners
+                    );
+
+                if (
+                    coOwners.ValueKind == System.Text.Json.JsonValueKind.Array
+                    && coOwners.GetArrayLength() > 0
+                )
+                {
+                    var coOwnersList = new List<string>();
+                    for (int i = 0; i < coOwners.GetArrayLength(); i++)
+                    {
+                        var coOwner = coOwners[i];
+                        var name = coOwner.TryGetProperty("name", out var nameElement)
+                            ? nameElement.GetString() ?? ""
+                            : "";
+                        var dni = coOwner.TryGetProperty("dni", out var dniElement)
+                            ? dniElement.GetString() ?? ""
+                            : "";
+                        var address = coOwner.TryGetProperty("address", out var addressElement)
+                            ? addressElement.GetString() ?? ""
+                            : "";
+
+                        // Solo agregar si tiene al menos nombre o DNI
+                        if (!string.IsNullOrEmpty(name) || !string.IsNullOrEmpty(dni))
+                        {
+                            // Formato: "Nombre, identificado con DNI N° X, domiciliado en Y"
+                            var coOwnerText = "";
+                            if (!string.IsNullOrEmpty(name))
+                            {
+                                coOwnerText = name;
+                            }
+                            if (!string.IsNullOrEmpty(dni))
+                            {
+                                coOwnerText += string.IsNullOrEmpty(coOwnerText)
+                                    ? $"identificado con DNI N° {dni}"
+                                    : $", identificado con DNI N° {dni}";
+                            }
+                            if (!string.IsNullOrEmpty(address))
+                            {
+                                coOwnerText += string.IsNullOrEmpty(coOwnerText)
+                                    ? $"domiciliado en {address}"
+                                    : $", domiciliado en {address}";
+                            }
+                            coOwnersList.Add(coOwnerText);
+                        }
+                    }
+                    // Unir todos los copropietarios con punto y coma y "y" antes del último
+                    if (coOwnersList.Count > 0)
+                    {
+                        string coOwnersFormatted = "";
+                        if (coOwnersList.Count == 1)
+                        {
+                            coOwnersFormatted = coOwnersList[0];
+                        }
+                        else if (coOwnersList.Count == 2)
+                        {
+                            coOwnersFormatted = $"{coOwnersList[0]} y {coOwnersList[1]}";
+                        }
+                        else
+                        {
+                            // Para más de 2: "X; Y; y Z"
+                            var allButLast = string.Join(
+                                "; ",
+                                coOwnersList.Take(coOwnersList.Count - 1)
+                            );
+                            coOwnersFormatted = $"{allButLast}; y {coOwnersList.Last()}";
+                        }
+                        // Agregar texto introductorio para la opción 2
+                        allCoOwnersText = $", y sus representantes legales: {coOwnersFormatted}";
+                    }
+                }
+            }
+            catch
+            {
+                // Si hay error al deserializar, dejar vacío
+                allCoOwnersText = "";
+            }
+        }
+
         // Load template
         var templatePath = "Templates/plantilla_contrato_gestion_hogar.docx";
         using var inputFileStream = new FileStream(templatePath, FileMode.Open, FileAccess.Read);
@@ -2446,6 +2581,7 @@ public class ReservationService : IReservationService
                 "{fecha_suscripcion_contrato_letras}",
                 ConvertDateToWords(reservation.ReservationDate)
             },
+            { "{representantes_legales}", allCoOwnersText },
         };
 
         // Fill template

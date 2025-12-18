@@ -172,7 +172,9 @@ public class ClientService : IClientService
             );
             if (existingWithDni != null)
             {
-                throw new ArgumentException("Ya existe un cliente activo con este DNI");
+                throw new ArgumentException(
+                    $"El DNI {client.Dni} ya está registrado. Por favor, verifique que no exista un cliente con este documento."
+                );
             }
         }
 
@@ -184,7 +186,9 @@ public class ClientService : IClientService
             );
             if (existingWithRuc != null)
             {
-                throw new ArgumentException("Ya existe un cliente activo con este RUC");
+                throw new ArgumentException(
+                    $"El RUC {client.Ruc} ya está registrado. Por favor, verifique que no exista un cliente con este documento."
+                );
             }
         }
 
@@ -197,7 +201,7 @@ public class ClientService : IClientService
             if (existingWithPhone != null)
             {
                 throw new ArgumentException(
-                    "Ya existe un cliente activo con este número de teléfono"
+                    $"El número de teléfono {client.PhoneNumber} ya está registrado. Por favor, verifique que no exista un cliente con este número."
                 );
             }
         }

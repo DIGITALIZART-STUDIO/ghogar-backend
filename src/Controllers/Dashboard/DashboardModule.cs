@@ -11,6 +11,7 @@ public static class DashboardModule
         services.AddScoped<GetFinanceManagerDashboardDataUseCase>();
         services.AddScoped<GetSupervisorDashboardDataUseCase>();
         services.AddScoped<GetManagerDashboardDataUseCase>();
+        services.AddScoped<GetCommercialManagerDashboardDataUseCase>();
         services.AddScoped<DashboardController>();
 
         return services;
