@@ -11,14 +11,26 @@ public class DashboardController : ControllerBase
 {
     private readonly GetDashboardAdminDataUseCase _getDashboardAdminDataUseCase;
     private readonly GetAdvisorDashboardDataUseCase _getAdvisorDashboardDataUseCase;
+    private readonly GetFinanceManagerDashboardDataUseCase _getFinanceManagerDashboardDataUseCase;
+    private readonly GetSupervisorDashboardDataUseCase _getSupervisorDashboardDataUseCase;
+    private readonly GetManagerDashboardDataUseCase _getManagerDashboardDataUseCase;
+    private readonly GetCommercialManagerDashboardDataUseCase _getCommercialManagerDashboardDataUseCase;
 
     public DashboardController(
         GetDashboardAdminDataUseCase getDashboardAdminDataUseCase,
-        GetAdvisorDashboardDataUseCase getAdvisorDashboardDataUseCase
+        GetAdvisorDashboardDataUseCase getAdvisorDashboardDataUseCase,
+        GetFinanceManagerDashboardDataUseCase getFinanceManagerDashboardDataUseCase,
+        GetSupervisorDashboardDataUseCase getSupervisorDashboardDataUseCase,
+        GetManagerDashboardDataUseCase getManagerDashboardDataUseCase,
+        GetCommercialManagerDashboardDataUseCase getCommercialManagerDashboardDataUseCase
     )
     {
         _getDashboardAdminDataUseCase = getDashboardAdminDataUseCase;
         _getAdvisorDashboardDataUseCase = getAdvisorDashboardDataUseCase;
+        _getFinanceManagerDashboardDataUseCase = getFinanceManagerDashboardDataUseCase;
+        _getSupervisorDashboardDataUseCase = getSupervisorDashboardDataUseCase;
+        _getManagerDashboardDataUseCase = getManagerDashboardDataUseCase;
+        _getCommercialManagerDashboardDataUseCase = getCommercialManagerDashboardDataUseCase;
     }
 
     [HttpGet("admin")]
@@ -43,6 +55,86 @@ public class DashboardController : ControllerBase
         catch (UnauthorizedAccessException)
         {
             return Unauthorized("Usuario no autenticado");
+        }
+    }
+
+    [HttpGet("finance")]
+    [AuthorizeCurrentUser("FinanceManager", "Admin", "SuperAdmin")]
+    public async Task<ActionResult<FinanceManagerDashboardDto>> GetFinanceDashboard(
+        [FromQuery] int? year,
+        [FromQuery] Guid? projectId
+    )
+    {
+        try
+        {
+            var result = await _getFinanceManagerDashboardDataUseCase.ExecuteAsync(year, projectId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
+        }
+    }
+
+    [HttpGet("supervisor")]
+    [AuthorizeCurrentUser("Supervisor", "Admin", "SuperAdmin")]
+    public async Task<ActionResult<SupervisorDashboardDto>> GetSupervisorDashboard(
+        [FromQuery] int? year
+    )
+    {
+        try
+        {
+            // Obtener el ID del supervisor actual desde el token
+            var currentSupervisorId = User.GetCurrentUserIdOrThrow();
+            var result = await _getSupervisorDashboardDataUseCase.ExecuteAsync(
+                currentSupervisorId,
+                year
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("Usuario no autenticado");
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
+        }
+    }
+
+    [HttpGet("manager")]
+    [AuthorizeCurrentUser("Manager", "Admin", "SuperAdmin")]
+    public async Task<ActionResult<ManagerDashboardDto>> GetManagerDashboard([FromQuery] int? year)
+    {
+        try
+        {
+            var result = await _getManagerDashboardDataUseCase.ExecuteAsync(year);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
+        }
+    }
+
+    [HttpGet("commercial-manager")]
+    [AuthorizeCurrentUser("CommercialManager", "Admin", "SuperAdmin")]
+    public async Task<ActionResult<SupervisorDashboardDto>> GetCommercialManagerDashboard(
+        [FromQuery] int? year
+    )
+    {
+        try
+        {
+            var result = await _getCommercialManagerDashboardDataUseCase.ExecuteAsync(year);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("Usuario no autenticado");
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error interno del servidor: {ex.Message}");
         }
     }
 }
