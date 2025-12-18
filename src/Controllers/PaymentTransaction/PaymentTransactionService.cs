@@ -383,15 +383,24 @@ public class PaymentTransactionService : IPaymentTransactionService
 
         var payments = transaction.Payments.ToList();
 
+        // Eliminar imagen de Cloudflare si existe
         if (!string.IsNullOrEmpty(transaction.ComprobanteUrl))
         {
             try
             {
-                var result = await _cloudflareService.DeletePaymentTransactionFolderAsync(
+                await _cloudflareService.DeletePaymentTransactionFolderAsync(
                     transaction.Id.ToString()
                 );
             }
-            catch (Exception ex) { }
+            catch (Exception ex)
+            {
+                // Log el error pero continúa con la eliminación de la transacción
+                // La imagen puede no existir o haber sido eliminada previamente
+                // No lanzamos la excepción para no bloquear la eliminación de la transacción
+                Console.WriteLine(
+                    $"Error al eliminar imagen de Cloudflare para transacción {transaction.Id}: {ex.Message}"
+                );
+            }
         }
 
         _context.PaymentTransactions.Remove(transaction);

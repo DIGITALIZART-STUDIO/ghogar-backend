@@ -14,13 +14,15 @@ public class ReservationService : IReservationService
     private readonly OdsTemplateService _odsTemplateService;
     private readonly SofficeConverterService _sofficeConverterService;
     private readonly WordTemplateService _wordTemplateService;
+    private readonly ICloudflareService _cloudflareService;
 
     public ReservationService(
         DatabaseContext context,
         PaginationService paginationService,
         OdsTemplateService odsTemplateService,
         SofficeConverterService sofficeConverterService,
-        WordTemplateService wordTemplateService
+        WordTemplateService wordTemplateService,
+        ICloudflareService cloudflareService
     )
     {
         _context = context;
@@ -28,6 +30,7 @@ public class ReservationService : IReservationService
         _odsTemplateService = odsTemplateService;
         _sofficeConverterService = sofficeConverterService;
         _wordTemplateService = wordTemplateService;
+        _cloudflareService = cloudflareService;
     }
 
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
@@ -471,9 +474,9 @@ public class ReservationService : IReservationService
                 CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
-                PaymentCount = r.Payments.Count(p => p.Paid), // Solo pagos realizados
+                PaymentCount = r.Payments.Count(p => p.Paid && p.IsActive), // Solo pagos realizados y activos
                 NextPaymentDueDate = r
-                    .Payments.Where(p => !p.Paid)
+                    .Payments.Where(p => !p.Paid && p.IsActive)
                     .OrderBy(p => p.DueDate)
                     .Select(p => (DateTime?)p.DueDate)
                     .FirstOrDefault(),
@@ -527,9 +530,9 @@ public class ReservationService : IReservationService
             CoOwners = r.CoOwners,
             CreatedAt = r.CreatedAt,
             ModifiedAt = r.ModifiedAt,
-            PaymentCount = r.Payments.Count(p => p.Paid),
+            PaymentCount = r.Payments.Count(p => p.Paid), // Solo pagos realizados y activos
             NextPaymentDueDate = r
-                .Payments.Where(p => !p.Paid)
+                .Payments.Where(p => !p.Paid && p.IsActive)
                 .OrderBy(p => p.DueDate)
                 .Select(p => (DateTime?)p.DueDate)
                 .FirstOrDefault(),
@@ -1039,8 +1042,34 @@ public class ReservationService : IReservationService
         reservation.Status = statusEnum;
         reservation.ModifiedAt = DateTime.UtcNow;
 
-        // Manejar pagos si se proporciona información de pago
-        if (statusDto.IsFullPayment.HasValue)
+        // Si se cambia de CANCELED o ISSUED a ISSUED o ANULATED, eliminar los pagos
+        bool shouldClearPayments =
+            (
+                previousStatus == ReservationStatus.CANCELED
+                || previousStatus == ReservationStatus.ISSUED
+            )
+            && (statusEnum == ReservationStatus.ISSUED || statusEnum == ReservationStatus.ANULATED);
+
+        // Si se cambia de CANCELED a otro estado (excepto cuando shouldClearPayments ya lo maneja), eliminar payment schedules
+        bool shouldDeletePaymentSchedule =
+            previousStatus == ReservationStatus.CANCELED
+            && statusEnum != ReservationStatus.CANCELED
+            && !shouldClearPayments;
+
+        if (shouldClearPayments || shouldDeletePaymentSchedule)
+        {
+            // Eliminar payment schedules y sus relaciones en cascada
+            await DeletePaymentScheduleAsync(reservation.Id);
+
+            // Limpiar el historial de pagos
+            reservation.PaymentHistory = null;
+            // Resetear montos de pago
+            reservation.AmountPaid = 0;
+            reservation.RemainingAmount = reservation.TotalAmountRequired;
+        }
+
+        // Manejar pagos si se proporciona información de pago (solo si no se están limpiando los pagos)
+        if (!shouldClearPayments && statusDto.IsFullPayment.HasValue)
         {
             if (statusDto.IsFullPayment.Value)
             {
@@ -1070,7 +1099,7 @@ public class ReservationService : IReservationService
                 }
             }
         }
-        else if (statusDto.PaymentAmount.HasValue)
+        else if (!shouldClearPayments && statusDto.PaymentAmount.HasValue)
         {
             // Si no se especifica IsFullPayment pero sí PaymentAmount, tratarlo como pago parcial
             reservation.AmountPaid += statusDto.PaymentAmount.Value;
@@ -1114,16 +1143,23 @@ public class ReservationService : IReservationService
         if (statusEnum == ReservationStatus.CANCELED)
         {
             reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
-            // Si tienes lógica para pagos, la mantienes aquí
+            // Generar payment schedule solo si no existían previamente (evitar duplicados)
             if (previousStatus != ReservationStatus.CANCELED)
             {
-                await GeneratePaymentScheduleAsync(reservation);
+                // Verificar si ya existen payments para esta reserva antes de generar nuevos
+                var existingPayments = await _context
+                    .Payments.Where(p => p.ReservationId == reservation.Id && p.IsActive)
+                    .AnyAsync();
+
+                if (!existingPayments)
+                {
+                    await GeneratePaymentScheduleAsync(reservation);
+                }
             }
         }
         else
         {
             reservation.ContractValidationStatus = ContractValidationStatus.None;
-            // Aquí podrías limpiar pagos si lo necesitas
         }
 
         await _context.SaveChangesAsync();
@@ -1153,6 +1189,114 @@ public class ReservationService : IReservationService
             CreatedAt = reservation.CreatedAt,
             ModifiedAt = reservation.ModifiedAt,
         };
+    }
+
+    /// <summary>
+    /// Elimina el payment schedule de una reserva y todas sus relaciones en cascada.
+    /// Orden de eliminación:
+    /// 1. PaymentTransactionPayment (relaciones detalladas)
+    /// 2. PaymentTransactionPaymentLegacy (relaciones legacy)
+    /// 3. PaymentTransactions relacionados
+    /// 4. Payments de la reserva
+    /// </summary>
+    private async Task DeletePaymentScheduleAsync(Guid reservationId)
+    {
+        // 1. Obtener todos los Payments de la reserva (sin filtrar por IsActive para eliminar todos)
+        var payments = await _context
+            .Payments.Where(p => p.ReservationId == reservationId)
+            .Select(p => p.Id)
+            .ToListAsync();
+
+        if (!payments.Any())
+            return;
+
+        // 2. Obtener todos los PaymentTransactionPayment que referencian estos Payments
+        var paymentTransactionPayments = await _context
+            .PaymentTransactionPayments.Where(ptp => payments.Contains(ptp.PaymentId))
+            .ToListAsync();
+
+        // 3. Obtener TODAS las transacciones relacionadas con esta reserva (por ReservationId directo)
+        // Esto es más simple y directo: eliminar todas las transacciones que tengan este ReservationId
+        var transactionsToDelete = await _context
+            .PaymentTransactions.Where(pt => pt.ReservationId == reservationId)
+            .ToListAsync();
+
+        // 6. Eliminar en orden correcto para evitar errores de foreign key
+        // Primero: PaymentTransactionPayment (relaciones detalladas) - usar SQL directo
+        if (paymentTransactionPayments.Any())
+        {
+            foreach (var ptp in paymentTransactionPayments)
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM \"PaymentTransactionPayments\" WHERE \"PaymentTransactionId\" = {0} AND \"PaymentId\" = {1}",
+                    ptp.PaymentTransactionId,
+                    ptp.PaymentId
+                );
+            }
+        }
+
+        // Segundo: PaymentTransactionPaymentLegacy (relaciones legacy)
+        // Usar SQL directo ya que es una tabla de unión sin entidad
+        // Eliminar uno por uno para evitar problemas de SQL injection
+        if (payments.Any())
+        {
+            foreach (var paymentId in payments)
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM \"PaymentTransactionPaymentLegacy\" WHERE \"PaymentId\" = {0}",
+                    paymentId
+                );
+            }
+        }
+
+        // Tercero: PaymentTransactions - Eliminar directamente por ReservationId
+        if (transactionsToDelete.Any())
+        {
+            // Eliminar imágenes de Cloudflare antes de eliminar las transacciones
+            foreach (var transaction in transactionsToDelete)
+            {
+                if (!string.IsNullOrEmpty(transaction.ComprobanteUrl))
+                {
+                    try
+                    {
+                        await _cloudflareService.DeletePaymentTransactionFolderAsync(
+                            transaction.Id.ToString()
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log el error pero continúa con la eliminación
+                        // La imagen puede no existir o haber sido eliminada previamente
+                        Console.WriteLine(
+                            $"Error al eliminar imagen de Cloudflare para transacción {transaction.Id}: {ex.Message}"
+                        );
+                    }
+                }
+            }
+
+            // Eliminación física de PaymentTransactions directamente por ReservationId usando SQL directo
+            await _context.Database.ExecuteSqlRawAsync(
+                "DELETE FROM \"PaymentTransactions\" WHERE \"ReservationId\" = {0}",
+                reservationId
+            );
+        }
+
+        // Cuarto: Payments (eliminación física usando SQL directo)
+        var paymentsToDelete = await _context
+            .Payments.Where(p => payments.Contains(p.Id))
+            .ToListAsync();
+
+        // Eliminación física de Payments usando SQL directo para asegurar eliminación física
+        foreach (var payment in paymentsToDelete)
+        {
+            await _context.Database.ExecuteSqlRawAsync(
+                "DELETE FROM \"Payments\" WHERE \"Id\" = {0}",
+                payment.Id
+            );
+        }
+
+        // Guardar cambios finales
+        await _context.SaveChangesAsync();
     }
 
     /// <summary>
@@ -1274,7 +1418,7 @@ public class ReservationService : IReservationService
                                         .Cell()
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text($"S/ {reservation.AmountPaid:N2}");
+                                        .Text($"S/ {reservation.TotalAmountRequired:N2}");
                                 }
                                 else
                                 {
@@ -1289,7 +1433,7 @@ public class ReservationService : IReservationService
                                         .Cell()
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text($"$ {reservation.AmountPaid:N2}");
+                                        .Text($"$ {reservation.TotalAmountRequired:N2}");
                                 }
                                 else
                                 {
@@ -1565,7 +1709,9 @@ public class ReservationService : IReservationService
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text($"{currencySymbol} {reservation.AmountPaid:N2}");
+                                        .Text(
+                                            $"{currencySymbol} {reservation.TotalAmountRequired:N2}"
+                                        );
                                 }
                             });
 
@@ -2076,11 +2222,11 @@ public class ReservationService : IReservationService
             { "{forma_pago_cliente}", paymentMethodText },
             { "{precio_total_venta}", $"{currencySymbol} {quotation?.FinalPrice ?? 0:N2}" },
             { "{nro_cuota}", "Separación" },
-            { "{monto_cuota}", $"{currencySymbol} {reservation.AmountPaid:N2}" },
-            { "{monto_cuota_total}", $"{currencySymbol} {reservation.AmountPaid:N2}" },
+            { "{monto_cuota}", $"{currencySymbol} {reservation.TotalAmountRequired:N2}" },
+            { "{monto_cuota_total}", $"{currencySymbol} {reservation.TotalAmountRequired:N2}" },
             {
                 "{total_letras}",
-                ConvertAmountToWords(reservation.AmountPaid, reservation.Currency)
+                ConvertAmountToWords(reservation.TotalAmountRequired, reservation.Currency)
             },
         };
 
@@ -2531,6 +2677,20 @@ public class ReservationService : IReservationService
     }
 
     /// <summary>
+    /// Helper method to translate reservation status to Spanish for user-facing messages
+    /// </summary>
+    private static string GetReservationStatusLabel(string status)
+    {
+        return status.ToUpper() switch
+        {
+            "ISSUED" => "Emitida",
+            "CANCELED" => "Cancelado",
+            "ANULATED" => "Anulado",
+            _ => status, // Si no se encuentra, devolver el valor original
+        };
+    }
+
+    /// <summary>
     /// Helper method to add payment to history when changing reservation status
     /// </summary>
     private async Task AddPaymentToHistoryFromStatusChangeAsync(
@@ -2540,8 +2700,15 @@ public class ReservationService : IReservationService
     {
         var paymentId = Guid.NewGuid().ToString();
         var paymentDate = statusDto.PaymentDate ?? DateTime.UtcNow;
-        var paymentAmount = statusDto.PaymentAmount ?? reservation.TotalAmountRequired;
+        // Si es pago completo, usar el TotalAmountRequired; si no, usar el PaymentAmount proporcionado
+        var paymentAmount =
+            statusDto.IsFullPayment == true
+                ? reservation.TotalAmountRequired
+                : (statusDto.PaymentAmount ?? reservation.TotalAmountRequired);
         var paymentMethod = statusDto.PaymentMethod ?? PaymentMethod.CASH;
+
+        // Traducir el estado a español para las notas
+        var statusLabel = GetReservationStatusLabel(statusDto.Status);
 
         var newPayment = new PaymentHistoryDto
         {
@@ -2552,8 +2719,7 @@ public class ReservationService : IReservationService
             BankName = statusDto.BankName,
             Reference = statusDto.PaymentReference,
             Status = PaymentStatus.CONFIRMED, // Automáticamente confirmado cuando se cambia el estado
-            Notes =
-                statusDto.PaymentNotes ?? $"Pago confirmado al cambiar estado a {statusDto.Status}",
+            Notes = statusDto.PaymentNotes ?? $"Pago confirmado al cambiar estado a {statusLabel}",
         };
 
         var currentHistory = await GetPaymentHistoryAsync(reservation.Id);
