@@ -337,11 +337,6 @@ public class GetSupervisorDashboardDataUseCase
         };
     }
 }
-using GestionHogar.Controllers;
-using GestionHogar.Model;
-using Microsoft.EntityFrameworkCore;
-
-public class GetSupervisorDashboardDataUseCase
 {
     private readonly DatabaseContext _db;
 

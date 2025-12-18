@@ -1690,18 +1690,6 @@ public class QuotationService(
         </div>";
     }
 }
-using System.Collections.Generic;
-using GestionHogar.Configuration;
-using GestionHogar.Dtos;
-using GestionHogar.Model;
-using GestionHogar.Services;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using QuestPDF.Fluent;
-using QuestPDF.Helpers;
-using QuestPDF.Infrastructure;
-
-namespace GestionHogar.Services;
 
 public class QuotationService(
     DatabaseContext _context,

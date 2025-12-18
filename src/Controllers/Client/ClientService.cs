@@ -528,11 +528,6 @@ public class ClientService : IClientService
         return await _context.Clients.FirstOrDefaultAsync(c => c.Ruc == ruc && c.IsActive);
     }
 }
-using GestionHogar.Controllers.Dtos;
-using GestionHogar.Model;
-using Microsoft.EntityFrameworkCore;
-
-namespace GestionHogar.Services;
 
 public class ClientService : IClientService
 {

@@ -16,11 +16,6 @@ public static class DashboardModule
         return services;
     }
 }
-using Microsoft.Extensions.DependencyInjection;
-
-namespace GestionHogar.Controllers;
-
-public static class DashboardModule
 {
     public static IServiceCollection AddDashboardServices(this IServiceCollection services)
     {

@@ -1368,24 +1368,6 @@ public class ClientsController : ControllerBase
         }
     }
 }
-using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
-using DocumentFormat.OpenXml;
-using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Spreadsheet;
-using GestionHogar.Controllers.Dtos;
-using GestionHogar.Model;
-using GestionHogar.Services;
-using GestionHogar.Utils;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
-namespace GestionHogar.Controllers;
 
 [ApiController]
 [Authorize]

@@ -92,9 +92,7 @@ public class DashboardController : ControllerBase
 
     [HttpGet("manager")]
     [AuthorizeCurrentUser("Manager", "Admin", "SuperAdmin")]
-    public async Task<ActionResult<ManagerDashboardDto>> GetManagerDashboard(
-        [FromQuery] int? year
-    )
+    public async Task<ActionResult<ManagerDashboardDto>> GetManagerDashboard([FromQuery] int? year)
     {
         try
         {
@@ -107,11 +105,6 @@ public class DashboardController : ControllerBase
         }
     }
 }
-using GestionHogar.Utils;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-
-namespace GestionHogar.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
