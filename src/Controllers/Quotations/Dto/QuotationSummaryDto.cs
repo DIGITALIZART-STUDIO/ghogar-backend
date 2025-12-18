@@ -8,12 +8,14 @@ public class QuotationSummaryDTO
 {
     public required Guid Id { get; set; }
     public required string Code { get; set; } = null!;
+    public required string ClientId { get; set; } = null!;
     public required string ClientName { get; set; } = null!;
     public string? ClientIdentification { get; set; }
     public string? ClientIdentificationType { get; set; }
     public required string ProjectName { get; set; } = null!;
     public required decimal TotalPrice { get; set; }
     public required decimal FinalPrice { get; set; }
+    public required decimal AmountFinanced { get; set; }
     public required string BlockName { get; set; } = null!; // Cambiado de Block a BlockName
     public required string LotNumber { get; set; } = null!;
     public required decimal AreaAtQuotation { get; set; } // Cambiado de Area a AreaAtQuotation
@@ -53,12 +55,14 @@ public class QuotationSummaryDTO
         {
             Id = quotation.Id,
             Code = quotation.Code,
+            ClientId = quotation.Lead?.Client?.Id.ToString() ?? "Cliente no especificado",
             ClientName = quotation.Lead?.Client?.Name ?? "Cliente no especificado",
             ClientIdentification = identification,
             ClientIdentificationType = identificationType,
             ProjectName = quotation.ProjectName, // Usa la propiedad calculada
             TotalPrice = quotation.TotalPrice,
             FinalPrice = quotation.FinalPrice,
+            AmountFinanced = quotation.AmountFinanced,
             ExchangeRate = quotation.ExchangeRate,
             BlockName = quotation.BlockName, // Usa la propiedad calculada
             LotNumber = quotation.LotNumber, // Usa la propiedad calculada
