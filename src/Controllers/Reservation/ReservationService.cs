@@ -2592,12 +2592,6 @@ public class ReservationService : IReservationService
         }
     }
 }
-using GestionHogar.Controllers.Dtos;
-using GestionHogar.Model;
-using Microsoft.EntityFrameworkCore;
-using QuestPDF.Fluent;
-using QuestPDF.Helpers;
-using QuestPDF.Infrastructure;
 
 namespace GestionHogar.Services;
 

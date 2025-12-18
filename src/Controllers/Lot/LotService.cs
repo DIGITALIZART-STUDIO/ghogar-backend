@@ -654,15 +654,6 @@ public class LotService : ILotService
         };
     }
 }
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using GestionHogar.Dtos;
-using GestionHogar.Model;
-using Microsoft.EntityFrameworkCore;
-
-namespace GestionHogar.Services;
 
 public class LotService : ILotService
 {
@@ -1168,13 +1159,19 @@ public class LotService : ILotService
                 .FirstOrDefaultAsync(b => b.Id == dto.BlockId.Value);
 
             if (newBlock == null)
-                throw new InvalidOperationException($"Bloque con ID {dto.BlockId.Value} no encontrado");
+                throw new InvalidOperationException(
+                    $"Bloque con ID {dto.BlockId.Value} no encontrado"
+                );
 
             if (!newBlock.IsActive)
-                throw new InvalidOperationException("No se puede mover un lote a un bloque inactivo");
+                throw new InvalidOperationException(
+                    "No se puede mover un lote a un bloque inactivo"
+                );
 
             if (!newBlock.Project.IsActive)
-                throw new InvalidOperationException("No se puede mover un lote a un proyecto inactivo");
+                throw new InvalidOperationException(
+                    "No se puede mover un lote a un proyecto inactivo"
+                );
         }
 
         // Verificar que no exista otro lote con el mismo número en el bloque objetivo

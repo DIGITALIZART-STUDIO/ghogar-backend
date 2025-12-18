@@ -511,10 +511,6 @@ public class PaymentTransactionService : IPaymentTransactionService
         }
     }
 }
-using GestionHogar.Dtos;
-using GestionHogar.Model;
-using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 
 namespace GestionHogar.Services;
 

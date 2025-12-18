@@ -40,10 +40,6 @@ public class LotUpdateDTO
         lot.ModifiedAt = DateTime.UtcNow;
     }
 }
-using System;
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
-using GestionHogar.Model;
 
 namespace GestionHogar.Dtos;
 
