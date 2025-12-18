@@ -11,19 +11,6 @@ public static class DashboardModule
         services.AddScoped<GetFinanceManagerDashboardDataUseCase>();
         services.AddScoped<GetSupervisorDashboardDataUseCase>();
         services.AddScoped<GetManagerDashboardDataUseCase>();
-        services.AddScoped<DashboardController>();
-
-        return services;
-    }
-}
-{
-    public static IServiceCollection AddDashboardServices(this IServiceCollection services)
-    {
-        services.AddScoped<GetDashboardAdminDataUseCase>();
-        services.AddScoped<GetAdvisorDashboardDataUseCase>();
-        services.AddScoped<GetFinanceManagerDashboardDataUseCase>();
-        services.AddScoped<GetSupervisorDashboardDataUseCase>();
-        services.AddScoped<GetManagerDashboardDataUseCase>();
         services.AddScoped<GetCommercialManagerDashboardDataUseCase>();
         services.AddScoped<DashboardController>();
 
