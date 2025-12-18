@@ -23,25 +23,20 @@ COPY Services ./Services
 COPY Program.cs .
 COPY appsettings.json .
 
-# Build and publish the application (framework-dependent)
-RUN echo "=== Starting dotnet publish ===" && \
-    HUSKY=0 dotnet publish GestionHogar.csproj \
-    -c Release \
-    -o /app/out && \
-    echo "=== Publish completed ==="
+# Build and publish the application
+RUN HUSKY=0 dotnet publish GestionHogar.csproj -c Release -r linux-musl-x64 \
+    --self-contained true \
+    -o /app/out
 
-# Verify the build was successful
-RUN echo "" && \
-    echo "=== Build verification ===" && \
-    ls -lh /app/out/GestionHogar.dll && \
-    test -f /app/out/GestionHogar.dll && echo "✅ GestionHogar.dll found!" || \
-    (echo "❌ ERROR: GestionHogar.dll not generated!" && exit 1)
+# Create EF migrations bundle (self-contained)
+RUN HUSKY=0 dotnet ef migrations bundle \
+    -r linux-musl-x64 \
+    --configuration Release \
+    --self-contained \
+    -o /app/out/efbundle
 
-# NOTE: EF migrations are now applied programmatically in Program.cs
-# No need to generate the bundle anymore - this avoids connection string issues
-
-# Runtime stage - Usar runtime completo en lugar de runtime-deps
-FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS runtime
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/runtime-deps:9.0-alpine AS runtime
 WORKDIR /app
 
 # Install LibreOffice and dependencies
@@ -67,14 +62,8 @@ COPY Templates ./Templates
 COPY Fonts /usr/local/share/fonts/
 COPY Deployment/docker-entrypoint.sh ./
 
-# Verify DLL was copied correctly
-RUN echo "=== Verifying files in runtime stage ===" && \
-    ls -lh /app/GestionHogar.dll && \
-    test -f /app/GestionHogar.dll && echo "✅ GestionHogar.dll found!" || \
-    (echo "❌ ERROR: GestionHogar.dll not found in runtime!" && exit 1)
-
-# Make entrypoint executable
-RUN chmod +x ./docker-entrypoint.sh
+# Make scripts executable
+RUN chmod +x ./docker-entrypoint.sh ./efbundle
 
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app

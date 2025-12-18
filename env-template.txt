@@ -1,0 +1,107 @@
+# =================================================================
+# GESTION HOGAR BACKEND - VARIABLES DE ENTORNO
+# =================================================================
+# Copia este archivo como .env y configura los valores reales
+
+# =================================================================
+# BASE DE DATOS
+# =================================================================
+# URL de conexión completa a PostgreSQL
+# IMPORTANTE: Si usas docker-compose, el host debe ser "db" (nombre del servicio)
+DATABASE_URL=Host=db;Database=gestionhogar;Username=gestionhogar_user;Password=tu_password_seguro_aqui
+
+# Variables individuales para PostgreSQL (usadas por el contenedor db)
+POSTGRES_DB=gestionhogar
+POSTGRES_USER=gestionhogar_user
+POSTGRES_PASSWORD=tu_password_seguro_aqui
+
+# =================================================================
+# JWT (JSON Web Tokens)
+# =================================================================
+# Clave secreta de al menos 32 caracteres
+JWT_SECRET_KEY=YourSuperSecretKeyHereItShouldBeAtLeast32CharactersLong
+JWT_ISSUER=https://tu-dominio.com
+JWT_AUDIENCE=https://tu-dominio.com
+JWT_EXPIRATION_SECONDS=144000
+JWT_REFRESH_EXPIRATION_SECONDS=4320000
+
+# =================================================================
+# CORS (Cross-Origin Resource Sharing)
+# =================================================================
+# Orígenes permitidos (frontend URLs)
+CORS_ALLOWED_ORIGIN_1=https://tu-frontend.com
+CORS_ALLOWED_ORIGIN_2=https://tu-landing-page.com
+CORS_EXPIRATION_SECONDS=86400
+CORS_REFRESH_EXPIRATION_SECONDS=604800
+CORS_COOKIE_NAME=gestion_hogar_access_token
+CORS_COOKIE_DOMAIN=tu-dominio.com
+
+# =================================================================
+# API PERU
+# =================================================================
+# Token de API Peru para consultas de DNI/RUC
+API_PERU_TOKEN=tu_token_de_api_peru_aqui
+API_PERU_BASE_URL=https://apiperu.dev/api
+
+# =================================================================
+# CONFIGURACIÓN DE EMAIL
+# =================================================================
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USERNAME=tu-email@gmail.com
+EMAIL_PASSWORD=tu-app-password-de-gmail
+EMAIL_ENABLE_SSL=true
+EMAIL_USE_DEFAULT_CREDENTIALS=false
+
+# =================================================================
+# CLOUDFLARE R2 (Almacenamiento de archivos)
+# =================================================================
+CLOUDFLARE_R2_ACCESS_KEY_ID=tu_access_key_id
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=tu_secret_access_key
+CLOUDFLARE_R2_ACCOUNT_ID=tu_account_id
+CLOUDFLARE_R2_API_S3=https://tu-account-id.r2.cloudflarestorage.com
+CLOUDFLARE_R2_BUCKET_NAME=gestion-hogar
+CLOUDFLARE_R2_PUBLIC_URL_IMAGE=https://pub-tu-hash.r2.dev
+
+# =================================================================
+# INFORMACIÓN DEL NEGOCIO
+# =================================================================
+BUSINESS_NAME="Gestion Hogar"
+BUSINESS_URL=https://tu-frontend.com
+BUSINESS_PHONE="977 759 910"
+BUSINESS_ADDRESS="Tu dirección completa"
+BUSINESS_CONTACT=contacto@tu-empresa.com
+BUSINESS_LOGO_URL=https://tu-logo-url.com/logo.png
+
+# =================================================================
+# CONFIGURACIÓN DE LOGGING
+# =================================================================
+LOG_LEVEL_DEFAULT=Information
+LOG_LEVEL_ASPNETCORE=Warning
+
+# =================================================================
+# EXPIRACIÓN DE LEADS
+# =================================================================
+LEAD_EXPIRATION_ENABLED=true
+LEAD_EXPIRATION_CRON_SCHEDULE=0 0 0,8,16 * * *
+LEAD_EXPIRATION_MAX_ERRORS=3
+LEAD_EXPIRATION_INITIAL_BACKOFF=30
+LEAD_EXPIRATION_MAX_BACKOFF=1440
+LEAD_EXPIRATION_MAX_FUTURE_DAYS=30
+LEAD_EXPIRATION_MAX_PAST_YEARS=1
+LEAD_EXPIRATION_MAX_RECYCLE_COUNT=10
+LEAD_EXPIRATION_MIN_CREATION_AGE=1
+
+# =================================================================
+# HOSTS PERMITIDOS
+# =================================================================
+ALLOWED_HOSTS=*
+
+# =================================================================
+# INSTRUCCIONES DE CONFIGURACIÓN
+# =================================================================
+# 1. Copia este archivo: cp env-template.txt .env
+# 2. Reemplaza todos los valores marcados con "tu_" con valores reales
+# 3. Para producción, usa contraseñas seguras y URLs reales
+# 4. Variables sensibles como contraseñas deben ser configuradas en Dokploy
+# 5. Las URLs de CORS deben coincidir con tus dominios reales
