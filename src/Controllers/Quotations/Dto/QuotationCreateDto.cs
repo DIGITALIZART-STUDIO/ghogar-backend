@@ -40,7 +40,8 @@ public class QuotationCreateDTO
 
         // Cálculos financieros
         var discount = Discount ?? 0;
-        var finalPrice = lot.Price - discount;
+        var totalPrice = lot.Price; // Precio total del lote
+        var finalPrice = totalPrice - discount;
         var downPaymentPercentage = DownPayment ?? project.DefaultDownPayment ?? 10;
         var monthsFinanced = MonthsFinanced ?? project.DefaultFinancingMonths ?? 36;
         var downPaymentAmount = finalPrice * (downPaymentPercentage / 100);
@@ -55,7 +56,7 @@ public class QuotationCreateDTO
             Status = QuotationStatus.ISSUED,
 
             // Precios (históricos al momento de la cotización)
-            TotalPrice = lot.Price,
+            TotalPrice = totalPrice,
             Discount = discount,
             FinalPrice = finalPrice,
             DownPayment = downPaymentPercentage,
@@ -64,7 +65,7 @@ public class QuotationCreateDTO
 
             // Datos históricos del lote al momento de cotización
             AreaAtQuotation = lot.Area,
-            PricePerM2AtQuotation = lot.Area > 0 ? lot.Price / lot.Area : 0,
+            PricePerM2AtQuotation = lot.Price / lot.Area,
 
             // Información financiera
             Currency = project.Currency,

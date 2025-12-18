@@ -1,6 +1,7 @@
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
 using GestionHogar.Services;
+using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -34,6 +35,72 @@ public class ReservationsController : ControllerBase
         return Ok(reservations);
     }
 
+    [HttpGet("paginated")]
+    public async Task<ActionResult<PaginatedResponseV2<ReservationDto>>> GetReservationsPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] ReservationStatus[]? status = null,
+        [FromQuery] PaymentMethod[]? paymentMethod = null,
+        [FromQuery] Guid? projectId = null,
+        [FromQuery] string? orderBy = null
+    )
+    {
+        var result = await _reservationService.GetAllReservationsPaginatedAsync(
+            page,
+            pageSize,
+            paginationService,
+            search,
+            status,
+            paymentMethod,
+            projectId,
+            orderBy
+        );
+        return Ok(result);
+    }
+
+    [HttpGet("advisor/paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<ReservationDto>>
+    > GetReservationsByAdvisorPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] ReservationStatus[]? status = null,
+        [FromQuery] PaymentMethod[]? paymentMethod = null,
+        [FromQuery] Guid? projectId = null,
+        [FromQuery] string? orderBy = null
+    )
+    {
+        try
+        {
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+
+            var result = await _reservationService.GetReservationsByAdvisorIdPaginatedAsync(
+                currentUserId,
+                page,
+                pageSize,
+                paginationService,
+                search,
+                status,
+                paymentMethod,
+                projectId,
+                orderBy
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     [HttpGet("canceled")]
     public async Task<
         ActionResult<IEnumerable<ReservationWithPaymentsDto>>
@@ -45,18 +112,30 @@ public class ReservationsController : ControllerBase
 
     [HttpGet("canceled/pending-validation/paginated")]
     public async Task<
-        ActionResult<PaginatedResponseV2<ReservationDto>>
+        ActionResult<PaginatedResponseV2<ReservationPendingValidationDto>>
     > GetAllCanceledPendingValidationReservationsPaginated(
         [FromServices] PaginationService paginationService,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] ReservationStatus[]? status = null,
+        [FromQuery] PaymentMethod[]? paymentMethod = null,
+        [FromQuery] ContractValidationStatus[]? contractValidationStatus = null,
+        [FromQuery] Guid? projectId = null,
+        [FromQuery] string? orderBy = null
     )
     {
         var result =
             await _reservationService.GetAllCanceledPendingValidationReservationsPaginatedAsync(
                 page,
                 pageSize,
-                paginationService
+                paginationService,
+                search,
+                status,
+                paymentMethod,
+                contractValidationStatus,
+                projectId,
+                orderBy
             );
         return Ok(result);
     }
@@ -64,13 +143,62 @@ public class ReservationsController : ControllerBase
     [HttpGet("canceled/paginated")]
     public async Task<
         ActionResult<PaginatedResponseV2<ReservationWithPaymentsDto>>
-    > GetAllCanceledReservationsPaginated([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    > GetAllCanceledReservationsPaginated(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] Guid? projectId = null
+    )
     {
         var result = await _reservationService.GetAllCanceledReservationsPaginatedAsync(
             page,
-            pageSize
+            pageSize,
+            projectId
         );
         return Ok(result);
+    }
+
+    [HttpGet("pending-payments/paginated")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<ReservationWithPendingPaymentsDto>>
+    > GetAllReservationsWithPendingPaymentsPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] ReservationStatus[]? status = null,
+        [FromQuery] PaymentMethod[]? paymentMethod = null,
+        [FromQuery] ContractValidationStatus[]? contractValidationStatus = null,
+        [FromQuery] Guid? projectId = null,
+        [FromQuery] string? orderBy = null
+    )
+    {
+        try
+        {
+            // Obtener el usuario actual y sus roles
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+
+            var result =
+                await _reservationService.GetAllReservationsWithPendingPaymentsPaginatedAsync(
+                    page,
+                    pageSize,
+                    paginationService,
+                    currentUserId,
+                    currentUserRoles,
+                    search,
+                    status,
+                    paymentMethod,
+                    contractValidationStatus,
+                    projectId,
+                    orderBy
+                );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            // _logger.LogError(ex, "Error al obtener reservas con cuotas pendientes"); // Assuming _logger is available
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     // GET: api/reservations/{id}
@@ -188,10 +316,7 @@ public class ReservationsController : ControllerBase
     {
         try
         {
-            var updatedReservation = await _reservationService.ChangeStatusAsync(
-                id,
-                statusDto.Status
-            );
+            var updatedReservation = await _reservationService.ChangeStatusAsync(id, statusDto);
 
             if (updatedReservation == null)
                 return NotFound();
@@ -311,6 +436,96 @@ public class ReservationsController : ControllerBase
         catch (Exception ex)
         {
             return StatusCode(500, $"Error al generar PDF de recibo: {ex.Message}");
+        }
+    }
+
+    // Payment History Management Endpoints
+
+    // GET: api/reservations/{id}/payment-history
+    [HttpGet("{id}/payment-history")]
+    public async Task<ActionResult<List<PaymentHistoryDto>>> GetPaymentHistory(Guid id)
+    {
+        try
+        {
+            var paymentHistory = await _reservationService.GetPaymentHistoryAsync(id);
+            return Ok(paymentHistory);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al obtener historial de pagos: {ex.Message}");
+        }
+    }
+
+    // POST: api/reservations/{id}/payment-history
+    [HttpPost("{id}/payment-history")]
+    public async Task<ActionResult<PaymentHistoryDto>> AddPaymentToHistory(
+        Guid id,
+        AddPaymentHistoryDto paymentDto
+    )
+    {
+        try
+        {
+            var addedPayment = await _reservationService.AddPaymentToHistoryAsync(id, paymentDto);
+            return CreatedAtAction(nameof(GetPaymentHistory), new { id }, addedPayment);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al agregar pago al historial: {ex.Message}");
+        }
+    }
+
+    // PUT: api/reservations/{id}/payment-history
+    [HttpPut("{id}/payment-history")]
+    public async Task<ActionResult<PaymentHistoryDto>> UpdatePaymentInHistory(
+        Guid id,
+        UpdatePaymentHistoryDto paymentDto
+    )
+    {
+        try
+        {
+            var updatedPayment = await _reservationService.UpdatePaymentInHistoryAsync(
+                id,
+                paymentDto
+            );
+            return Ok(updatedPayment);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al actualizar pago en el historial: {ex.Message}");
+        }
+    }
+
+    // DELETE: api/reservations/{id}/payment-history/{paymentId}
+    [HttpDelete("{id}/payment-history/{paymentId}")]
+    public async Task<ActionResult> RemovePaymentFromHistory(Guid id, string paymentId)
+    {
+        try
+        {
+            var success = await _reservationService.RemovePaymentFromHistoryAsync(id, paymentId);
+            if (!success)
+                return NotFound();
+
+            return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error al eliminar pago del historial: {ex.Message}");
         }
     }
 }

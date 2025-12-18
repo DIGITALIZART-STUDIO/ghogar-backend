@@ -3,6 +3,7 @@ using GestionHogar.Configuration;
 using GestionHogar.Controllers;
 using GestionHogar.Controllers.ApiPeru;
 using GestionHogar.Controllers.ExcelExport;
+using GestionHogar.Controllers.Notifications;
 using GestionHogar.Model;
 using GestionHogar.Services;
 using GestionHogar.Utils;
@@ -24,6 +25,18 @@ builder
         options.JsonSerializerOptions.Converters.Add(
             new System.Text.Json.Serialization.JsonStringEnumConverter()
         );
+        options.JsonSerializerOptions.ReferenceHandler = System
+            .Text
+            .Json
+            .Serialization
+            .ReferenceHandler
+            .IgnoreCycles;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = System
+            .Text
+            .Json
+            .Serialization
+            .JsonIgnoreCondition
+            .WhenWritingNull;
     });
 
 // Configure file upload limits
@@ -195,6 +208,8 @@ var modules = new IModule[]
     new ExcelExportModule(),
     new EmailModule(),
     new UserHigherRankModule(),
+    new LandingModule(),
+    new NotificationModule(),
 };
 
 // Register dashboard services
@@ -208,6 +223,12 @@ foreach (var module in modules)
 builder.Services.AddScoped<WordTemplateService>();
 builder.Services.AddScoped<SofficeConverterService>();
 builder.Services.AddScoped<ICloudflareService, CloudflareService>();
+
+// Background services
+builder.Services.AddHostedService<LeadExpirationService>();
+
+// Health checks
+builder.Services.AddHealthChecks().AddCheck<LeadExpirationHealthCheck>("lead-expiration-service");
 
 // Register controllers explicitly to avoid constructor conflicts
 builder.Services.AddScoped<UsersController>();
@@ -265,6 +286,7 @@ app.UseAuthorization();
 app.UseSecurityStampValidator();
 app.UseAuthenticationMiddleware();
 app.MapControllers();
+app.MapHealthChecks("/api/healthz");
 
 // Libraries startup
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;

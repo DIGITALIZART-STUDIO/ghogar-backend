@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using GestionHogar.Controllers.Dtos;
 using GestionHogar.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,17 +16,34 @@ namespace GestionHogar.Controllers
             _exchangeRateService = exchangeRateService;
         }
 
+        /// <summary>
+        /// Obtiene el tipo de cambio actual de SUNAT
+        /// </summary>
+        /// <returns>DTO con el tipo de cambio y metadatos</returns>
+        /// <response code="200">Tipo de cambio obtenido exitosamente</response>
+        /// <response code="404">No se pudo obtener el tipo de cambio</response>
+        /// <response code="500">Error interno del servidor</response>
         [HttpGet]
-        public async Task<IActionResult> GetCurrentExchangeRate()
+        [ProducesResponseType(typeof(ExchangeRateDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<ExchangeRateDto>> GetCurrentExchangeRate()
         {
-            var exchangeRate = await _exchangeRateService.GetCurrentExchangeRateAsync();
-
-            if (exchangeRate == 0)
+            try
             {
-                return NotFound("No se pudo obtener el tipo de cambio");
-            }
+                var exchangeRateDto = await _exchangeRateService.GetCurrentExchangeRateAsync();
 
-            return Ok(new { exchangeRate });
+                if (!exchangeRateDto.IsSuccess || exchangeRateDto.ExchangeRate == 0)
+                {
+                    return NotFound(exchangeRateDto.Message);
+                }
+
+                return Ok(exchangeRateDto);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, $"Error interno del servidor: {ex.Message}");
+            }
         }
     }
 }

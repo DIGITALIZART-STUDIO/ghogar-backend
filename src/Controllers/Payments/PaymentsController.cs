@@ -11,10 +11,12 @@ namespace GestionHogar.Controllers;
 public class PaymentsController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
+    private readonly ILogger<PaymentsController> _logger;
 
-    public PaymentsController(IPaymentService paymentService)
+    public PaymentsController(IPaymentService paymentService, ILogger<PaymentsController> logger)
     {
         _paymentService = paymentService;
+        _logger = logger;
     }
 
     // GET: api/payments/reservation/{id}/schedule
@@ -30,6 +32,11 @@ public class PaymentsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(
+                ex,
+                "Error al obtener el cronograma de pagos para la reserva {ReservationId}",
+                id
+            );
             return StatusCode(500, $"Error al obtener el cronograma de pagos: {ex.Message}");
         }
     }

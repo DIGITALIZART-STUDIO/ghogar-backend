@@ -22,6 +22,71 @@ namespace GestionHogar.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("GestionHogar.Model.ApiPeruConsultation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("CompanyName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Condition")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("ConsultedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DocumentNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PersonName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ResponseData")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyName");
+
+                    b.HasIndex("ConsultedAt");
+
+                    b.HasIndex("PersonName");
+
+                    b.HasIndex("DocumentNumber", "DocumentType");
+
+                    b.ToTable("ApiPeruConsultations");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Audit", b =>
                 {
                     b.Property<Guid>("Id")
@@ -301,6 +366,71 @@ namespace GestionHogar.Migrations
                     b.ToTable("Lots");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Data")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RelatedEntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RelatedEntityType")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Notifications");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.OtpCode", b =>
                 {
                     b.Property<Guid>("Id")
@@ -437,6 +567,24 @@ namespace GestionHogar.Migrations
                     b.ToTable("PaymentTransactions");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.PaymentTransactionPayment", b =>
+                {
+                    b.Property<Guid>("PaymentTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PaymentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AmountPaid")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("PaymentTransactionId", "PaymentId");
+
+                    b.HasIndex("PaymentId");
+
+                    b.ToTable("PaymentTransactionPayments");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Project", b =>
                 {
                     b.Property<Guid>("Id")
@@ -560,6 +708,42 @@ namespace GestionHogar.Migrations
                     b.ToTable("Quotations");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.Referral", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ReferredLeadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ReferrerClientId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("ReferredLeadId")
+                        .IsUnique();
+
+                    b.HasIndex("ReferrerClientId");
+
+                    b.ToTable("Referrals");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Reservation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -574,6 +758,9 @@ namespace GestionHogar.Migrations
 
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("CoOwners")
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("ContractValidationStatus")
                         .HasColumnType("integer");
@@ -603,11 +790,17 @@ namespace GestionHogar.Migrations
                     b.Property<bool>("Notified")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("PaymentHistory")
+                        .HasColumnType("jsonb");
+
                     b.Property<int>("PaymentMethod")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("QuotationId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal>("RemainingAmount")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateOnly>("ReservationDate")
                         .HasColumnType("date");
@@ -618,6 +811,9 @@ namespace GestionHogar.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("TotalAmountRequired")
+                        .HasColumnType("decimal(18,2)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId");
@@ -625,6 +821,39 @@ namespace GestionHogar.Migrations
                     b.HasIndex("QuotationId");
 
                     b.ToTable("Reservations");
+                });
+
+            modelBuilder.Entity("GestionHogar.Model.SupervisorSalesAdvisor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SalesAdvisorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SupervisorId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SalesAdvisorId");
+
+                    b.HasIndex("SupervisorId");
+
+                    b.HasIndex("SupervisorId", "SalesAdvisorId")
+                        .IsUnique();
+
+                    b.ToTable("SupervisorSalesAdvisors");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.User", b =>
@@ -841,7 +1070,7 @@ namespace GestionHogar.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("PaymentTransactionPayments", b =>
+            modelBuilder.Entity("PaymentTransactionPaymentLegacy", b =>
                 {
                     b.Property<Guid>("PaymentId")
                         .HasColumnType("uuid");
@@ -853,7 +1082,7 @@ namespace GestionHogar.Migrations
 
                     b.HasIndex("PaymentTransactionId");
 
-                    b.ToTable("PaymentTransactionPayments");
+                    b.ToTable("PaymentTransactionPaymentLegacy");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.Block", b =>
@@ -924,6 +1153,17 @@ namespace GestionHogar.Migrations
                     b.Navigation("Block");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.Notification", b =>
+                {
+                    b.HasOne("GestionHogar.Model.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.OtpCode", b =>
                 {
                     b.HasOne("GestionHogar.Model.User", "ApprovedByUser")
@@ -969,6 +1209,25 @@ namespace GestionHogar.Migrations
                     b.Navigation("Reservation");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.PaymentTransactionPayment", b =>
+                {
+                    b.HasOne("GestionHogar.Model.Payment", "Payment")
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GestionHogar.Model.PaymentTransaction", "PaymentTransaction")
+                        .WithMany("PaymentDetails")
+                        .HasForeignKey("PaymentTransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Payment");
+
+                    b.Navigation("PaymentTransaction");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Quotation", b =>
                 {
                     b.HasOne("GestionHogar.Model.User", "Advisor")
@@ -996,6 +1255,31 @@ namespace GestionHogar.Migrations
                     b.Navigation("Lot");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.Referral", b =>
+                {
+                    b.HasOne("GestionHogar.Model.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId");
+
+                    b.HasOne("GestionHogar.Model.Lead", "ReferredLead")
+                        .WithOne("Referral")
+                        .HasForeignKey("GestionHogar.Model.Referral", "ReferredLeadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GestionHogar.Model.Client", "ReferrerClient")
+                        .WithMany("Referrals")
+                        .HasForeignKey("ReferrerClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+
+                    b.Navigation("ReferredLead");
+
+                    b.Navigation("ReferrerClient");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Reservation", b =>
                 {
                     b.HasOne("GestionHogar.Model.Client", "Client")
@@ -1013,6 +1297,25 @@ namespace GestionHogar.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("Quotation");
+                });
+
+            modelBuilder.Entity("GestionHogar.Model.SupervisorSalesAdvisor", b =>
+                {
+                    b.HasOne("GestionHogar.Model.User", "SalesAdvisor")
+                        .WithMany()
+                        .HasForeignKey("SalesAdvisorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GestionHogar.Model.User", "Supervisor")
+                        .WithMany()
+                        .HasForeignKey("SupervisorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SalesAdvisor");
+
+                    b.Navigation("Supervisor");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -1066,7 +1369,7 @@ namespace GestionHogar.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("PaymentTransactionPayments", b =>
+            modelBuilder.Entity("PaymentTransactionPaymentLegacy", b =>
                 {
                     b.HasOne("GestionHogar.Model.Payment", null)
                         .WithMany()
@@ -1084,6 +1387,21 @@ namespace GestionHogar.Migrations
             modelBuilder.Entity("GestionHogar.Model.Block", b =>
                 {
                     b.Navigation("Lots");
+                });
+
+            modelBuilder.Entity("GestionHogar.Model.Client", b =>
+                {
+                    b.Navigation("Referrals");
+                });
+
+            modelBuilder.Entity("GestionHogar.Model.Lead", b =>
+                {
+                    b.Navigation("Referral");
+                });
+
+            modelBuilder.Entity("GestionHogar.Model.PaymentTransaction", b =>
+                {
+                    b.Navigation("PaymentDetails");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.Project", b =>

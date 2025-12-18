@@ -48,7 +48,7 @@ public class PaymentTransactionService : IPaymentTransactionService
         return transactions.Select(PaymentTransactionDTO.FromEntity);
     }
 
-    public async Task<IEnumerable<PaymentQuotaSimpleDTO>> GetQuotaStatusByReservationAsync(
+    public async Task<PaymentQuotaStatusDTO> GetQuotaStatusByReservationAsync(
         Guid reservationId,
         Guid? excludeTransactionId = null
     )
@@ -62,51 +62,68 @@ public class PaymentTransactionService : IPaymentTransactionService
             .OrderBy(p => p.DueDate)
             .ToListAsync();
 
-        var transactionsQuery = _context.PaymentTransactions.Where(pt =>
-            pt.ReservationId == reservationId
+        var transactionsQuery = _context.PaymentTransactionPayments.Where(ptp =>
+            ptp.PaymentTransaction.ReservationId == reservationId
         );
 
         if (excludeTransactionId.HasValue)
         {
-            transactionsQuery = transactionsQuery.Where(pt => pt.Id != excludeTransactionId.Value);
+            transactionsQuery = transactionsQuery.Where(ptp =>
+                ptp.PaymentTransactionId != excludeTransactionId.Value
+            );
         }
 
-        var transactions = await transactionsQuery.ToListAsync();
+        var paymentDetails = await transactionsQuery.ToListAsync();
 
-        decimal totalPaid = transactions.Sum(t => t.AmountPaid);
-
-        var result = new List<PaymentQuotaSimpleDTO>();
+        var pendingQuotas = new List<PaymentQuotaSimpleDTO>();
+        decimal totalRemaining = 0;
+        int fullyUnpaidQuotas = 0;
 
         foreach (var payment in payments)
         {
-            decimal paidForThisQuota = Math.Min(totalPaid, payment.AmountDue);
+            // Calcular cuánto ya se ha pagado por esta cuota específica
+            var totalPaidForThisPayment = paymentDetails
+                .Where(ptp => ptp.PaymentId == payment.Id)
+                .Sum(ptp => ptp.AmountPaid);
 
-            bool isPaid = paidForThisQuota >= payment.AmountDue;
+            // Calcular cuánto falta por pagar
+            var remainingAmount = payment.AmountDue - totalPaidForThisPayment;
+            bool isFullyPaid = remainingAmount <= 0;
 
-            // Solo agregar cuotas NO pagadas
-            if (!isPaid)
+            if (!isFullyPaid)
             {
-                result.Add(
+                // Si no se ha pagado nada, es una cuota completamente impaga
+                if (totalPaidForThisPayment == 0)
+                {
+                    fullyUnpaidQuotas++;
+                }
+
+                totalRemaining += remainingAmount;
+
+                pendingQuotas.Add(
                     new PaymentQuotaSimpleDTO
                     {
                         Id = payment.Id,
                         ReservationId = payment.ReservationId,
                         ClientName = payment.Reservation.Client.Name!,
                         QuotationCode = payment.Reservation.Quotation.Code,
-                        AmountDue = payment.AmountDue,
+                        AmountDue = remainingAmount, // Monto que falta por pagar
                         DueDate = payment.DueDate,
                         Paid = false,
                         Currency = payment.Reservation.Currency,
                     }
                 );
             }
-
-            totalPaid -= paidForThisQuota;
-            if (totalPaid < 0)
-                totalPaid = 0;
         }
 
-        return result;
+        return new PaymentQuotaStatusDTO
+        {
+            PendingQuotas = pendingQuotas,
+            MinQuotasToPay = fullyUnpaidQuotas, // Cuotas completamente impagas
+            MaxQuotasToPay = pendingQuotas.Count, // Total de cuotas con algún monto pendiente
+            TotalAmountRemaining = totalRemaining,
+            Currency = pendingQuotas.FirstOrDefault()?.Currency ?? Currency.SOLES,
+        };
     }
 
     public async Task<PaymentTransactionDTO> CreateAsync(
@@ -114,12 +131,48 @@ public class PaymentTransactionService : IPaymentTransactionService
         IFormFile? comprobanteImage = null
     )
     {
-        var payments = await _context
-            .Payments.Where(p => dto.PaymentIds.Contains(p.Id))
-            .ToListAsync();
+        List<PaymentTransactionPayment> paymentDetails;
+        List<Payment> payments;
 
-        if (payments.Count != dto.PaymentIds.Count)
-            throw new InvalidOperationException("Uno o más pagos no existen");
+        // Determinar qué cuotas asignar
+        if (dto.PaymentIds != null && dto.PaymentIds.Any())
+        {
+            // Caso 1: Se proporcionaron PaymentIds específicos
+            payments = await _context
+                .Payments.Where(p => dto.PaymentIds.Contains(p.Id))
+                .ToListAsync();
+
+            if (payments.Count != dto.PaymentIds.Count)
+                throw new InvalidOperationException("Uno o más pagos no existen");
+
+            // Crear PaymentDetails con el monto completo para cada cuota
+            paymentDetails = payments
+                .Select(p => new PaymentTransactionPayment
+                {
+                    PaymentId = p.Id,
+                    AmountPaid = p.AmountDue,
+                })
+                .ToList();
+        }
+        else
+        {
+            // Caso 2: No se proporcionaron PaymentIds - asignación automática
+            if (!dto.ReservationId.HasValue)
+                throw new InvalidOperationException(
+                    "ReservationId es requerido cuando no se proporcionan PaymentIds"
+                );
+
+            paymentDetails = await AutoAssignPaymentsAsync(dto.ReservationId.Value, dto.AmountPaid);
+
+            if (!paymentDetails.Any())
+                throw new InvalidOperationException(
+                    "No se encontraron cuotas disponibles para asignar el pago"
+                );
+
+            // Obtener las cuotas asignadas
+            var paymentIds = paymentDetails.Select(pd => pd.PaymentId).ToList();
+            payments = await _context.Payments.Where(p => paymentIds.Contains(p.Id)).ToListAsync();
+        }
 
         PaymentTransaction transaction;
 
@@ -137,7 +190,8 @@ public class PaymentTransactionService : IPaymentTransactionService
                     PaymentMethod = dto.PaymentMethod,
                     ReferenceNumber = dto.ReferenceNumber,
                     ComprobanteUrl = null, // Se actualizará después de subir la imagen
-                    Payments = payments,
+                    Payments = payments, // Mantener para compatibilidad
+                    PaymentDetails = paymentDetails, // Nueva relación detallada
                     CreatedAt = DateTime.UtcNow,
                     ModifiedAt = DateTime.UtcNow,
                 };
@@ -173,7 +227,8 @@ public class PaymentTransactionService : IPaymentTransactionService
                 PaymentMethod = dto.PaymentMethod,
                 ReferenceNumber = dto.ReferenceNumber,
                 ComprobanteUrl = dto.ComprobanteUrl,
-                Payments = payments,
+                Payments = payments, // Mantener para compatibilidad
+                PaymentDetails = paymentDetails, // Nueva relación detallada
                 CreatedAt = DateTime.UtcNow,
                 ModifiedAt = DateTime.UtcNow,
             };
@@ -182,20 +237,16 @@ public class PaymentTransactionService : IPaymentTransactionService
             await _context.SaveChangesAsync();
         }
 
-        // Actualiza el estado Paid de cada cuota
+        // Actualizar el estado Paid de cada cuota usando la nueva lógica
         foreach (var payment in payments)
         {
-            // Suma total pagado por esta cuota
-            var totalPaidForPayment = await _context
-                .PaymentTransactions.Where(pt => pt.Payments.Any(p => p.Id == payment.Id))
-                .SumAsync(pt => pt.AmountPaid);
-
-            payment.Paid = totalPaidForPayment >= payment.AmountDue;
+            await UpdatePaymentStatusAsync(payment.Id);
         }
-        await _context.SaveChangesAsync();
 
         var created = await _context
-            .PaymentTransactions.Include(pt => pt.Payments)
+            .PaymentTransactions.Include(pt => pt.Payments) // Mantener para compatibilidad
+            .Include(pt => pt.PaymentDetails)
+            .ThenInclude(pd => pd.Payment)
             .FirstAsync(pt => pt.Id == transaction.Id);
 
         return PaymentTransactionDTO.FromEntity(created);
@@ -209,17 +260,54 @@ public class PaymentTransactionService : IPaymentTransactionService
     {
         var transaction = await _context
             .PaymentTransactions.Include(pt => pt.Payments)
+            .Include(pt => pt.PaymentDetails)
             .FirstOrDefaultAsync(pt => pt.Id == id);
 
         if (transaction == null)
             return null;
 
-        var payments = await _context
-            .Payments.Where(p => dto.PaymentIds.Contains(p.Id))
-            .ToListAsync();
+        List<PaymentTransactionPayment> paymentDetails;
+        List<Payment> payments;
 
-        if (payments.Count != dto.PaymentIds.Count)
-            throw new InvalidOperationException("Uno o más pagos no existen");
+        // Determinar qué cuotas asignar
+        if (dto.PaymentIds != null && dto.PaymentIds.Any())
+        {
+            // Caso 1: Se proporcionaron PaymentIds específicos
+            payments = await _context
+                .Payments.Where(p => dto.PaymentIds.Contains(p.Id))
+                .ToListAsync();
+
+            if (payments.Count != dto.PaymentIds.Count)
+                throw new InvalidOperationException("Uno o más pagos no existen");
+
+            // Crear PaymentDetails con el monto completo para cada cuota
+            paymentDetails = payments
+                .Select(p => new PaymentTransactionPayment
+                {
+                    PaymentId = p.Id,
+                    AmountPaid = p.AmountDue,
+                })
+                .ToList();
+        }
+        else
+        {
+            // Caso 2: No se proporcionaron PaymentIds - asignación automática
+            if (!dto.ReservationId.HasValue)
+                throw new InvalidOperationException(
+                    "ReservationId es requerido cuando no se proporcionan PaymentIds"
+                );
+
+            paymentDetails = await AutoAssignPaymentsAsync(dto.ReservationId.Value, dto.AmountPaid);
+
+            if (!paymentDetails.Any())
+                throw new InvalidOperationException(
+                    "No se encontraron cuotas disponibles para asignar el pago"
+                );
+
+            // Obtener las cuotas asignadas
+            var paymentIds = paymentDetails.Select(pd => pd.PaymentId).ToList();
+            payments = await _context.Payments.Where(p => paymentIds.Contains(p.Id)).ToListAsync();
+        }
 
         // Manejar la actualización de la imagen del comprobante si se proporciona
         if (comprobanteImage != null)
@@ -246,35 +334,39 @@ public class PaymentTransactionService : IPaymentTransactionService
             transaction.ComprobanteUrl = dto.ComprobanteUrl;
         }
 
+        // Actualizar campos básicos
         transaction.PaymentDate = dto.PaymentDate;
         transaction.AmountPaid = dto.AmountPaid;
         transaction.ReservationId = dto.ReservationId;
         transaction.PaymentMethod = dto.PaymentMethod;
         transaction.ReferenceNumber = dto.ReferenceNumber;
-        transaction.Payments = payments;
         transaction.ModifiedAt = DateTime.UtcNow;
+
+        // Limpiar relaciones existentes y crear nuevas
+        transaction.Payments = payments; // Mantener para compatibilidad
+        transaction.PaymentDetails.Clear();
+        foreach (var detail in paymentDetails)
+        {
+            detail.PaymentTransactionId = transaction.Id;
+            transaction.PaymentDetails.Add(detail);
+        }
 
         await _context.SaveChangesAsync();
 
-        // --- Lógica mejorada ---
-        // Actualiza el estado Paid de TODAS las cuotas de la reserva
+        // Actualizar el estado Paid de todas las cuotas de la reserva usando la nueva lógica
         var allPayments = await _context
             .Payments.Where(p => p.ReservationId == transaction.ReservationId)
             .ToListAsync();
 
         foreach (var payment in allPayments)
         {
-            var totalPaidForPayment = await _context
-                .PaymentTransactions.Where(pt => pt.Payments.Any(p2 => p2.Id == payment.Id))
-                .SumAsync(pt => pt.AmountPaid);
-
-            payment.Paid = totalPaidForPayment >= payment.AmountDue;
+            await UpdatePaymentStatusAsync(payment.Id);
         }
-        await _context.SaveChangesAsync();
-        // --- Fin lógica mejorada ---
 
         var updated = await _context
-            .PaymentTransactions.Include(pt => pt.Payments)
+            .PaymentTransactions.Include(pt => pt.Payments) // Mantener para compatibilidad
+            .Include(pt => pt.PaymentDetails)
+            .ThenInclude(pd => pd.Payment)
             .FirstAsync(pt => pt.Id == transaction.Id);
 
         return PaymentTransactionDTO.FromEntity(updated);
@@ -291,31 +383,140 @@ public class PaymentTransactionService : IPaymentTransactionService
 
         var payments = transaction.Payments.ToList();
 
+        // Eliminar imagen de Cloudflare si existe
         if (!string.IsNullOrEmpty(transaction.ComprobanteUrl))
         {
             try
             {
-                var result = await _cloudflareService.DeletePaymentTransactionFolderAsync(
+                await _cloudflareService.DeletePaymentTransactionFolderAsync(
                     transaction.Id.ToString()
                 );
             }
-            catch (Exception ex) { }
+            catch (Exception ex)
+            {
+                // Log el error pero continúa con la eliminación de la transacción
+                // La imagen puede no existir o haber sido eliminada previamente
+                // No lanzamos la excepción para no bloquear la eliminación de la transacción
+                Console.WriteLine(
+                    $"Error al eliminar imagen de Cloudflare para transacción {transaction.Id}: {ex.Message}"
+                );
+            }
         }
 
         _context.PaymentTransactions.Remove(transaction);
         await _context.SaveChangesAsync();
 
-        // Actualiza el estado Paid de cada cuota afectada
+        // Actualizar el estado Paid de cada cuota afectada usando la nueva lógica
         foreach (var payment in payments)
         {
-            var totalPaidForPayment = await _context
-                .PaymentTransactions.Where(pt => pt.Payments.Any(p => p.Id == payment.Id))
-                .SumAsync(pt => pt.AmountPaid);
-
-            payment.Paid = totalPaidForPayment >= payment.AmountDue;
+            await UpdatePaymentStatusAsync(payment.Id);
         }
-        await _context.SaveChangesAsync();
 
         return true;
+    }
+
+    /// <summary>
+    /// Asigna automáticamente las cuotas a pagar cuando no se proporcionan PaymentIds específicos.
+    /// </summary>
+    /// <param name="reservationId">ID de la reserva</param>
+    /// <param name="totalAmount">Monto total a distribuir</param>
+    /// <param name="startFromLast">Si es true, empieza desde la última cuota (max). Si es false, empieza desde la primera cuota (min)</param>
+    /// <returns>Lista de PaymentTransactionPayment con la distribución automática</returns>
+    private async Task<List<PaymentTransactionPayment>> AutoAssignPaymentsAsync(
+        Guid reservationId,
+        decimal totalAmount,
+        bool startFromLast = true // Por defecto mantiene el comportamiento actual (max)
+    )
+    {
+        var payments = await _context
+            .Payments.Where(p => p.ReservationId == reservationId)
+            .OrderBy(p => p.DueDate) // Orden ascendente (cuota 1, 2, 3...)
+            .ToListAsync();
+
+        var result = new List<PaymentTransactionPayment>();
+        decimal remainingAmount = totalAmount;
+
+        if (startFromLast)
+        {
+            // LÓGICA MAX: Empezar desde la última cuota (fecha más lejana) hacia atrás
+            // Esta es la lógica original que ya teníamos implementada
+            for (int i = payments.Count - 1; i >= 0 && remainingAmount > 0; i--)
+            {
+                var payment = payments[i];
+
+                // Calcular cuánto ya se ha pagado por esta cuota
+                var alreadyPaid = await _context
+                    .PaymentTransactionPayments.Where(ptp => ptp.PaymentId == payment.Id)
+                    .SumAsync(ptp => ptp.AmountPaid);
+
+                var remainingForThisPayment = payment.AmountDue - alreadyPaid;
+
+                if (remainingForThisPayment > 0)
+                {
+                    var amountToPay = Math.Min(remainingAmount, remainingForThisPayment);
+
+                    result.Add(
+                        new PaymentTransactionPayment
+                        {
+                            PaymentId = payment.Id,
+                            AmountPaid = amountToPay,
+                        }
+                    );
+
+                    remainingAmount -= amountToPay;
+                }
+            }
+        }
+        else
+        {
+            // LÓGICA MIN: Empezar desde la primera cuota (fecha más temprana) hacia adelante
+            // Esta es la nueva lógica más flexible
+            for (int i = 0; i < payments.Count && remainingAmount > 0; i++)
+            {
+                var payment = payments[i];
+
+                // Calcular cuánto ya se ha pagado por esta cuota
+                var alreadyPaid = await _context
+                    .PaymentTransactionPayments.Where(ptp => ptp.PaymentId == payment.Id)
+                    .SumAsync(ptp => ptp.AmountPaid);
+
+                var remainingForThisPayment = payment.AmountDue - alreadyPaid;
+
+                if (remainingForThisPayment > 0)
+                {
+                    var amountToPay = Math.Min(remainingAmount, remainingForThisPayment);
+
+                    result.Add(
+                        new PaymentTransactionPayment
+                        {
+                            PaymentId = payment.Id,
+                            AmountPaid = amountToPay,
+                        }
+                    );
+
+                    remainingAmount -= amountToPay;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Actualiza el estado Paid de una cuota basándose en el total pagado.
+    /// </summary>
+    /// <param name="paymentId">ID de la cuota a actualizar</param>
+    private async Task UpdatePaymentStatusAsync(Guid paymentId)
+    {
+        var totalPaid = await _context
+            .PaymentTransactionPayments.Where(ptp => ptp.PaymentId == paymentId)
+            .SumAsync(ptp => ptp.AmountPaid);
+
+        var payment = await _context.Payments.FindAsync(paymentId);
+        if (payment != null)
+        {
+            payment.Paid = totalPaid >= payment.AmountDue;
+            await _context.SaveChangesAsync();
+        }
     }
 }

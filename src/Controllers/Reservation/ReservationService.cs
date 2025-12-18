@@ -14,13 +14,15 @@ public class ReservationService : IReservationService
     private readonly OdsTemplateService _odsTemplateService;
     private readonly SofficeConverterService _sofficeConverterService;
     private readonly WordTemplateService _wordTemplateService;
+    private readonly ICloudflareService _cloudflareService;
 
     public ReservationService(
         DatabaseContext context,
         PaginationService paginationService,
         OdsTemplateService odsTemplateService,
         SofficeConverterService sofficeConverterService,
-        WordTemplateService wordTemplateService
+        WordTemplateService wordTemplateService,
+        ICloudflareService cloudflareService
     )
     {
         _context = context;
@@ -28,6 +30,7 @@ public class ReservationService : IReservationService
         _odsTemplateService = odsTemplateService;
         _sofficeConverterService = sofficeConverterService;
         _wordTemplateService = wordTemplateService;
+        _cloudflareService = cloudflareService;
     }
 
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
@@ -45,6 +48,9 @@ public class ReservationService : IReservationService
                 QuotationCode = r.Quotation.Code,
                 ReservationDate = r.ReservationDate,
                 AmountPaid = r.AmountPaid,
+                TotalAmountRequired = r.TotalAmountRequired,
+                RemainingAmount = r.RemainingAmount,
+                PaymentHistory = r.PaymentHistory,
                 Currency = r.Currency,
                 Status = r.Status,
                 ContractValidationStatus = r.ContractValidationStatus,
@@ -54,23 +60,272 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
             .ToListAsync();
     }
 
-    public async Task<
-        PaginatedResponseV2<ReservationDto>
-    > GetAllCanceledPendingValidationReservationsPaginatedAsync(
+    public async Task<PaginatedResponseV2<ReservationDto>> GetAllReservationsPaginatedAsync(
         int page,
         int pageSize,
-        PaginationService paginationService
+        PaginationService paginationService,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        Guid? projectId = null,
+        string? orderBy = null
     )
     {
         var query = _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(l => l.Block)
+            .ThenInclude(b => b.Project)
+            .Where(r => r.IsActive)
+            .AsQueryable();
+
+        // Aplicar filtro de búsqueda
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(r =>
+                (r.Client.Name != null && r.Client.Name.ToLower().Contains(searchTerm))
+                || (r.Client.Email != null && r.Client.Email.ToLower().Contains(searchTerm))
+                || (r.Client.PhoneNumber != null && r.Client.PhoneNumber.Contains(searchTerm))
+                || (r.Client.Dni != null && r.Client.Dni.Contains(searchTerm))
+                || (r.Client.Ruc != null && r.Client.Ruc.Contains(searchTerm))
+                || (
+                    r.Client.CompanyName != null
+                    && r.Client.CompanyName.ToLower().Contains(searchTerm)
+                )
+                || (r.Quotation.Code != null && r.Quotation.Code.ToLower().Contains(searchTerm))
+            );
+        }
+
+        // Aplicar filtro por estado
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(r => status.Contains(r.Status));
+        }
+
+        // Aplicar filtro por método de pago
+        if (paymentMethod != null && paymentMethod.Length > 0)
+        {
+            query = query.Where(r => paymentMethod.Contains(r.PaymentMethod));
+        }
+
+        // Aplicar filtro por proyecto
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.Project.Id == projectId.Value);
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "reservationdate" => direction == "desc"
+                    ? query.OrderByDescending(r => r.ReservationDate)
+                    : query.OrderBy(r => r.ReservationDate),
+                "amountpaid" => direction == "desc"
+                    ? query.OrderByDescending(r => r.AmountPaid)
+                    : query.OrderBy(r => r.AmountPaid),
+                "status" => direction == "desc"
+                    ? query.OrderByDescending(r => r.Status)
+                    : query.OrderBy(r => r.Status),
+                "paymentmethod" => direction == "desc"
+                    ? query.OrderByDescending(r => r.PaymentMethod)
+                    : query.OrderBy(r => r.PaymentMethod),
+                "client.name" => direction == "desc"
+                    ? query.OrderByDescending(r => r.Client.Name)
+                    : query.OrderBy(r => r.Client.Name),
+                _ => query.OrderByDescending(r => r.CreatedAt),
+            };
+        }
+        else
+        {
+            query = query.OrderByDescending(r => r.CreatedAt);
+        }
+
+        // Convertir a DTOs antes de paginar
+        var reservationDtos = query.Select(r => new ReservationDto
+        {
+            Id = r.Id,
+            ClientId = r.ClientId,
+            ClientName = r.Client.DisplayName,
+            QuotationId = r.QuotationId,
+            QuotationCode = r.Quotation.Code,
+            ReservationDate = r.ReservationDate,
+            AmountPaid = r.AmountPaid,
+            TotalAmountRequired = r.TotalAmountRequired,
+            RemainingAmount = r.RemainingAmount,
+            PaymentHistory = r.PaymentHistory,
+            Currency = r.Currency,
+            Status = r.Status,
+            ContractValidationStatus = r.ContractValidationStatus,
+            PaymentMethod = r.PaymentMethod,
+            BankName = r.BankName,
+            ExchangeRate = r.ExchangeRate,
+            ExpiresAt = r.ExpiresAt,
+            Notified = r.Notified,
+            Schedule = r.Schedule,
+            CreatedAt = r.CreatedAt,
+            ModifiedAt = r.ModifiedAt,
+        });
+
+        return await paginationService.PaginateAsync(reservationDtos, page, pageSize);
+    }
+
+    public async Task<PaginatedResponseV2<ReservationDto>> GetReservationsByAdvisorIdPaginatedAsync(
+        Guid advisorId,
+        int page,
+        int pageSize,
+        PaginationService paginationService,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        Guid? projectId = null,
+        string? orderBy = null
+    )
+    {
+        var query = _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lead)
+            .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(l => l.Block)
+            .ThenInclude(b => b.Project)
+            .Where(r => r.IsActive && r.Quotation.Lead.AssignedToId == advisorId)
+            .AsQueryable();
+
+        // Aplicar filtro de búsqueda
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(r =>
+                (r.Client.Name != null && r.Client.Name.ToLower().Contains(searchTerm))
+                || (r.Client.Email != null && r.Client.Email.ToLower().Contains(searchTerm))
+                || (r.Client.PhoneNumber != null && r.Client.PhoneNumber.Contains(searchTerm))
+                || (r.Client.Dni != null && r.Client.Dni.Contains(searchTerm))
+                || (r.Client.Ruc != null && r.Client.Ruc.Contains(searchTerm))
+                || (
+                    r.Client.CompanyName != null
+                    && r.Client.CompanyName.ToLower().Contains(searchTerm)
+                )
+                || (r.Quotation.Code != null && r.Quotation.Code.ToLower().Contains(searchTerm))
+            );
+        }
+
+        // Aplicar filtro por estado
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(r => status.Contains(r.Status));
+        }
+
+        // Aplicar filtro por método de pago
+        if (paymentMethod != null && paymentMethod.Length > 0)
+        {
+            query = query.Where(r => paymentMethod.Contains(r.PaymentMethod));
+        }
+
+        // Aplicar filtro por proyecto
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.Project.Id == projectId.Value);
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "reservationdate" => direction == "desc"
+                    ? query.OrderByDescending(r => r.ReservationDate)
+                    : query.OrderBy(r => r.ReservationDate),
+                "amountpaid" => direction == "desc"
+                    ? query.OrderByDescending(r => r.AmountPaid)
+                    : query.OrderBy(r => r.AmountPaid),
+                "status" => direction == "desc"
+                    ? query.OrderByDescending(r => r.Status)
+                    : query.OrderBy(r => r.Status),
+                "paymentmethod" => direction == "desc"
+                    ? query.OrderByDescending(r => r.PaymentMethod)
+                    : query.OrderBy(r => r.PaymentMethod),
+                "client.name" => direction == "desc"
+                    ? query.OrderByDescending(r => r.Client.Name)
+                    : query.OrderBy(r => r.Client.Name),
+                _ => query.OrderByDescending(r => r.CreatedAt),
+            };
+        }
+        else
+        {
+            query = query.OrderByDescending(r => r.CreatedAt);
+        }
+
+        // Convertir a DTOs antes de paginar
+        var reservationDtos = query.Select(r => new ReservationDto
+        {
+            Id = r.Id,
+            ClientId = r.ClientId,
+            ClientName = r.Client.DisplayName,
+            QuotationId = r.QuotationId,
+            QuotationCode = r.Quotation.Code,
+            ReservationDate = r.ReservationDate,
+            AmountPaid = r.AmountPaid,
+            TotalAmountRequired = r.TotalAmountRequired,
+            RemainingAmount = r.RemainingAmount,
+            PaymentHistory = r.PaymentHistory,
+            Currency = r.Currency,
+            Status = r.Status,
+            ContractValidationStatus = r.ContractValidationStatus,
+            PaymentMethod = r.PaymentMethod,
+            BankName = r.BankName,
+            ExchangeRate = r.ExchangeRate,
+            ExpiresAt = r.ExpiresAt,
+            Notified = r.Notified,
+            Schedule = r.Schedule,
+            CreatedAt = r.CreatedAt,
+            ModifiedAt = r.ModifiedAt,
+        });
+
+        return await paginationService.PaginateAsync(reservationDtos, page, pageSize);
+    }
+
+    public async Task<
+        PaginatedResponseV2<ReservationPendingValidationDto>
+    > GetAllCanceledPendingValidationReservationsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        ContractValidationStatus[]? contractValidationStatus = null,
+        Guid? projectId = null,
+        string? orderBy = null
+    )
+    {
+        var query = _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(l => l.Block)
+            .ThenInclude(b => b.Project)
             .Where(r =>
                 r.IsActive
                 && r.Status == ReservationStatus.CANCELED
@@ -79,29 +334,114 @@ public class ReservationService : IReservationService
                     || r.ContractValidationStatus == ContractValidationStatus.Validated
                 )
             )
-            .Select(r => new ReservationDto
-            {
-                Id = r.Id,
-                ClientId = r.ClientId,
-                ClientName = r.Client.DisplayName,
-                QuotationId = r.QuotationId,
-                QuotationCode = r.Quotation.Code,
-                ReservationDate = r.ReservationDate,
-                AmountPaid = r.AmountPaid,
-                Currency = r.Currency,
-                Status = r.Status,
-                ContractValidationStatus = r.ContractValidationStatus,
-                PaymentMethod = r.PaymentMethod,
-                BankName = r.BankName,
-                ExchangeRate = r.ExchangeRate,
-                ExpiresAt = r.ExpiresAt,
-                Notified = r.Notified,
-                Schedule = r.Schedule,
-                CreatedAt = r.CreatedAt,
-                ModifiedAt = r.ModifiedAt,
-            });
+            .AsQueryable();
 
-        return await paginationService.PaginateAsync(query, page, pageSize);
+        // Aplicar filtro de búsqueda
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(r =>
+                (r.Client.Name != null && r.Client.Name.ToLower().Contains(searchTerm))
+                || (r.Client.Email != null && r.Client.Email.ToLower().Contains(searchTerm))
+                || (r.Client.PhoneNumber != null && r.Client.PhoneNumber.Contains(searchTerm))
+                || (r.Client.Dni != null && r.Client.Dni.Contains(searchTerm))
+                || (r.Client.Ruc != null && r.Client.Ruc.Contains(searchTerm))
+                || (
+                    r.Client.CompanyName != null
+                    && r.Client.CompanyName.ToLower().Contains(searchTerm)
+                )
+                || (r.Quotation.Code != null && r.Quotation.Code.ToLower().Contains(searchTerm))
+            );
+        }
+
+        // Aplicar filtro por estado
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(r => status.Contains(r.Status));
+        }
+
+        // Aplicar filtro por método de pago
+        if (paymentMethod != null && paymentMethod.Length > 0)
+        {
+            query = query.Where(r => paymentMethod.Contains(r.PaymentMethod));
+        }
+
+        // Aplicar filtro por estado de validación de contrato
+        if (contractValidationStatus != null && contractValidationStatus.Length > 0)
+        {
+            query = query.Where(r => contractValidationStatus.Contains(r.ContractValidationStatus));
+        }
+
+        // Aplicar filtro por proyecto
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.Project.Id == projectId.Value);
+        }
+
+        // Aplicar ordenamiento
+        if (!string.IsNullOrWhiteSpace(orderBy))
+        {
+            var orderParts = orderBy.Split(' ');
+            var field = orderParts[0].ToLower();
+            var direction =
+                orderParts.Length > 1 && orderParts[1].ToLower() == "desc" ? "desc" : "asc";
+
+            query = field switch
+            {
+                "reservationdate" => direction == "desc"
+                    ? query.OrderByDescending(r => r.ReservationDate)
+                    : query.OrderBy(r => r.ReservationDate),
+                "amountpaid" => direction == "desc"
+                    ? query.OrderByDescending(r => r.AmountPaid)
+                    : query.OrderBy(r => r.AmountPaid),
+                "status" => direction == "desc"
+                    ? query.OrderByDescending(r => r.Status)
+                    : query.OrderBy(r => r.Status),
+                "paymentmethod" => direction == "desc"
+                    ? query.OrderByDescending(r => r.PaymentMethod)
+                    : query.OrderBy(r => r.PaymentMethod),
+                "contractvalidationstatus" => direction == "desc"
+                    ? query.OrderByDescending(r => r.ContractValidationStatus)
+                    : query.OrderBy(r => r.ContractValidationStatus),
+                "createdat" => direction == "desc"
+                    ? query.OrderByDescending(r => r.CreatedAt)
+                    : query.OrderBy(r => r.CreatedAt),
+                _ => query.OrderByDescending(r => r.CreatedAt),
+            };
+        }
+        else
+        {
+            query = query.OrderByDescending(r => r.CreatedAt);
+        }
+
+        // Convertir a DTOs antes de paginar (mantener como IQueryable de EF)
+        var reservationDtos = query.Select(r => new ReservationPendingValidationDto
+        {
+            Id = r.Id,
+            ClientId = r.ClientId,
+            ClientName = r.Client.DisplayName,
+            QuotationId = r.QuotationId,
+            QuotationCode = r.Quotation.Code,
+            ReservationDate = r.ReservationDate,
+            AmountPaid = r.AmountPaid,
+            TotalAmountRequired = r.TotalAmountRequired,
+            RemainingAmount = r.RemainingAmount,
+            PaymentHistory = r.PaymentHistory, // Mantener como string, se deserializará en el frontend
+            Currency = r.Currency,
+            Status = r.Status,
+            ContractValidationStatus = r.ContractValidationStatus,
+            PaymentMethod = r.PaymentMethod,
+            BankName = r.BankName,
+            ExchangeRate = r.ExchangeRate,
+            ExpiresAt = r.ExpiresAt,
+            Notified = r.Notified,
+            Schedule = r.Schedule,
+            CoOwners = r.CoOwners,
+            CreatedAt = r.CreatedAt,
+            ModifiedAt = r.ModifiedAt,
+        });
+
+        return await paginationService.PaginateAsync(reservationDtos, page, pageSize);
     }
 
     public async Task<IEnumerable<ReservationWithPaymentsDto>> GetAllCanceledReservationsAsync()
@@ -120,6 +460,9 @@ public class ReservationService : IReservationService
                 QuotationCode = r.Quotation.Code,
                 ReservationDate = r.ReservationDate,
                 AmountPaid = r.AmountPaid,
+                TotalAmountRequired = r.TotalAmountRequired,
+                RemainingAmount = r.RemainingAmount,
+                PaymentHistory = r.PaymentHistory,
                 Currency = r.Currency,
                 Status = r.Status,
                 PaymentMethod = r.PaymentMethod,
@@ -128,11 +471,12 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
-                PaymentCount = r.Payments.Count(p => p.Paid), // Solo pagos realizados
+                PaymentCount = r.Payments.Count(p => p.Paid && p.IsActive), // Solo pagos realizados y activos
                 NextPaymentDueDate = r
-                    .Payments.Where(p => !p.Paid)
+                    .Payments.Where(p => !p.Paid && p.IsActive)
                     .OrderBy(p => p.DueDate)
                     .Select(p => (DateTime?)p.DueDate)
                     .FirstOrDefault(),
@@ -142,45 +486,59 @@ public class ReservationService : IReservationService
 
     public async Task<
         PaginatedResponseV2<ReservationWithPaymentsDto>
-    > GetAllCanceledReservationsPaginatedAsync(int page, int pageSize)
+    > GetAllCanceledReservationsPaginatedAsync(int page, int pageSize, Guid? projectId = null)
     {
         var query = _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
+            .ThenInclude(l => l.Block)
+            .ThenInclude(b => b.Project)
             .Include(r => r.Payments)
             .Where(r =>
                 r.IsActive
                 && r.Status == ReservationStatus.CANCELED
                 && r.ContractValidationStatus == ContractValidationStatus.Validated
-            )
-            .Select(r => new ReservationWithPaymentsDto
-            {
-                Id = r.Id,
-                ClientId = r.ClientId,
-                ClientName = r.Client.DisplayName,
-                QuotationId = r.QuotationId,
-                QuotationCode = r.Quotation.Code,
-                ReservationDate = r.ReservationDate,
-                AmountPaid = r.AmountPaid,
-                Currency = r.Currency,
-                Status = r.Status,
-                PaymentMethod = r.PaymentMethod,
-                BankName = r.BankName,
-                ExchangeRate = r.ExchangeRate,
-                ExpiresAt = r.ExpiresAt,
-                Notified = r.Notified,
-                Schedule = r.Schedule,
-                CreatedAt = r.CreatedAt,
-                ModifiedAt = r.ModifiedAt,
-                PaymentCount = r.Payments.Count(p => p.Paid),
-                NextPaymentDueDate = r
-                    .Payments.Where(p => !p.Paid)
-                    .OrderBy(p => p.DueDate)
-                    .Select(p => (DateTime?)p.DueDate)
-                    .FirstOrDefault(),
-            });
+            );
 
-        return await _paginationService.PaginateAsync(query, page, pageSize);
+        // Aplicar filtro por proyecto si se proporciona
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.ProjectId == projectId.Value);
+        }
+
+        var projectedQuery = query.Select(r => new ReservationWithPaymentsDto
+        {
+            Id = r.Id,
+            ClientId = r.ClientId,
+            ClientName = r.Client.DisplayName,
+            QuotationId = r.QuotationId,
+            QuotationCode = r.Quotation.Code,
+            ReservationDate = r.ReservationDate,
+            AmountPaid = r.AmountPaid,
+            TotalAmountRequired = r.TotalAmountRequired,
+            RemainingAmount = r.RemainingAmount,
+            PaymentHistory = r.PaymentHistory,
+            Currency = r.Currency,
+            Status = r.Status,
+            PaymentMethod = r.PaymentMethod,
+            BankName = r.BankName,
+            ExchangeRate = r.ExchangeRate,
+            ExpiresAt = r.ExpiresAt,
+            Notified = r.Notified,
+            Schedule = r.Schedule,
+            CoOwners = r.CoOwners,
+            CreatedAt = r.CreatedAt,
+            ModifiedAt = r.ModifiedAt,
+            PaymentCount = r.Payments.Count(p => p.Paid), // Solo pagos realizados y activos
+            NextPaymentDueDate = r
+                .Payments.Where(p => !p.Paid && p.IsActive)
+                .OrderBy(p => p.DueDate)
+                .Select(p => (DateTime?)p.DueDate)
+                .FirstOrDefault(),
+        });
+
+        return await _paginationService.PaginateAsync(projectedQuery, page, pageSize);
     }
 
     public async Task<ReservationDto?> GetReservationByIdAsync(Guid id)
@@ -206,6 +564,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
@@ -251,13 +610,16 @@ public class ReservationService : IReservationService
             ClientId = clientId,
             QuotationId = reservationDto.QuotationId,
             ReservationDate = reservationDto.ReservationDate,
-            AmountPaid = reservationDto.AmountPaid,
+            AmountPaid = 0, // Inicializar en 0 porque aún no se ha pagado
+            TotalAmountRequired = reservationDto.AmountPaid, // El monto del DTO es lo que debe pagar
+            RemainingAmount = reservationDto.AmountPaid, // Al inicio, todo está pendiente
             Currency = reservationDto.Currency,
             PaymentMethod = reservationDto.PaymentMethod,
             BankName = reservationDto.BankName,
             ExchangeRate = reservationDto.ExchangeRate,
             ExpiresAt = reservationDto.ExpiresAt,
             Schedule = reservationDto.Schedule,
+            CoOwners = reservationDto.CoOwners,
             Status = ReservationStatus.ISSUED,
             Notified = false,
             Client = client,
@@ -271,22 +633,258 @@ public class ReservationService : IReservationService
 
     public async Task<bool> ToggleContractValidationStatusAsync(Guid reservationId)
     {
-        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
-            r.Id == reservationId && r.IsActive
-        );
+        var reservation = await _context.Reservations.FindAsync(reservationId);
         if (reservation == null)
             return false;
 
-        if (reservation.ContractValidationStatus == ContractValidationStatus.PendingValidation)
-            reservation.ContractValidationStatus = ContractValidationStatus.Validated;
-        else if (reservation.ContractValidationStatus == ContractValidationStatus.Validated)
-            reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
-        else
-            reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
+        reservation.ContractValidationStatus =
+            reservation.ContractValidationStatus == ContractValidationStatus.Validated
+                ? ContractValidationStatus.None
+                : ContractValidationStatus.Validated;
 
-        reservation.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<
+        PaginatedResponseV2<ReservationWithPendingPaymentsDto>
+    > GetAllReservationsWithPendingPaymentsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService,
+        Guid currentUserId,
+        List<string> currentUserRoles,
+        string? search = null,
+        ReservationStatus[]? status = null,
+        PaymentMethod[]? paymentMethod = null,
+        ContractValidationStatus[]? contractValidationStatus = null,
+        Guid? projectId = null,
+        string? orderBy = null
+    )
+    {
+        // Verificar si es Supervisor
+        var isSupervisor = currentUserRoles.Contains("Supervisor");
+
+        var query = _context
+            .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .Include(r => r.Quotation.Lot)
+            .Include(r => r.Quotation.Lot.Block)
+            .Include(r => r.Quotation.Lot.Block.Project)
+            .Include(r => r.Payments)
+            .Where(r =>
+                (r.Status == ReservationStatus.ISSUED || r.Status == ReservationStatus.CANCELED)
+                && r.IsActive
+            );
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar reservas que tienen leads asignados a sus SalesAdvisors o al propio supervisor
+        if (isSupervisor)
+        {
+            // Obtener los IDs de los SalesAdvisors asignados a este supervisor
+            var assignedSalesAdvisorIds = await _context
+                .SupervisorSalesAdvisors.Where(ssa =>
+                    ssa.SupervisorId == currentUserId && ssa.IsActive
+                )
+                .Select(ssa => ssa.SalesAdvisorId)
+                .ToListAsync();
+
+            // Incluir también el propio ID del supervisor para que vea sus propios clientes
+            assignedSalesAdvisorIds.Add(currentUserId);
+
+            // Filtrar reservas que tienen leads asignados a estos usuarios
+            query = query.Where(r =>
+                _context.Leads.Any(l =>
+                    l.ClientId == r.ClientId
+                    && l.IsActive
+                    && (
+                        l.AssignedToId.HasValue
+                        && (
+                            assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
+                            || l.AssignedToId.Value == currentUserId
+                        )
+                    )
+                )
+            );
+        }
+
+        // Aplicar filtro por proyecto si se proporciona
+        if (projectId.HasValue)
+        {
+            query = query.Where(r => r.Quotation.Lot.Block.ProjectId == projectId.Value);
+        }
+
+        // Aplicar filtros de status si se proporcionan
+        if (status != null && status.Length > 0)
+        {
+            query = query.Where(r => status.Contains(r.Status));
+        }
+
+        // Aplicar filtros de paymentMethod si se proporcionan
+        if (paymentMethod != null && paymentMethod.Length > 0)
+        {
+            query = query.Where(r => paymentMethod.Contains(r.PaymentMethod));
+        }
+
+        // Aplicar filtros de contractValidationStatus si se proporcionan
+        if (contractValidationStatus != null && contractValidationStatus.Length > 0)
+        {
+            query = query.Where(r => contractValidationStatus.Contains(r.ContractValidationStatus));
+        }
+
+        // Aplicar filtro de búsqueda si se proporciona
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchTerm = search.ToLower();
+            query = query.Where(r =>
+                (r.Client.Name != null && r.Client.Name.ToLower().Contains(searchTerm))
+                || (r.Client.Email != null && r.Client.Email.ToLower().Contains(searchTerm))
+                || (r.Client.PhoneNumber != null && r.Client.PhoneNumber.Contains(searchTerm))
+                || (r.Client.Dni != null && r.Client.Dni.Contains(searchTerm))
+                || (r.Client.Ruc != null && r.Client.Ruc.Contains(searchTerm))
+                || (
+                    r.Client.CompanyName != null
+                    && r.Client.CompanyName.ToLower().Contains(searchTerm)
+                )
+                || (
+                    r.Quotation.Lot.Block.Project.Name != null
+                    && r.Quotation.Lot.Block.Project.Name.ToLower().Contains(searchTerm)
+                )
+                || (
+                    r.Quotation.Lot.LotNumber != null
+                    && r.Quotation.Lot.LotNumber.Contains(searchTerm)
+                )
+            );
+        }
+
+        // Ejecutar paginación optimizada
+        var paginatedResult = await _paginationService.PaginateAsync(query, page, pageSize);
+
+        // Convertir el resultado paginado a ReservationWithPendingPaymentsDto
+        var dtoResult = new List<ReservationWithPendingPaymentsDto>();
+
+        foreach (var reservation in paginatedResult.Data)
+        {
+            // Obtener cuotas pendientes para esta reserva
+            var pendingPayments = await GetPendingPaymentsForReservationAsync(reservation.Id);
+
+            // Calcular totales
+            var totalAmountDue = pendingPayments.Sum(p => p.AmountDue);
+            var totalAmountPaid = pendingPayments.Sum(p => p.AmountPaid);
+            var totalRemainingAmount = pendingPayments.Sum(p => p.RemainingAmount);
+            var nextPaymentDueDate = pendingPayments
+                .Where(p => p.RemainingAmount > 0)
+                .OrderBy(p => p.DueDate)
+                .FirstOrDefault()
+                ?.DueDate;
+
+            dtoResult.Add(
+                new ReservationWithPendingPaymentsDto
+                {
+                    Id = reservation.Id,
+                    ReservationDate = reservation.ReservationDate.ToDateTime(TimeOnly.MinValue),
+                    AmountPaid = reservation.AmountPaid,
+                    PaymentMethod = reservation.PaymentMethod,
+                    Status = reservation.Status,
+                    ContractValidationStatus = reservation.ContractValidationStatus,
+                    Currency = reservation.Currency,
+                    ExchangeRate = reservation.ExchangeRate,
+                    ExpiresAt = reservation.ExpiresAt,
+                    CreatedAt = reservation.CreatedAt,
+                    ModifiedAt = reservation.ModifiedAt,
+
+                    Client = new ClientDto
+                    {
+                        Id = reservation.Client.Id,
+                        Name = reservation.Client.Name ?? string.Empty,
+                        Dni = reservation.Client.Dni ?? string.Empty,
+                        Ruc = reservation.Client.Ruc,
+                        Email = reservation.Client.Email,
+                        PhoneNumber = reservation.Client.PhoneNumber,
+                    },
+
+                    Lot = new LotDto
+                    {
+                        Id = reservation.Quotation.Lot.Id,
+                        LotNumber = reservation.Quotation.Lot.LotNumber,
+                        Area = reservation.Quotation.Lot.Area,
+                        Price = reservation.Quotation.Lot.Price,
+                    },
+
+                    Project = new ProjectDto
+                    {
+                        Id = reservation.Quotation.Lot.Block.Project.Id,
+                        Name = reservation.Quotation.Lot.Block.Project.Name,
+                        Location = reservation.Quotation.Lot.Block.Project.Location,
+                    },
+
+                    Quotation = new QuotationDto
+                    {
+                        Id = reservation.Quotation.Id,
+                        Code = reservation.Quotation.Code,
+                        FinalPrice = reservation.Quotation.FinalPrice,
+                        MonthsFinanced = reservation.Quotation.MonthsFinanced,
+                        QuotaAmount =
+                            reservation.Quotation.FinalPrice / reservation.Quotation.MonthsFinanced,
+                    },
+
+                    PendingPayments = pendingPayments,
+
+                    TotalAmountDue = totalAmountDue,
+                    TotalAmountPaid = totalAmountPaid,
+                    TotalRemainingAmount = totalRemainingAmount,
+                    TotalPendingQuotas = pendingPayments.Count(p => p.RemainingAmount > 0),
+                    NextPaymentDueDate = nextPaymentDueDate,
+                }
+            );
+        }
+
+        return new PaginatedResponseV2<ReservationWithPendingPaymentsDto>
+        {
+            Data = dtoResult,
+            Meta = paginatedResult.Meta,
+        };
+    }
+
+    private async Task<List<PendingPaymentDto>> GetPendingPaymentsForReservationAsync(
+        Guid reservationId
+    )
+    {
+        var payments = await _context
+            .Payments.Where(p => p.ReservationId == reservationId && p.IsActive)
+            .OrderBy(p => p.DueDate)
+            .ToListAsync();
+
+        var paymentIds = payments.Select(p => p.Id).ToList();
+        var paymentDetails = await _context
+            .PaymentTransactionPayments.Where(ptp => paymentIds.Contains(ptp.PaymentId))
+            .ToListAsync();
+
+        var paymentsByPaymentId = paymentDetails
+            .GroupBy(ptp => ptp.PaymentId)
+            .ToDictionary(g => g.Key, g => g.Sum(ptp => ptp.AmountPaid));
+
+        var result = new List<PendingPaymentDto>();
+
+        foreach (var payment in payments)
+        {
+            var totalPaidForThisPayment = paymentsByPaymentId.GetValueOrDefault(payment.Id, 0);
+            var remainingAmount = payment.AmountDue - totalPaidForThisPayment;
+            var isOverdue = payment.DueDate < DateTime.UtcNow && remainingAmount > 0;
+
+            result.Add(
+                new PendingPaymentDto
+                {
+                    Id = payment.Id,
+                    DueDate = payment.DueDate,
+                    AmountDue = payment.AmountDue,
+                    AmountPaid = totalPaidForThisPayment,
+                    RemainingAmount = Math.Max(0, remainingAmount),
+                    IsOverdue = isOverdue,
+                }
+            );
+        }
+
+        return result;
     }
 
     public async Task<ReservationDto?> UpdateReservationAsync(
@@ -304,7 +902,8 @@ public class ReservationService : IReservationService
 
         // Update the reservation properties
         reservation.ReservationDate = reservationDto.ReservationDate;
-        reservation.AmountPaid = reservationDto.AmountPaid;
+        reservation.TotalAmountRequired = reservationDto.AmountPaid; // El monto del DTO es lo que debe pagar
+        reservation.RemainingAmount = reservationDto.AmountPaid - reservation.AmountPaid; // Recalcular pendiente
         reservation.Currency = reservationDto.Currency;
         reservation.Status = reservationDto.Status;
         reservation.PaymentMethod = reservationDto.PaymentMethod;
@@ -316,6 +915,7 @@ public class ReservationService : IReservationService
                 : DateTime.SpecifyKind(reservationDto.ExpiresAt, DateTimeKind.Utc);
         reservation.Notified = reservationDto.Notified;
         reservation.Schedule = reservationDto.Schedule;
+        reservation.CoOwners = reservationDto.CoOwners;
         reservation.ModifiedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -330,6 +930,9 @@ public class ReservationService : IReservationService
             QuotationCode = reservation.Quotation.Code,
             ReservationDate = reservation.ReservationDate,
             AmountPaid = reservation.AmountPaid,
+            TotalAmountRequired = reservation.TotalAmountRequired,
+            RemainingAmount = reservation.RemainingAmount,
+            PaymentHistory = reservation.PaymentHistory,
             Currency = reservation.Currency,
             Status = reservation.Status,
             PaymentMethod = reservation.PaymentMethod,
@@ -338,6 +941,7 @@ public class ReservationService : IReservationService
             ExpiresAt = reservation.ExpiresAt,
             Notified = reservation.Notified,
             Schedule = reservation.Schedule,
+            CoOwners = reservation.CoOwners,
             CreatedAt = reservation.CreatedAt,
             ModifiedAt = reservation.ModifiedAt,
         };
@@ -381,6 +985,7 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
@@ -412,22 +1017,24 @@ public class ReservationService : IReservationService
                 ExpiresAt = r.ExpiresAt,
                 Notified = r.Notified,
                 Schedule = r.Schedule,
+                CoOwners = r.CoOwners,
                 CreatedAt = r.CreatedAt,
                 ModifiedAt = r.ModifiedAt,
             })
             .ToListAsync();
     }
 
-    public async Task<ReservationDto?> ChangeStatusAsync(Guid id, string status)
+    public async Task<ReservationDto?> ChangeStatusAsync(Guid id, ReservationStatusDto statusDto)
     {
         var reservation = await _context
             .Reservations.Include(r => r.Client)
             .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lot)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
 
         if (
             reservation == null
-            || !Enum.TryParse<ReservationStatus>(status, true, out var statusEnum)
+            || !Enum.TryParse<ReservationStatus>(statusDto.Status, true, out var statusEnum)
         )
             return null;
 
@@ -435,20 +1042,124 @@ public class ReservationService : IReservationService
         reservation.Status = statusEnum;
         reservation.ModifiedAt = DateTime.UtcNow;
 
+        // Si se cambia de CANCELED o ISSUED a ISSUED o ANULATED, eliminar los pagos
+        bool shouldClearPayments =
+            (
+                previousStatus == ReservationStatus.CANCELED
+                || previousStatus == ReservationStatus.ISSUED
+            )
+            && (statusEnum == ReservationStatus.ISSUED || statusEnum == ReservationStatus.ANULATED);
+
+        // Si se cambia de CANCELED a otro estado (excepto cuando shouldClearPayments ya lo maneja), eliminar payment schedules
+        bool shouldDeletePaymentSchedule =
+            previousStatus == ReservationStatus.CANCELED
+            && statusEnum != ReservationStatus.CANCELED
+            && !shouldClearPayments;
+
+        if (shouldClearPayments || shouldDeletePaymentSchedule)
+        {
+            // Eliminar payment schedules y sus relaciones en cascada
+            await DeletePaymentScheduleAsync(reservation.Id);
+
+            // Limpiar el historial de pagos
+            reservation.PaymentHistory = null;
+            // Resetear montos de pago
+            reservation.AmountPaid = 0;
+            reservation.RemainingAmount = reservation.TotalAmountRequired;
+        }
+
+        // Manejar pagos si se proporciona información de pago (solo si no se están limpiando los pagos)
+        if (!shouldClearPayments && statusDto.IsFullPayment.HasValue)
+        {
+            if (statusDto.IsFullPayment.Value)
+            {
+                // Pago completo: AmountPaid = TotalAmountRequired, RemainingAmount = 0
+                reservation.AmountPaid = reservation.TotalAmountRequired;
+                reservation.RemainingAmount = 0;
+
+                // Agregar al PaymentHistory si se proporciona información del pago
+                if (statusDto.PaymentDate.HasValue)
+                {
+                    await AddPaymentToHistoryFromStatusChangeAsync(reservation, statusDto);
+                }
+            }
+            else if (statusDto.PaymentAmount.HasValue)
+            {
+                // Pago parcial: agregar al AmountPaid y recalcular RemainingAmount
+                reservation.AmountPaid += statusDto.PaymentAmount.Value;
+                reservation.RemainingAmount = Math.Max(
+                    0,
+                    reservation.TotalAmountRequired - reservation.AmountPaid
+                );
+
+                // Agregar al PaymentHistory si se proporciona información del pago
+                if (statusDto.PaymentDate.HasValue)
+                {
+                    await AddPaymentToHistoryFromStatusChangeAsync(reservation, statusDto);
+                }
+            }
+        }
+        else if (!shouldClearPayments && statusDto.PaymentAmount.HasValue)
+        {
+            // Si no se especifica IsFullPayment pero sí PaymentAmount, tratarlo como pago parcial
+            reservation.AmountPaid += statusDto.PaymentAmount.Value;
+            reservation.RemainingAmount = Math.Max(
+                0,
+                reservation.TotalAmountRequired - reservation.AmountPaid
+            );
+
+            // Agregar al PaymentHistory si se proporciona información del pago
+            if (statusDto.PaymentDate.HasValue)
+            {
+                await AddPaymentToHistoryFromStatusChangeAsync(reservation, statusDto);
+            }
+        }
+
+        // **NUEVO: Actualizar estado del lote según el cambio de estado de la reserva**
+        if (reservation.Quotation?.Lot != null)
+        {
+            switch (statusEnum)
+            {
+                case ReservationStatus.CANCELED:
+                    // Si se cancela la reserva, el lote pasa a reservado
+                    reservation.Quotation.Lot.Status = LotStatus.Reserved;
+                    break;
+
+                case ReservationStatus.ANULATED:
+                    // Si se anula la reserva, el lote pasa a disponible
+                    reservation.Quotation.Lot.Status = LotStatus.Available;
+                    break;
+
+                case ReservationStatus.ISSUED:
+                    // Si vuelve a emitida desde cancelada/anulada, el lote pasa a cotizado
+                    reservation.Quotation.Lot.Status = LotStatus.Quoted;
+                    break;
+            }
+
+            reservation.Quotation.Lot.ModifiedAt = DateTime.UtcNow;
+        }
+
         // Actualiza el estado de validación de contrato según el nuevo estado
         if (statusEnum == ReservationStatus.CANCELED)
         {
             reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
-            // Si tienes lógica para pagos, la mantienes aquí
+            // Generar payment schedule solo si no existían previamente (evitar duplicados)
             if (previousStatus != ReservationStatus.CANCELED)
             {
-                await GeneratePaymentScheduleAsync(reservation);
+                // Verificar si ya existen payments para esta reserva antes de generar nuevos
+                var existingPayments = await _context
+                    .Payments.Where(p => p.ReservationId == reservation.Id && p.IsActive)
+                    .AnyAsync();
+
+                if (!existingPayments)
+                {
+                    await GeneratePaymentScheduleAsync(reservation);
+                }
             }
         }
         else
         {
             reservation.ContractValidationStatus = ContractValidationStatus.None;
-            // Aquí podrías limpiar pagos si lo necesitas
         }
 
         await _context.SaveChangesAsync();
@@ -463,6 +1174,9 @@ public class ReservationService : IReservationService
             QuotationCode = reservation.Quotation.Code,
             ReservationDate = reservation.ReservationDate,
             AmountPaid = reservation.AmountPaid,
+            TotalAmountRequired = reservation.TotalAmountRequired,
+            RemainingAmount = reservation.RemainingAmount,
+            PaymentHistory = reservation.PaymentHistory,
             Currency = reservation.Currency,
             Status = reservation.Status,
             PaymentMethod = reservation.PaymentMethod,
@@ -471,9 +1185,118 @@ public class ReservationService : IReservationService
             ExpiresAt = reservation.ExpiresAt,
             Notified = reservation.Notified,
             Schedule = reservation.Schedule,
+            CoOwners = reservation.CoOwners,
             CreatedAt = reservation.CreatedAt,
             ModifiedAt = reservation.ModifiedAt,
         };
+    }
+
+    /// <summary>
+    /// Elimina el payment schedule de una reserva y todas sus relaciones en cascada.
+    /// Orden de eliminación:
+    /// 1. PaymentTransactionPayment (relaciones detalladas)
+    /// 2. PaymentTransactionPaymentLegacy (relaciones legacy)
+    /// 3. PaymentTransactions relacionados
+    /// 4. Payments de la reserva
+    /// </summary>
+    private async Task DeletePaymentScheduleAsync(Guid reservationId)
+    {
+        // 1. Obtener todos los Payments de la reserva (sin filtrar por IsActive para eliminar todos)
+        var payments = await _context
+            .Payments.Where(p => p.ReservationId == reservationId)
+            .Select(p => p.Id)
+            .ToListAsync();
+
+        if (!payments.Any())
+            return;
+
+        // 2. Obtener todos los PaymentTransactionPayment que referencian estos Payments
+        var paymentTransactionPayments = await _context
+            .PaymentTransactionPayments.Where(ptp => payments.Contains(ptp.PaymentId))
+            .ToListAsync();
+
+        // 3. Obtener TODAS las transacciones relacionadas con esta reserva (por ReservationId directo)
+        // Esto es más simple y directo: eliminar todas las transacciones que tengan este ReservationId
+        var transactionsToDelete = await _context
+            .PaymentTransactions.Where(pt => pt.ReservationId == reservationId)
+            .ToListAsync();
+
+        // 6. Eliminar en orden correcto para evitar errores de foreign key
+        // Primero: PaymentTransactionPayment (relaciones detalladas) - usar SQL directo
+        if (paymentTransactionPayments.Any())
+        {
+            foreach (var ptp in paymentTransactionPayments)
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM \"PaymentTransactionPayments\" WHERE \"PaymentTransactionId\" = {0} AND \"PaymentId\" = {1}",
+                    ptp.PaymentTransactionId,
+                    ptp.PaymentId
+                );
+            }
+        }
+
+        // Segundo: PaymentTransactionPaymentLegacy (relaciones legacy)
+        // Usar SQL directo ya que es una tabla de unión sin entidad
+        // Eliminar uno por uno para evitar problemas de SQL injection
+        if (payments.Any())
+        {
+            foreach (var paymentId in payments)
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM \"PaymentTransactionPaymentLegacy\" WHERE \"PaymentId\" = {0}",
+                    paymentId
+                );
+            }
+        }
+
+        // Tercero: PaymentTransactions - Eliminar directamente por ReservationId
+        if (transactionsToDelete.Any())
+        {
+            // Eliminar imágenes de Cloudflare antes de eliminar las transacciones
+            foreach (var transaction in transactionsToDelete)
+            {
+                if (!string.IsNullOrEmpty(transaction.ComprobanteUrl))
+                {
+                    try
+                    {
+                        await _cloudflareService.DeletePaymentTransactionFolderAsync(
+                            transaction.Id.ToString()
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log el error pero continúa con la eliminación
+                        // La imagen puede no existir o haber sido eliminada previamente
+                        Console.WriteLine(
+                            $"Error al eliminar imagen de Cloudflare para transacción {transaction.Id}: {ex.Message}"
+                        );
+                    }
+                }
+            }
+
+            // Eliminación física de PaymentTransactions directamente por ReservationId usando SQL directo
+            await _context.Database.ExecuteSqlRawAsync(
+                "DELETE FROM \"PaymentTransactions\" WHERE \"ReservationId\" = {0}",
+                reservationId
+            );
+        }
+
+        // Cuarto: Payments (eliminación física usando SQL directo)
+        var paymentsToDelete = await _context
+            .Payments.Where(p => payments.Contains(p.Id))
+            .ToListAsync();
+
+        // Eliminación física de Payments usando SQL directo para asegurar eliminación física
+        foreach (var payment in paymentsToDelete)
+        {
+            await _context.Database.ExecuteSqlRawAsync(
+                "DELETE FROM \"Payments\" WHERE \"Id\" = {0}",
+                payment.Id
+            );
+        }
+
+        // Guardar cambios finales
+        await _context.SaveChangesAsync();
     }
 
     /// <summary>
@@ -595,7 +1418,7 @@ public class ReservationService : IReservationService
                                         .Cell()
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text($"S/ {reservation.AmountPaid:N2}");
+                                        .Text($"S/ {reservation.TotalAmountRequired:N2}");
                                 }
                                 else
                                 {
@@ -610,7 +1433,7 @@ public class ReservationService : IReservationService
                                         .Cell()
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text($"$ {reservation.AmountPaid:N2}");
+                                        .Text($"$ {reservation.TotalAmountRequired:N2}");
                                 }
                                 else
                                 {
@@ -697,91 +1520,137 @@ public class ReservationService : IReservationService
                                         .Text("");
                                 }
 
-                                // Co-propietario
+                                // Representantes legales (copropietarios) de la reserva
                                 {
-                                    table
-                                        .Cell()
-                                        .ColumnSpan(2)
-                                        .AlignLeft()
-                                        .PaddingVertical(5)
-                                        .Text("Nombre del Co-propietario:");
-
-                                    string coOwnerName = "";
-                                    string coOwnerDni = "";
-
-                                    // Procesar el JSON de co-owners para extraer solo el primero
-                                    if (!string.IsNullOrEmpty(client?.CoOwners))
+                                    // Procesar TODOS los representantes legales de la reserva
+                                    var coOwnersList = new List<(string name, string dni)>();
+                                    if (!string.IsNullOrEmpty(reservation.CoOwners))
                                     {
                                         try
                                         {
-                                            // Deserializar el JSON a una lista de objetos anónimos
                                             var coOwners =
                                                 System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
-                                                    client.CoOwners
+                                                    reservation.CoOwners
                                                 );
 
-                                            // Verificar que sea un array y tenga al menos un elemento
                                             if (
                                                 coOwners.ValueKind
                                                     == System.Text.Json.JsonValueKind.Array
                                                 && coOwners.GetArrayLength() > 0
                                             )
                                             {
-                                                // Obtener el primer elemento
-                                                var firstCoOwner = coOwners[0];
-
-                                                // Intentar obtener la propiedad "name" del primer co-owner
-                                                if (
-                                                    firstCoOwner.TryGetProperty(
-                                                        "name",
-                                                        out var nameElement
-                                                    )
-                                                )
+                                                for (int i = 0; i < coOwners.GetArrayLength(); i++)
                                                 {
-                                                    coOwnerName = nameElement.GetString() ?? "";
-                                                }
+                                                    var coOwner = coOwners[i];
+                                                    string coOwnerName = "";
+                                                    string coOwnerDni = "";
 
-                                                // Intentar obtener la propiedad "dni" del primer co-owner
-                                                if (
-                                                    firstCoOwner.TryGetProperty(
-                                                        "dni",
-                                                        out var dniElement
+                                                    if (
+                                                        coOwner.TryGetProperty(
+                                                            "name",
+                                                            out var nameElement
+                                                        )
                                                     )
-                                                )
-                                                {
-                                                    coOwnerDni = dniElement.GetString() ?? "";
+                                                    {
+                                                        coOwnerName = nameElement.GetString() ?? "";
+                                                    }
+
+                                                    if (
+                                                        coOwner.TryGetProperty(
+                                                            "dni",
+                                                            out var dniElement
+                                                        )
+                                                    )
+                                                    {
+                                                        coOwnerDni = dniElement.GetString() ?? "";
+                                                    }
+
+                                                    if (
+                                                        !string.IsNullOrEmpty(coOwnerName)
+                                                        || !string.IsNullOrEmpty(coOwnerDni)
+                                                    )
+                                                    {
+                                                        coOwnersList.Add((coOwnerName, coOwnerDni));
+                                                    }
                                                 }
                                             }
                                         }
                                         catch
                                         {
-                                            // En caso de error al procesar el JSON, dejar los campos vacíos
-                                            coOwnerName = "";
-                                            coOwnerDni = "";
+                                            // En caso de error, dejar la lista vacía
                                         }
                                     }
 
-                                    table
-                                        .Cell()
-                                        .ColumnSpan(3)
-                                        .PaddingVertical(5)
-                                        .BorderBottom(1)
-                                        .BorderColor(Colors.Black)
-                                        .Text(coOwnerName);
+                                    // Mostrar todos los representantes legales
+                                    if (coOwnersList.Count > 0)
+                                    {
+                                        for (int i = 0; i < coOwnersList.Count; i++)
+                                        {
+                                            var (coOwnerName, coOwnerDni) = coOwnersList[i];
+                                            var labelText = i == 0 ? "Representantes legales:" : "";
 
-                                    table
-                                        .Cell()
-                                        .AlignLeft()
-                                        .PaddingVertical(5)
-                                        .PaddingLeft(10)
-                                        .Text("D.N.I.");
+                                            table
+                                                .Cell()
+                                                .ColumnSpan(2)
+                                                .AlignLeft()
+                                                .PaddingVertical(5)
+                                                .Text(labelText);
 
-                                    table
-                                        .Cell()
-                                        .PaddingVertical(5)
-                                        .BorderBottom(1)
-                                        .BorderColor(Colors.Black)
-                                        .Text(coOwnerDni);
+                                            table
+                                                .Cell()
+                                                .ColumnSpan(3)
+                                                .PaddingVertical(5)
+                                                .BorderBottom(1)
+                                                .BorderColor(Colors.Black)
+                                                .Text(coOwnerName);
+
+                                            table
+                                                .Cell()
+                                                .AlignLeft()
+                                                .PaddingVertical(5)
+                                                .PaddingLeft(10)
+                                                .Text("D.N.I.");
+
+                                            table
+                                                .Cell()
+                                                .PaddingVertical(5)
+                                                .BorderBottom(1)
+                                                .BorderColor(Colors.Black)
+                                                .Text(coOwnerDni);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // Si no hay representantes, mostrar una fila vacía
+                                        table
+                                            .Cell()
+                                            .ColumnSpan(2)
+                                            .AlignLeft()
+                                            .PaddingVertical(5)
+                                            .Text("Representantes legales:");
+
+                                        table
+                                            .Cell()
+                                            .ColumnSpan(3)
+                                            .PaddingVertical(5)
+                                            .BorderBottom(1)
+                                            .BorderColor(Colors.Black)
+                                            .Text("");
+
+                                        table
+                                            .Cell()
+                                            .AlignLeft()
+                                            .PaddingVertical(5)
+                                            .PaddingLeft(10)
+                                            .Text("D.N.I.");
+
+                                        table
+                                            .Cell()
+                                            .PaddingVertical(5)
+                                            .BorderBottom(1)
+                                            .BorderColor(Colors.Black)
+                                            .Text("");
+                                    }
                                 }
                                 // Razon social
                                 {
@@ -886,7 +1755,9 @@ public class ReservationService : IReservationService
                                         .PaddingVertical(5)
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text($"{currencySymbol} {reservation.AmountPaid:N2}");
+                                        .Text(
+                                            $"{currencySymbol} {reservation.TotalAmountRequired:N2}"
+                                        );
                                 }
                             });
 
@@ -1397,11 +2268,11 @@ public class ReservationService : IReservationService
             { "{forma_pago_cliente}", paymentMethodText },
             { "{precio_total_venta}", $"{currencySymbol} {quotation?.FinalPrice ?? 0:N2}" },
             { "{nro_cuota}", "Separación" },
-            { "{monto_cuota}", $"{currencySymbol} {reservation.AmountPaid:N2}" },
-            { "{monto_cuota_total}", $"{currencySymbol} {reservation.AmountPaid:N2}" },
+            { "{monto_cuota}", $"{currencySymbol} {reservation.TotalAmountRequired:N2}" },
+            { "{monto_cuota_total}", $"{currencySymbol} {reservation.TotalAmountRequired:N2}" },
             {
                 "{total_letras}",
-                ConvertAmountToWords(reservation.AmountPaid, reservation.Currency)
+                ConvertAmountToWords(reservation.TotalAmountRequired, reservation.Currency)
             },
         };
 
@@ -1579,6 +2450,95 @@ public class ReservationService : IReservationService
         // Format client title (honorific)
         var clientTitle = client?.Type == ClientType.Natural ? "Sr./Sra." : "Empresa";
 
+        // Procesar todos los representantes legales (copropietarios) de la reserva
+        var allCoOwnersText = "";
+        if (!string.IsNullOrEmpty(reservation.CoOwners))
+        {
+            try
+            {
+                // Deserializar el JSON string que contiene el array de copropietarios
+                // Formato esperado: "[{""dni"": ""..."", ""name"": ""..."", ...}, ...]"
+                var coOwners =
+                    System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
+                        reservation.CoOwners
+                    );
+
+                if (
+                    coOwners.ValueKind == System.Text.Json.JsonValueKind.Array
+                    && coOwners.GetArrayLength() > 0
+                )
+                {
+                    var coOwnersList = new List<string>();
+                    for (int i = 0; i < coOwners.GetArrayLength(); i++)
+                    {
+                        var coOwner = coOwners[i];
+                        var name = coOwner.TryGetProperty("name", out var nameElement)
+                            ? nameElement.GetString() ?? ""
+                            : "";
+                        var dni = coOwner.TryGetProperty("dni", out var dniElement)
+                            ? dniElement.GetString() ?? ""
+                            : "";
+                        var address = coOwner.TryGetProperty("address", out var addressElement)
+                            ? addressElement.GetString() ?? ""
+                            : "";
+
+                        // Solo agregar si tiene al menos nombre o DNI
+                        if (!string.IsNullOrEmpty(name) || !string.IsNullOrEmpty(dni))
+                        {
+                            // Formato: "Nombre, identificado con DNI N° X, domiciliado en Y"
+                            var coOwnerText = "";
+                            if (!string.IsNullOrEmpty(name))
+                            {
+                                coOwnerText = name;
+                            }
+                            if (!string.IsNullOrEmpty(dni))
+                            {
+                                coOwnerText += string.IsNullOrEmpty(coOwnerText)
+                                    ? $"identificado con DNI N° {dni}"
+                                    : $", identificado con DNI N° {dni}";
+                            }
+                            if (!string.IsNullOrEmpty(address))
+                            {
+                                coOwnerText += string.IsNullOrEmpty(coOwnerText)
+                                    ? $"domiciliado en {address}"
+                                    : $", domiciliado en {address}";
+                            }
+                            coOwnersList.Add(coOwnerText);
+                        }
+                    }
+                    // Unir todos los copropietarios con punto y coma y "y" antes del último
+                    if (coOwnersList.Count > 0)
+                    {
+                        string coOwnersFormatted = "";
+                        if (coOwnersList.Count == 1)
+                        {
+                            coOwnersFormatted = coOwnersList[0];
+                        }
+                        else if (coOwnersList.Count == 2)
+                        {
+                            coOwnersFormatted = $"{coOwnersList[0]} y {coOwnersList[1]}";
+                        }
+                        else
+                        {
+                            // Para más de 2: "X; Y; y Z"
+                            var allButLast = string.Join(
+                                "; ",
+                                coOwnersList.Take(coOwnersList.Count - 1)
+                            );
+                            coOwnersFormatted = $"{allButLast}; y {coOwnersList.Last()}";
+                        }
+                        // Agregar texto introductorio para la opción 2
+                        allCoOwnersText = $", y sus representantes legales: {coOwnersFormatted}";
+                    }
+                }
+            }
+            catch
+            {
+                // Si hay error al deserializar, dejar vacío
+                allCoOwnersText = "";
+            }
+        }
+
         // Load template
         var templatePath = "Templates/plantilla_contrato_gestion_hogar.docx";
         using var inputFileStream = new FileStream(templatePath, FileMode.Open, FileAccess.Read);
@@ -1621,6 +2581,7 @@ public class ReservationService : IReservationService
                 "{fecha_suscripcion_contrato_letras}",
                 ConvertDateToWords(reservation.ReservationDate)
             },
+            { "{representantes_legales}", allCoOwnersText },
         };
 
         // Fill template
@@ -1661,5 +2622,275 @@ public class ReservationService : IReservationService
         var yearWords = ConvertNumberToWords(date.Year).ToLower();
 
         return $"{dayWords} de {monthWord} del año {yearWords}";
+    }
+
+    // Payment History Management Methods
+
+    public async Task<List<PaymentHistoryDto>> GetPaymentHistoryAsync(Guid reservationId)
+    {
+        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
+            r.Id == reservationId && r.IsActive
+        );
+
+        if (reservation == null)
+            throw new ArgumentException("Reserva no encontrada");
+
+        if (string.IsNullOrEmpty(reservation.PaymentHistory))
+            return new List<PaymentHistoryDto>();
+
+        try
+        {
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            };
+            var paymentHistory = System.Text.Json.JsonSerializer.Deserialize<
+                List<PaymentHistoryDto>
+            >(reservation.PaymentHistory, options);
+            return paymentHistory ?? new List<PaymentHistoryDto>();
+        }
+        catch
+        {
+            return new List<PaymentHistoryDto>();
+        }
+    }
+
+    public async Task<PaymentHistoryDto> AddPaymentToHistoryAsync(
+        Guid reservationId,
+        AddPaymentHistoryDto paymentDto
+    )
+    {
+        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
+            r.Id == reservationId && r.IsActive
+        );
+
+        if (reservation == null)
+            throw new ArgumentException("Reserva no encontrada");
+
+        var paymentId = Guid.NewGuid().ToString();
+        var newPayment = new PaymentHistoryDto
+        {
+            Id = paymentId,
+            Date = paymentDto.Date,
+            Amount = paymentDto.Amount,
+            Method = paymentDto.Method,
+            BankName = paymentDto.BankName,
+            Reference = paymentDto.Reference,
+            Status = paymentDto.Status,
+            Notes = paymentDto.Notes,
+        };
+
+        var currentHistory = await GetPaymentHistoryAsync(reservationId);
+        currentHistory.Add(newPayment);
+
+        // Actualizar el JSON en la base de datos
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        };
+        reservation.PaymentHistory = System.Text.Json.JsonSerializer.Serialize(
+            currentHistory,
+            options
+        );
+
+        // Si el pago está confirmado, actualizar AmountPaid y RemainingAmount
+        if (paymentDto.Status == PaymentStatus.CONFIRMED)
+        {
+            reservation.AmountPaid += paymentDto.Amount;
+            reservation.RemainingAmount = Math.Max(
+                0,
+                reservation.TotalAmountRequired - reservation.AmountPaid
+            );
+        }
+
+        reservation.ModifiedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return newPayment;
+    }
+
+    public async Task<PaymentHistoryDto> UpdatePaymentInHistoryAsync(
+        Guid reservationId,
+        UpdatePaymentHistoryDto paymentDto
+    )
+    {
+        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
+            r.Id == reservationId && r.IsActive
+        );
+
+        if (reservation == null)
+            throw new ArgumentException("Reserva no encontrada");
+
+        var currentHistory = await GetPaymentHistoryAsync(reservationId);
+        var paymentIndex = currentHistory.FindIndex(p => p.Id == paymentDto.Id);
+
+        if (paymentIndex == -1)
+            throw new ArgumentException("Pago no encontrado en el historial");
+
+        var oldPayment = currentHistory[paymentIndex];
+        var oldAmount = oldPayment.Status == PaymentStatus.CONFIRMED ? oldPayment.Amount : 0;
+        var newAmount = paymentDto.Status == PaymentStatus.CONFIRMED ? paymentDto.Amount : 0;
+
+        // Actualizar el pago
+        currentHistory[paymentIndex] = new PaymentHistoryDto
+        {
+            Id = paymentDto.Id,
+            Date = paymentDto.Date,
+            Amount = paymentDto.Amount,
+            Method = paymentDto.Method,
+            BankName = paymentDto.BankName,
+            Reference = paymentDto.Reference,
+            Status = paymentDto.Status,
+            Notes = paymentDto.Notes,
+        };
+
+        // Actualizar el JSON en la base de datos
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        };
+        reservation.PaymentHistory = System.Text.Json.JsonSerializer.Serialize(
+            currentHistory,
+            options
+        );
+
+        // Recalcular AmountPaid y RemainingAmount
+        reservation.AmountPaid = reservation.AmountPaid - oldAmount + newAmount;
+        reservation.RemainingAmount = Math.Max(
+            0,
+            reservation.TotalAmountRequired - reservation.AmountPaid
+        );
+
+        reservation.ModifiedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return currentHistory[paymentIndex];
+    }
+
+    public async Task<bool> RemovePaymentFromHistoryAsync(Guid reservationId, string paymentId)
+    {
+        var reservation = await _context.Reservations.FirstOrDefaultAsync(r =>
+            r.Id == reservationId && r.IsActive
+        );
+
+        if (reservation == null)
+            throw new ArgumentException("Reserva no encontrada");
+
+        var currentHistory = await GetPaymentHistoryAsync(reservationId);
+        var paymentIndex = currentHistory.FindIndex(p => p.Id == paymentId);
+
+        if (paymentIndex == -1)
+            return false;
+
+        var paymentToRemove = currentHistory[paymentIndex];
+        var amountToRemove =
+            paymentToRemove.Status == PaymentStatus.CONFIRMED ? paymentToRemove.Amount : 0;
+
+        // Remover el pago
+        currentHistory.RemoveAt(paymentIndex);
+
+        // Actualizar el JSON en la base de datos
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        };
+        reservation.PaymentHistory = System.Text.Json.JsonSerializer.Serialize(
+            currentHistory,
+            options
+        );
+
+        // Recalcular AmountPaid y RemainingAmount
+        reservation.AmountPaid = Math.Max(0, reservation.AmountPaid - amountToRemove);
+        reservation.RemainingAmount = Math.Max(
+            0,
+            reservation.TotalAmountRequired - reservation.AmountPaid
+        );
+
+        reservation.ModifiedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return true;
+    }
+
+    /// <summary>
+    /// Helper method to translate reservation status to Spanish for user-facing messages
+    /// </summary>
+    private static string GetReservationStatusLabel(string status)
+    {
+        return status.ToUpper() switch
+        {
+            "ISSUED" => "Emitida",
+            "CANCELED" => "Cancelado",
+            "ANULATED" => "Anulado",
+            _ => status, // Si no se encuentra, devolver el valor original
+        };
+    }
+
+    /// <summary>
+    /// Helper method to add payment to history when changing reservation status
+    /// </summary>
+    private async Task AddPaymentToHistoryFromStatusChangeAsync(
+        Reservation reservation,
+        ReservationStatusDto statusDto
+    )
+    {
+        var paymentId = Guid.NewGuid().ToString();
+        var paymentDate = statusDto.PaymentDate ?? DateTime.UtcNow;
+        // Si es pago completo, usar el TotalAmountRequired; si no, usar el PaymentAmount proporcionado
+        var paymentAmount =
+            statusDto.IsFullPayment == true
+                ? reservation.TotalAmountRequired
+                : (statusDto.PaymentAmount ?? reservation.TotalAmountRequired);
+        var paymentMethod = statusDto.PaymentMethod ?? PaymentMethod.CASH;
+
+        // Traducir el estado a español para las notas
+        var statusLabel = GetReservationStatusLabel(statusDto.Status);
+
+        var newPayment = new PaymentHistoryDto
+        {
+            Id = paymentId,
+            Date = paymentDate,
+            Amount = paymentAmount,
+            Method = paymentMethod,
+            BankName = statusDto.BankName,
+            Reference = statusDto.PaymentReference,
+            Status = PaymentStatus.CONFIRMED, // Automáticamente confirmado cuando se cambia el estado
+            Notes = statusDto.PaymentNotes ?? $"Pago confirmado al cambiar estado a {statusLabel}",
+        };
+
+        var currentHistory = await GetPaymentHistoryAsync(reservation.Id);
+        currentHistory.Add(newPayment);
+
+        // Actualizar el JSON en la base de datos
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        };
+        reservation.PaymentHistory = System.Text.Json.JsonSerializer.Serialize(
+            currentHistory,
+            options
+        );
+    }
+
+    private List<PaymentHistoryDto> DeserializePaymentHistory(string? paymentHistoryJson)
+    {
+        if (string.IsNullOrEmpty(paymentHistoryJson))
+            return new List<PaymentHistoryDto>();
+
+        try
+        {
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            };
+            return System.Text.Json.JsonSerializer.Deserialize<List<PaymentHistoryDto>>(
+                    paymentHistoryJson,
+                    options
+                ) ?? new List<PaymentHistoryDto>();
+        }
+        catch
+        {
+            return new List<PaymentHistoryDto>();
+        }
     }
 }
