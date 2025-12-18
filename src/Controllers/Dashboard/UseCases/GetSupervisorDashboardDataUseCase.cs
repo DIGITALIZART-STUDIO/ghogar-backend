@@ -11,7 +11,7 @@ public class GetSupervisorDashboardDataUseCase
         _db = db;
     }
 
-    public async Task<SupervisorDashboardDto> ExecuteAsync(int? year = null)
+    public async Task<SupervisorDashboardDto> ExecuteAsync(Guid supervisorId, int? year = null)
     {
         var now = DateTime.UtcNow;
         var yearToUse = year ?? now.Year;
@@ -19,37 +19,67 @@ public class GetSupervisorDashboardDataUseCase
         var startDate = new DateTime(yearToUse, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var endDate = new DateTime(yearToUse + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        // --- CONSULTAS OPTIMIZADAS: Cargar todos los datos necesarios ---
+        // --- OBTENER ASESORES ASIGNADOS AL SUPERVISOR ---
+        var assignedAdvisorIds = await _db
+            .SupervisorSalesAdvisors.Where(ssa => ssa.SupervisorId == supervisorId && ssa.IsActive)
+            .Select(ssa => ssa.SalesAdvisorId)
+            .ToListAsync();
 
-        // 1. Cargar todos los leads del año con sus relaciones
+        // Si no hay asesores asignados, retornar dashboard vacío
+        if (!assignedAdvisorIds.Any())
+        {
+            return new SupervisorDashboardDto();
+        }
+
+        // --- CONSULTAS OPTIMIZADAS: Cargar todos los datos necesarios FILTRADOS POR ASESORES ASIGNADOS ---
+
+        // 1. Cargar leads del año asignados a los asesores del supervisor
         var allLeads = await _db
             .Leads.Include(l => l.Client)
             .Include(l => l.AssignedTo)
             .Include(l => l.Project)
-            .Where(l => l.EntryDate >= startDate && l.EntryDate < endDate)
-            .ToListAsync();
-
-        // 2. Cargar todas las tareas del año
-        var allTasks = await _db
-            .LeadTasks.Include(lt => lt.AssignedTo)
-            .Where(lt => lt.CreatedAt >= startDate && lt.CreatedAt < endDate)
-            .ToListAsync();
-
-        // 3. Cargar cotizaciones del año
-        var allQuotations = await _db
-            .Quotations.Where(q => q.CreatedAt >= startDate && q.CreatedAt < endDate)
-            .ToListAsync();
-
-        // 4. Cargar reservaciones del año
-        var allReservations = await _db
-            .Reservations.Where(r =>
-                r.ReservationDate >= DateOnly.FromDateTime(startDate)
-                && r.ReservationDate < DateOnly.FromDateTime(endDate)
+            .Where(l =>
+                l.EntryDate >= startDate
+                && l.EntryDate < endDate
+                && l.AssignedToId.HasValue
+                && assignedAdvisorIds.Contains(l.AssignedToId!.Value)
             )
             .ToListAsync();
 
-        // 5. Cargar todos los usuarios (asesores)
-        var allUsers = await _db.Users.Where(u => u.IsActive).ToListAsync();
+        // 2. Cargar tareas del año asignadas a los asesores del supervisor
+        var allTasks = await _db
+            .LeadTasks.Include(lt => lt.AssignedTo)
+            .Where(lt =>
+                lt.CreatedAt >= startDate
+                && lt.CreatedAt < endDate
+                && assignedAdvisorIds.Contains(lt.AssignedToId)
+            )
+            .ToListAsync();
+
+        // 3. Cargar cotizaciones del año de los asesores del supervisor
+        var allQuotations = await _db
+            .Quotations.Where(q =>
+                q.CreatedAt >= startDate
+                && q.CreatedAt < endDate
+                && assignedAdvisorIds.Contains(q.AdvisorId)
+            )
+            .ToListAsync();
+
+        // 4. Cargar reservaciones del año de los asesores del supervisor
+        var allReservations = await _db
+            .Reservations.Include(r => r.Quotation)
+            .Where(r =>
+                r.ReservationDate >= DateOnly.FromDateTime(startDate)
+                && r.ReservationDate < DateOnly.FromDateTime(endDate)
+                && r.Quotation != null
+                && assignedAdvisorIds.Contains(r.Quotation!.AdvisorId)
+            )
+            .ToListAsync();
+
+        // 5. Cargar solo los usuarios (asesores) asignados al supervisor
+        var allUsers = await _db
+            .Users.Where(u => u.IsActive && assignedAdvisorIds.Contains(u.Id))
+            .ToListAsync();
 
         // --- CÁLCULOS EN MEMORIA (más eficiente) ---
 
@@ -75,11 +105,8 @@ public class GetSupervisorDashboardDataUseCase
         {
             QuotationsGenerated = allQuotations.Count,
             ReservationsActive = allReservations.Count(r => r.Status == ReservationStatus.ISSUED),
-            TasksToday = allTasks.Count(t =>
-                !t.IsCompleted && t.ScheduledDate.Date == now.Date
-            ),
+            TasksToday = allTasks.Count(t => !t.IsCompleted && t.ScheduledDate.Date == now.Date),
             AvgConversionRate = avgConversionRate,
-            AvgResponseTime = 2.5, // TODO: Calcular basado en timestamps reales
         };
 
         // Rendimiento de asesores
@@ -126,6 +153,58 @@ public class GetSupervisorDashboardDataUseCase
         // Ordenar por eficiencia descendente
         advisors = advisors.OrderByDescending(a => a.Efficiency).ToList();
 
+        // --- TEAM DATA (similar al admin pero solo para asesores asignados) ---
+        // Pre-cargar todos los datos necesarios en consultas optimizadas
+        var userRolesDict = await (
+            from ur in _db.UserRoles
+            join r in _db.Roles on ur.RoleId equals r.Id
+            where assignedAdvisorIds.Contains(ur.UserId)
+            select new { UserId = ur.UserId, RoleName = r.Name }
+        )
+            .GroupBy(x => x.UserId)
+            .ToDictionaryAsync(
+                g => g.Key,
+                g => g.First().RoleName // Toma el primer rol si hay múltiples
+            );
+
+        var quotationsByAdvisor = allQuotations
+            .GroupBy(q => q.AdvisorId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var reservationsByAdvisor = allReservations
+            .Where(r => r.Quotation != null)
+            .GroupBy(r => r.Quotation!.AdvisorId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var teamData = new List<SupervisorTeamMemberDto>();
+        foreach (var u in allUsers)
+        {
+            var role = userRolesDict.GetValueOrDefault(u.Id, "Sin rol");
+            var quotations = quotationsByAdvisor.GetValueOrDefault(u.Id, 0);
+            var reservations = reservationsByAdvisor.GetValueOrDefault(u.Id, 0);
+
+            double efficiency =
+                quotations > 0 ? Math.Round((reservations / (double)quotations) * 100, 1) : 0;
+
+            teamData.Add(
+                new SupervisorTeamMemberDto
+                {
+                    Name = u.Name,
+                    Role = role,
+                    Quotations = quotations,
+                    Reservations = reservations,
+                    Efficiency = efficiency,
+                }
+            );
+        }
+
+        // Selecciona solo el top 10 por eficiencia
+        teamData = teamData
+            .OrderByDescending(t => t.Efficiency)
+            .ThenByDescending(t => t.Reservations)
+            .Take(10)
+            .ToList();
+
         // Leads recientes (últimos 10, priorizando sin asignar y próximos a expirar)
         var recentLeads = allLeads
             .OrderByDescending(l => !l.AssignedToId.HasValue) // Sin asignar primero
@@ -162,10 +241,7 @@ public class GetSupervisorDashboardDataUseCase
                 Count = leadsKpi.AttendedLeads,
                 Percentage =
                     totalRegistered > 0
-                        ? Math.Round(
-                            (leadsKpi.AttendedLeads / (double)totalRegistered) * 100,
-                            1
-                        )
+                        ? Math.Round((leadsKpi.AttendedLeads / (double)totalRegistered) * 100, 1)
                         : 0,
             },
             new ConversionFunnelDto
@@ -174,10 +250,7 @@ public class GetSupervisorDashboardDataUseCase
                 Count = leadsKpi.InFollowUpLeads,
                 Percentage =
                     totalRegistered > 0
-                        ? Math.Round(
-                            (leadsKpi.InFollowUpLeads / (double)totalRegistered) * 100,
-                            1
-                        )
+                        ? Math.Round((leadsKpi.InFollowUpLeads / (double)totalRegistered) * 100, 1)
                         : 0,
             },
             new ConversionFunnelDto
@@ -186,10 +259,7 @@ public class GetSupervisorDashboardDataUseCase
                 Count = leadsKpi.CompletedLeads,
                 Percentage =
                     totalRegistered > 0
-                        ? Math.Round(
-                            (leadsKpi.CompletedLeads / (double)totalRegistered) * 100,
-                            1
-                        )
+                        ? Math.Round((leadsKpi.CompletedLeads / (double)totalRegistered) * 100, 1)
                         : 0,
             },
         };
@@ -220,9 +290,7 @@ public class GetSupervisorDashboardDataUseCase
             var date = now.Date.AddDays(-i);
             var nextDate = date.AddDays(1);
 
-            var dayLeads = allLeads.Where(l =>
-                l.EntryDate >= date && l.EntryDate < nextDate
-            );
+            var dayLeads = allLeads.Where(l => l.EntryDate >= date && l.EntryDate < nextDate);
 
             weeklyActivity.Add(
                 new WeeklyActivityDto
@@ -263,18 +331,13 @@ public class GetSupervisorDashboardDataUseCase
 
                 // Calcular días promedio para completar
                 var completedWithDates = projectLeadsList
-                    .Where(l =>
-                        l.Status == LeadStatus.Completed
-                        && l.ModifiedAt > l.EntryDate
-                    )
+                    .Where(l => l.Status == LeadStatus.Completed && l.ModifiedAt > l.EntryDate)
                     .ToList();
 
                 var avgDays =
                     completedWithDates.Count > 0
                         ? Math.Round(
-                            completedWithDates.Average(l =>
-                                (l.ModifiedAt - l.EntryDate).TotalDays
-                            ),
+                            completedWithDates.Average(l => (l.ModifiedAt - l.EntryDate).TotalDays),
                             1
                         )
                         : 0;
@@ -287,10 +350,7 @@ public class GetSupervisorDashboardDataUseCase
                     LeadsCompleted = completed,
                     ConversionRate =
                         projectLeadsList.Count > 0
-                            ? Math.Round(
-                                (completed / (double)projectLeadsList.Count) * 100,
-                                1
-                            )
+                            ? Math.Round((completed / (double)projectLeadsList.Count) * 100, 1)
                             : 0,
                     AvgDaysToComplete = avgDays,
                 };
@@ -303,6 +363,7 @@ public class GetSupervisorDashboardDataUseCase
             LeadsKpi = leadsKpi,
             TeamMetrics = teamMetrics,
             Advisors = advisors,
+            TeamData = teamData,
             RecentLeads = recentLeads,
             ConversionFunnel = conversionFunnel,
             LeadSources = leadSources,

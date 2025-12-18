@@ -81,8 +81,17 @@ public class DashboardController : ControllerBase
     {
         try
         {
-            var result = await _getSupervisorDashboardDataUseCase.ExecuteAsync(year);
+            // Obtener el ID del supervisor actual desde el token
+            var currentSupervisorId = User.GetCurrentUserIdOrThrow();
+            var result = await _getSupervisorDashboardDataUseCase.ExecuteAsync(
+                currentSupervisorId,
+                year
+            );
             return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("Usuario no autenticado");
         }
         catch (Exception ex)
         {
@@ -92,9 +101,7 @@ public class DashboardController : ControllerBase
 
     [HttpGet("manager")]
     [AuthorizeCurrentUser("Manager", "Admin", "SuperAdmin")]
-    public async Task<ActionResult<ManagerDashboardDto>> GetManagerDashboard(
-        [FromQuery] int? year
-    )
+    public async Task<ActionResult<ManagerDashboardDto>> GetManagerDashboard([FromQuery] int? year)
     {
         try
         {
