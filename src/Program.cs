@@ -72,15 +72,25 @@ builder.Services.AddCors(options =>
         "AllowOrigins",
         policy =>
         {
-            var corsSettings = builder
-                .Services.BuildServiceProvider()
-                .GetRequiredService<IOptions<CorsConfiguration>>()
-                .Value;
-            var allowedOrigins = corsSettings.AllowedOrigins;
+            var corsSection = builder.Configuration.GetSection("Cors");
+            var allowedOrigins = corsSection.GetSection("AllowedOrigins").Get<string[]>();
+
+            // Fallback for environment variables that might be a single comma-separated string
+            if (allowedOrigins == null || allowedOrigins.Length == 0)
+            {
+                var allowedOriginsString = corsSection.GetValue<string>("AllowedOrigins");
+                if (!string.IsNullOrEmpty(allowedOriginsString))
+                {
+                    allowedOrigins = allowedOriginsString.Split(
+                        ',',
+                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                    );
+                }
+            }
 
             if (allowedOrigins == null || allowedOrigins.Length == 0)
             {
-                throw new Exception("Allowed origins not found in configuration");
+                throw new Exception("Allowed origins not found in configuration. Check your 'Cors:AllowedOrigins' setting.");
             }
 
             policy
@@ -92,7 +102,6 @@ builder.Services.AddCors(options =>
         }
     );
 });
-
 // Configure Identity
 builder
     .Services.AddIdentityCore<User>(options =>
