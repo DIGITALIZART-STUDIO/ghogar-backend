@@ -21,7 +21,6 @@ public class TeamMetricsDto
     public int ReservationsActive { get; set; }
     public int TasksToday { get; set; }
     public double AvgConversionRate { get; set; }
-    public double AvgResponseTime { get; set; }
 }
 
 // Datos de cada asesor
@@ -105,12 +104,23 @@ public class ProjectLeadsAnalysisDto
     public double AvgDaysToComplete { get; set; }
 }
 
+// TeamMemberDto para el dashboard de supervisor (similar al admin)
+public class SupervisorTeamMemberDto
+{
+    public string Name { get; set; } = "";
+    public string Role { get; set; } = "";
+    public int Quotations { get; set; }
+    public int Reservations { get; set; }
+    public double Efficiency { get; set; }
+}
+
 // DTO principal del dashboard de supervisor
 public class SupervisorDashboardDto
 {
     public SupervisorLeadsKpiDto LeadsKpi { get; set; } = new();
     public TeamMetricsDto TeamMetrics { get; set; } = new();
     public List<AdvisorPerformanceDto> Advisors { get; set; } = new();
+    public List<SupervisorTeamMemberDto> TeamData { get; set; } = new();
     public List<RecentLeadDto> RecentLeads { get; set; } = new();
     public List<ConversionFunnelDto> ConversionFunnel { get; set; } = new();
     public List<LeadSourceDistributionDto> LeadSources { get; set; } = new();
