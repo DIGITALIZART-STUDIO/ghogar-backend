@@ -1,0 +1,27 @@
+services:
+  {{ project_name }}-db-{{ project_stage }}:
+    image: postgres:17-alpine
+    container_name: {{ project_name }}-db-{{ project_stage }}
+    restart: unless-stopped
+    shm_size: 128mb
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    environment:
+      - TZ=America/Lima
+    env_file:
+      - ./.env.database
+    networks:
+      - {{ project_name }}-network-{{ project_stage }}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 2
+      start_period: 5s
+
+networks:
+  proxy:
+    external: true
+  {{ project_name }}-network-{{ project_stage }}:
+    driver: bridge
+
