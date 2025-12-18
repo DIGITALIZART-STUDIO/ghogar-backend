@@ -2404,6 +2404,95 @@ public class ReservationService : IReservationService
         // Format client title (honorific)
         var clientTitle = client?.Type == ClientType.Natural ? "Sr./Sra." : "Empresa";
 
+        // Procesar todos los representantes legales (copropietarios) de la reserva
+        var allCoOwnersText = "";
+        if (!string.IsNullOrEmpty(reservation.CoOwners))
+        {
+            try
+            {
+                // Deserializar el JSON string que contiene el array de copropietarios
+                // Formato esperado: "[{""dni"": ""..."", ""name"": ""..."", ...}, ...]"
+                var coOwners =
+                    System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
+                        reservation.CoOwners
+                    );
+
+                if (
+                    coOwners.ValueKind == System.Text.Json.JsonValueKind.Array
+                    && coOwners.GetArrayLength() > 0
+                )
+                {
+                    var coOwnersList = new List<string>();
+                    for (int i = 0; i < coOwners.GetArrayLength(); i++)
+                    {
+                        var coOwner = coOwners[i];
+                        var name = coOwner.TryGetProperty("name", out var nameElement)
+                            ? nameElement.GetString() ?? ""
+                            : "";
+                        var dni = coOwner.TryGetProperty("dni", out var dniElement)
+                            ? dniElement.GetString() ?? ""
+                            : "";
+                        var address = coOwner.TryGetProperty("address", out var addressElement)
+                            ? addressElement.GetString() ?? ""
+                            : "";
+
+                        // Solo agregar si tiene al menos nombre o DNI
+                        if (!string.IsNullOrEmpty(name) || !string.IsNullOrEmpty(dni))
+                        {
+                            // Formato: "Nombre, identificado con DNI N° X, domiciliado en Y"
+                            var coOwnerText = "";
+                            if (!string.IsNullOrEmpty(name))
+                            {
+                                coOwnerText = name;
+                            }
+                            if (!string.IsNullOrEmpty(dni))
+                            {
+                                coOwnerText += string.IsNullOrEmpty(coOwnerText)
+                                    ? $"identificado con DNI N° {dni}"
+                                    : $", identificado con DNI N° {dni}";
+                            }
+                            if (!string.IsNullOrEmpty(address))
+                            {
+                                coOwnerText += string.IsNullOrEmpty(coOwnerText)
+                                    ? $"domiciliado en {address}"
+                                    : $", domiciliado en {address}";
+                            }
+                            coOwnersList.Add(coOwnerText);
+                        }
+                    }
+                    // Unir todos los copropietarios con punto y coma y "y" antes del último
+                    if (coOwnersList.Count > 0)
+                    {
+                        string coOwnersFormatted = "";
+                        if (coOwnersList.Count == 1)
+                        {
+                            coOwnersFormatted = coOwnersList[0];
+                        }
+                        else if (coOwnersList.Count == 2)
+                        {
+                            coOwnersFormatted = $"{coOwnersList[0]} y {coOwnersList[1]}";
+                        }
+                        else
+                        {
+                            // Para más de 2: "X; Y; y Z"
+                            var allButLast = string.Join(
+                                "; ",
+                                coOwnersList.Take(coOwnersList.Count - 1)
+                            );
+                            coOwnersFormatted = $"{allButLast}; y {coOwnersList.Last()}";
+                        }
+                        // Agregar texto introductorio para la opción 2
+                        allCoOwnersText = $", y sus representantes legales: {coOwnersFormatted}";
+                    }
+                }
+            }
+            catch
+            {
+                // Si hay error al deserializar, dejar vacío
+                allCoOwnersText = "";
+            }
+        }
+
         // Load template
         var templatePath = "Templates/plantilla_contrato_gestion_hogar.docx";
         using var inputFileStream = new FileStream(templatePath, FileMode.Open, FileAccess.Read);
@@ -2446,6 +2535,7 @@ public class ReservationService : IReservationService
                 "{fecha_suscripcion_contrato_letras}",
                 ConvertDateToWords(reservation.ReservationDate)
             },
+            { "{representantes_legales}", allCoOwnersText },
         };
 
         // Fill template
