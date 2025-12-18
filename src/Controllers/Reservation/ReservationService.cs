@@ -1520,91 +1520,137 @@ public class ReservationService : IReservationService
                                         .Text("");
                                 }
 
-                                // Co-propietario
+                                // Representantes legales (copropietarios) de la reserva
                                 {
-                                    table
-                                        .Cell()
-                                        .ColumnSpan(2)
-                                        .AlignLeft()
-                                        .PaddingVertical(5)
-                                        .Text("Nombre del Co-propietario:");
-
-                                    string coOwnerName = "";
-                                    string coOwnerDni = "";
-
-                                    // Procesar el JSON de co-owners para extraer solo el primero
-                                    if (!string.IsNullOrEmpty(client?.CoOwners))
+                                    // Procesar TODOS los representantes legales de la reserva
+                                    var coOwnersList = new List<(string name, string dni)>();
+                                    if (!string.IsNullOrEmpty(reservation.CoOwners))
                                     {
                                         try
                                         {
-                                            // Deserializar el JSON a una lista de objetos anónimos
                                             var coOwners =
                                                 System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
-                                                    client.CoOwners
+                                                    reservation.CoOwners
                                                 );
 
-                                            // Verificar que sea un array y tenga al menos un elemento
                                             if (
                                                 coOwners.ValueKind
                                                     == System.Text.Json.JsonValueKind.Array
                                                 && coOwners.GetArrayLength() > 0
                                             )
                                             {
-                                                // Obtener el primer elemento
-                                                var firstCoOwner = coOwners[0];
-
-                                                // Intentar obtener la propiedad "name" del primer co-owner
-                                                if (
-                                                    firstCoOwner.TryGetProperty(
-                                                        "name",
-                                                        out var nameElement
-                                                    )
-                                                )
+                                                for (int i = 0; i < coOwners.GetArrayLength(); i++)
                                                 {
-                                                    coOwnerName = nameElement.GetString() ?? "";
-                                                }
+                                                    var coOwner = coOwners[i];
+                                                    string coOwnerName = "";
+                                                    string coOwnerDni = "";
 
-                                                // Intentar obtener la propiedad "dni" del primer co-owner
-                                                if (
-                                                    firstCoOwner.TryGetProperty(
-                                                        "dni",
-                                                        out var dniElement
+                                                    if (
+                                                        coOwner.TryGetProperty(
+                                                            "name",
+                                                            out var nameElement
+                                                        )
                                                     )
-                                                )
-                                                {
-                                                    coOwnerDni = dniElement.GetString() ?? "";
+                                                    {
+                                                        coOwnerName = nameElement.GetString() ?? "";
+                                                    }
+
+                                                    if (
+                                                        coOwner.TryGetProperty(
+                                                            "dni",
+                                                            out var dniElement
+                                                        )
+                                                    )
+                                                    {
+                                                        coOwnerDni = dniElement.GetString() ?? "";
+                                                    }
+
+                                                    if (
+                                                        !string.IsNullOrEmpty(coOwnerName)
+                                                        || !string.IsNullOrEmpty(coOwnerDni)
+                                                    )
+                                                    {
+                                                        coOwnersList.Add((coOwnerName, coOwnerDni));
+                                                    }
                                                 }
                                             }
                                         }
                                         catch
                                         {
-                                            // En caso de error al procesar el JSON, dejar los campos vacíos
-                                            coOwnerName = "";
-                                            coOwnerDni = "";
+                                            // En caso de error, dejar la lista vacía
                                         }
                                     }
 
-                                    table
-                                        .Cell()
-                                        .ColumnSpan(3)
-                                        .PaddingVertical(5)
-                                        .BorderBottom(1)
-                                        .BorderColor(Colors.Black)
-                                        .Text(coOwnerName);
+                                    // Mostrar todos los representantes legales
+                                    if (coOwnersList.Count > 0)
+                                    {
+                                        for (int i = 0; i < coOwnersList.Count; i++)
+                                        {
+                                            var (coOwnerName, coOwnerDni) = coOwnersList[i];
+                                            var labelText = i == 0 ? "Representantes legales:" : "";
 
-                                    table
-                                        .Cell()
-                                        .AlignLeft()
-                                        .PaddingVertical(5)
-                                        .PaddingLeft(10)
-                                        .Text("D.N.I.");
+                                            table
+                                                .Cell()
+                                                .ColumnSpan(2)
+                                                .AlignLeft()
+                                                .PaddingVertical(5)
+                                                .Text(labelText);
 
-                                    table
-                                        .Cell()
-                                        .PaddingVertical(5)
-                                        .BorderBottom(1)
-                                        .BorderColor(Colors.Black)
-                                        .Text(coOwnerDni);
+                                            table
+                                                .Cell()
+                                                .ColumnSpan(3)
+                                                .PaddingVertical(5)
+                                                .BorderBottom(1)
+                                                .BorderColor(Colors.Black)
+                                                .Text(coOwnerName);
+
+                                            table
+                                                .Cell()
+                                                .AlignLeft()
+                                                .PaddingVertical(5)
+                                                .PaddingLeft(10)
+                                                .Text("D.N.I.");
+
+                                            table
+                                                .Cell()
+                                                .PaddingVertical(5)
+                                                .BorderBottom(1)
+                                                .BorderColor(Colors.Black)
+                                                .Text(coOwnerDni);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // Si no hay representantes, mostrar una fila vacía
+                                        table
+                                            .Cell()
+                                            .ColumnSpan(2)
+                                            .AlignLeft()
+                                            .PaddingVertical(5)
+                                            .Text("Representantes legales:");
+
+                                        table
+                                            .Cell()
+                                            .ColumnSpan(3)
+                                            .PaddingVertical(5)
+                                            .BorderBottom(1)
+                                            .BorderColor(Colors.Black)
+                                            .Text("");
+
+                                        table
+                                            .Cell()
+                                            .AlignLeft()
+                                            .PaddingVertical(5)
+                                            .PaddingLeft(10)
+                                            .Text("D.N.I.");
+
+                                        table
+                                            .Cell()
+                                            .PaddingVertical(5)
+                                            .BorderBottom(1)
+                                            .BorderColor(Colors.Black)
+                                            .Text("");
+                                    }
                                 }
                                 // Razon social
                                 {
