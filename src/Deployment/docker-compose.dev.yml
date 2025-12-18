@@ -1,0 +1,58 @@
+services:
+  gestionhogar-backend-develop:
+    image: docker.io/araozu/gestionhogar-backend-develop:${GESTIONHOGAR_BACKEND_VERSION:-latest}
+    container_name: gestionhogar-backend-develop
+    restart: unless-stopped
+    depends_on:
+      gestionhogar-db-develop:
+        condition: service_started
+    env_file:
+      - .env.backend
+    ports:
+      - 8888:8080
+    networks:
+      - proxy
+      - gestionhogar-network-develop
+
+  # gestionhogar-frontend-develop:
+  #   image: docker.io/araozu/gestionhogar-frontend-develop:latest
+  #   container_name: gestionhogar-frontend-develop
+  #   restart: unless-stopped
+  #   depends_on:
+  #     gestionhogar-backend-develop:
+  #       condition: service_started
+  #   env_file:
+  #     - .env.frontend
+  #   networks:
+  #     - proxy
+  #     - gestionhogar-network-develop
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.rule=Host(`gestionhogar-frontend-develop.araozu.dev`)"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.entrypoints=websecure"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.tls=true"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.tls.certresolver=dns-cloudflare"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.tls.domains[0].main=araozu.dev"
+  #     - "traefik.http.routers.gestionhogar-frontend-develop.tls.domains[0].sans=*.araozu.dev"
+  #     - "traefik.http.services.gestionhogar-frontend-develop.loadbalancer.server.port=3000"
+
+  gestionhogar-db-develop:
+    image: postgres:latest
+    container_name: gestionhogar-db-develop
+    restart: unless-stopped
+    # set shared memory limit when using docker-compose
+    shm_size: 128mb
+    volumes:
+      # store db data in a volume
+      - ./data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+    networks:
+      - gestionhogar-network-develop
+
+networks:
+  proxy:
+  gestionhogar-network-develop:
+    driver: bridge
+

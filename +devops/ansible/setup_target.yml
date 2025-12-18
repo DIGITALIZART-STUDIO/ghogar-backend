@@ -1,0 +1,58 @@
+---
+- name: Setup target machine
+  become: false
+  hosts: all
+  vars:
+      #
+      # -- required --
+      #
+      remote_folder: '{{ _remote_folder }}'
+      project_name: '{{ _project_name }}'
+      project_stage: '{{ _project_stage }}'
+      #
+      # -- generated --
+      #
+      db_host_name: '{{ project_name }}-db-{{ project_stage }}'
+      db_name: '{{ project_stage }}-db-{{ project_stage }}'
+      db_username: 'app_user_{{ project_stage }}'
+
+  tasks:
+    - name: Ensure target directory exists
+      file:
+        path: '{{ remote_folder }}'
+        state: directory
+        mode: '0755'
+        owner: '{{ ansible_user }}'
+        group: '{{ ansible_user }}'
+
+    - name: Generate database password
+      set_fact:
+        db_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+
+    # Create database .env.database file (only if it doesn't exist) - shared across services
+    - name: Create database .env.database file
+      copy:
+        content: |
+          # Database credentials generated on {{ ansible_date_time.iso8601 }}
+          POSTGRES_USER={{ db_username }}
+          POSTGRES_PASSWORD={{ db_password }}
+          POSTGRES_DB={{ db_name }}
+
+          # EF connection string
+          ConnectionStrings__DefaultConnection="Host={{ db_host_name }};Database={{ db_name }};Username={{ db_username }};Password={{ db_password }};"
+        dest: "{{ remote_folder }}/.env.database"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600'
+        force: false
+
+    # Setup base docker compose with templates
+    # Uses: project_name & project_stage
+    - name: Setup base docker compose file
+      template:
+        src: ../docker/docker-compose.base.yml.j2
+        dest: "{{ remote_folder }}/docker-compose.base.yml"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+
