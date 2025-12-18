@@ -500,21 +500,43 @@ public class LotService : ILotService
         if (lot == null)
             return null;
 
-        // Si se está cambiando el número, verificar que no exista otro lote con ese número en el bloque
+        // Determinar el bloque objetivo (nuevo o actual)
+        var targetBlockId = dto.BlockId ?? lot.BlockId;
+        var targetLotNumber = dto.LotNumber?.Trim() ?? lot.LotNumber;
+
+        // Si se está cambiando el bloque, validar el nuevo bloque
+        if (dto.BlockId.HasValue && dto.BlockId.Value != lot.BlockId)
+        {
+            var newBlock = await _context
+                .Blocks.Include(b => b.Project)
+                .FirstOrDefaultAsync(b => b.Id == dto.BlockId.Value);
+
+            if (newBlock == null)
+                throw new InvalidOperationException($"Bloque con ID {dto.BlockId.Value} no encontrado");
+
+            if (!newBlock.IsActive)
+                throw new InvalidOperationException("No se puede mover un lote a un bloque inactivo");
+
+            if (!newBlock.Project.IsActive)
+                throw new InvalidOperationException("No se puede mover un lote a un proyecto inactivo");
+        }
+
+        // Verificar que no exista otro lote con el mismo número en el bloque objetivo
+        // (ya sea porque se cambió el número, el bloque, o ambos)
         if (
-            !string.IsNullOrWhiteSpace(dto.LotNumber)
-            && dto.LotNumber.ToLower() != lot.LotNumber.ToLower()
+            (dto.LotNumber != null && dto.LotNumber.ToLower() != lot.LotNumber.ToLower())
+            || (dto.BlockId.HasValue && dto.BlockId.Value != lot.BlockId)
         )
         {
             var existingLot = await _context.Lots.FirstOrDefaultAsync(l =>
-                l.BlockId == lot.BlockId
-                && l.LotNumber.ToLower() == dto.LotNumber.ToLower()
+                l.BlockId == targetBlockId
+                && l.LotNumber.ToLower() == targetLotNumber.ToLower()
                 && l.Id != id
             );
 
             if (existingLot != null)
                 throw new InvalidOperationException(
-                    $"Ya existe un lote con el número '{dto.LotNumber}' en este bloque"
+                    $"Ya existe un lote con el número '{targetLotNumber}' en este bloque"
                 );
         }
 
