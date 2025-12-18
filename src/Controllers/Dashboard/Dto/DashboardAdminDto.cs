@@ -110,7 +110,7 @@ public class PaymentPipelineStageDto
     public decimal Amount { get; set; }
 }
 
-public class DashboardReservationStatusDto
+public class ReservationStatusDto
 {
     public string Status { get; set; } = "";
     public int Count { get; set; }
@@ -178,7 +178,7 @@ public class DashboardAdminDto
     public List<RecentClientDto> RecentClients { get; set; } = new();
 
     public List<PaymentPipelineStageDto> PaymentPipeline { get; set; } = new();
-    public List<DashboardReservationStatusDto> ReservationStatusData { get; set; } = new();
+    public List<ReservationStatusDto> ReservationStatusData { get; set; } = new();
     public List<PaymentMethodDto> PaymentMethodsData { get; set; } = new();
     public List<UpcomingPaymentDto> UpcomingPayments { get; set; } = new();
     public List<CashFlowDto> CashFlowData { get; set; } = new();

@@ -62,10 +62,6 @@ public class Client : IEntity
         var (isValid, _) = ValidateClientDetails();
         return isValid;
     }
-
-    // Navegación hacia los referidos que ha hecho este cliente
-    [JsonIgnore]
-    public ICollection<Referral>? Referrals { get; set; }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

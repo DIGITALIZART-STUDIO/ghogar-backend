@@ -107,41 +107,25 @@ public class QuotationsController : ControllerBase
         }
     }
 
-    [HttpGet("advisor/paginated")]
+    [HttpGet("advisor/{advisorId:guid}/paginated")]
     public async Task<
         ActionResult<PaginatedResponseV2<QuotationSummaryDTO>>
     > GetQuotationsByAdvisorPaginated(
+        Guid advisorId,
         [FromServices] PaginationService paginationService,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] string? search = null,
-        [FromQuery] QuotationStatus[]? status = null,
-        [FromQuery] Guid[]? clientId = null,
-        [FromQuery] Guid? projectId = null,
-        [FromQuery] string? orderBy = null
+        [FromQuery] int pageSize = 10
     )
     {
         try
         {
-            // Obtener el usuario actual
-            var currentUserId = User.GetCurrentUserIdOrThrow();
-
             var result = await _quotationService.GetQuotationsByAdvisorIdPaginatedAsync(
-                currentUserId,
+                advisorId,
                 page,
                 pageSize,
-                paginationService,
-                search,
-                status,
-                clientId,
-                projectId,
-                orderBy
+                paginationService
             );
             return Ok(result);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Unauthorized("No se pudo identificar al usuario actual");
         }
         catch (Exception ex)
         {
@@ -150,31 +134,15 @@ public class QuotationsController : ControllerBase
         }
     }
 
-    [HttpGet("advisor/accepted")]
+    [HttpGet("advisor/accepted/{advisorId:guid}")]
     public async Task<
-        ActionResult<PaginatedResponseV2<QuotationSummaryDTO>>
-    > GetAcceptedQuotationsByAdvisor(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] string? search = null,
-        [FromQuery] string? orderBy = null,
-        [FromQuery] string? orderDirection = "asc",
-        [FromQuery] string? preselectedId = null
-    )
+        ActionResult<IEnumerable<QuotationSummaryDTO>>
+    > GetAcceptedQuotationsByAdvisor(Guid advisorId)
     {
         try
         {
-            // Obtener el usuario actual
-            var currentUserId = User.GetCurrentUserIdOrThrow();
-
-            var quotations = await _quotationService.GetAcceptedQuotationsByAdvisorPaginatedAsync(
-                currentUserId,
-                page,
-                pageSize,
-                search,
-                orderBy,
-                orderDirection,
-                preselectedId
+            var quotations = await _quotationService.GetAcceptedQuotationsByAdvisorIdAsync(
+                advisorId
             );
             return Ok(quotations);
         }

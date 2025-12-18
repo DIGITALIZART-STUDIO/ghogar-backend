@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using GestionHogar.Dtos;
-using GestionHogar.Model;
 using GestionHogar.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -40,46 +39,17 @@ public class BlocksController : ControllerBase
     }
 
     [HttpGet("project/{projectId:guid}")]
-    [EndpointSummary("Get blocks by project with pagination")]
-    [EndpointDescription(
-        "Retrieves blocks by project with pagination, search and ordering capabilities"
-    )]
-    public async Task<ActionResult<PaginatedResponseV2<BlockDTO>>> GetBlocksByProject(
-        Guid projectId,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] string? search = null,
-        [FromQuery] string? orderBy = null,
-        [FromQuery] string? orderDirection = "asc",
-        [FromQuery] string? preselectedId = null
-    )
+    public async Task<ActionResult<IEnumerable<BlockDTO>>> GetBlocksByProject(Guid projectId)
     {
         try
         {
-            // Validar parámetros
-            if (page < 1)
-                page = 1;
-            if (pageSize < 1 || pageSize > 100)
-                pageSize = 10;
-
-            var result = await _blockService.GetBlocksByProjectIdAsync(
-                projectId,
-                page,
-                pageSize,
-                search,
-                orderBy,
-                orderDirection,
-                preselectedId
-            );
-            return Ok(result);
+            var blocks = await _blockService.GetBlocksByProjectIdAsync(projectId);
+            return Ok(blocks);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al obtener bloques del proyecto con paginación");
-            return StatusCode(
-                500,
-                new { message = "Error interno del servidor", error = ex.Message }
-            );
+            _logger.LogError(ex, "Error al obtener bloques del proyecto");
+            return StatusCode(500, "Error interno del servidor");
         }
     }
 
@@ -94,59 +64,6 @@ public class BlocksController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al obtener bloques activos del proyecto");
-            return StatusCode(500, "Error interno del servidor");
-        }
-    }
-
-    [HttpGet("project/{projectId:guid}/active/paginated")]
-    public async Task<
-        ActionResult<PaginatedResponseV2<BlockDTO>>
-    > GetActiveBlocksByProjectPaginated(
-        Guid projectId,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] string? search = null,
-        [FromQuery] string? orderBy = null,
-        [FromQuery] string? orderDirection = "asc",
-        [FromQuery] string? preselectedId = null
-    )
-    {
-        try
-        {
-            // Validar parámetros
-            if (page < 1)
-            {
-                return BadRequest("La página debe ser mayor a 0");
-            }
-            if (pageSize < 1 || pageSize > 100)
-            {
-                return BadRequest("El tamaño de página debe estar entre 1 y 100");
-            }
-
-            _logger.LogInformation(
-                "Obteniendo bloques activos del proyecto {ProjectId} paginados, página: {Page}, tamaño: {PageSize}, búsqueda: {Search}, preselectedId: {PreselectedId}",
-                projectId,
-                page,
-                pageSize,
-                search ?? "null",
-                preselectedId ?? "null"
-            );
-
-            var result = await _blockService.GetActiveBlocksByProjectIdPaginatedAsync(
-                projectId,
-                page,
-                pageSize,
-                search,
-                orderBy,
-                orderDirection,
-                preselectedId
-            );
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener bloques activos del proyecto paginados");
             return StatusCode(500, "Error interno del servidor");
         }
     }

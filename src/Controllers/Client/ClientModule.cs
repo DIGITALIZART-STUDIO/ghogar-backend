@@ -6,9 +6,8 @@ public class ClientModule : IModule
 {
     public IServiceCollection SetupModule(IServiceCollection services, IConfiguration configuration)
     {
-        // Registrar los servicios
+        // Registrar el servicio
         services.AddScoped<IClientService, ClientService>();
-        services.AddScoped<IExcelTemplateService, ExcelTemplateService>();
 
         return services;
     }

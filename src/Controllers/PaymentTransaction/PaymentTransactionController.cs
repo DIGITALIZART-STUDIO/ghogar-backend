@@ -72,7 +72,7 @@ public class PaymentTransactionController : ControllerBase
     }
 
     [HttpGet("quota-status/by-reservation/{reservationId:guid}/{excludeTransactionId:guid?}")]
-    public async Task<ActionResult<PaymentQuotaStatusDTO>> GetQuotaStatus(
+    public async Task<ActionResult<IEnumerable<PaymentQuotaSimpleDTO>>> GetQuotaStatus(
         Guid reservationId,
         Guid? excludeTransactionId
     )

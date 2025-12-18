@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using GestionHogar.Dtos;
-using GestionHogar.Model;
 using GestionHogar.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -26,43 +25,19 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpGet]
-    [EndpointSummary("Get all projects with pagination")]
-    [EndpointDescription(
-        "Retrieves all projects with pagination, search and ordering capabilities"
-    )]
-    public async Task<ActionResult<PaginatedResponseV2<ProjectDTO>>> GetAllProjects(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] string? search = null,
-        [FromQuery] string? orderBy = null,
-        [FromQuery] string? orderDirection = "asc",
-        [FromQuery] string? preselectedId = null
-    )
+    [EndpointSummary("Get all projects")]
+    [EndpointDescription("Retrieves all projects in the system")]
+    public async Task<ActionResult<IEnumerable<ProjectDTO>>> GetAllProjects()
     {
         try
         {
-            if (page < 1)
-                page = 1;
-            if (pageSize < 1 || pageSize > 100)
-                pageSize = 10;
-
-            var result = await _projectService.GetAllProjectsPaginatedAsync(
-                page,
-                pageSize,
-                search,
-                orderBy,
-                orderDirection,
-                preselectedId
-            );
-            return Ok(result);
+            var projects = await _projectService.GetAllProjectsAsync();
+            return Ok(projects);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al obtener proyectos con paginación");
-            return StatusCode(
-                500,
-                new { message = "Error interno del servidor", error = ex.Message }
-            );
+            _logger.LogError(ex, "Error al obtener proyectos");
+            return StatusCode(500, "Error interno del servidor");
         }
     }
 
@@ -80,47 +55,6 @@ public class ProjectsController : ControllerBase
         {
             _logger.LogError(ex, "Error al obtener proyectos activos");
             return StatusCode(500, "Error interno del servidor");
-        }
-    }
-
-    [HttpGet("active/paginated")]
-    [EndpointSummary("Get active projects with pagination")]
-    [EndpointDescription(
-        "Retrieves active projects with pagination, search and ordering capabilities"
-    )]
-    public async Task<ActionResult<PaginatedResponseV2<ProjectDTO>>> GetActiveProjectsPaginated(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] string? search = null,
-        [FromQuery] string? orderBy = null,
-        [FromQuery] string? orderDirection = "asc",
-        [FromQuery] string? preselectedId = null
-    )
-    {
-        try
-        {
-            if (page < 1)
-                page = 1;
-            if (pageSize < 1 || pageSize > 100)
-                pageSize = 10;
-
-            var result = await _projectService.GetActiveProjectsPaginatedAsync(
-                page,
-                pageSize,
-                search,
-                orderBy,
-                orderDirection,
-                preselectedId
-            );
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener proyectos activos con paginación");
-            return StatusCode(
-                500,
-                new { message = "Error interno del servidor", error = ex.Message }
-            );
         }
     }
 

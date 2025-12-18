@@ -84,9 +84,6 @@ public class Lead : IEntity
     [ForeignKey("ProjectId")]
     public Project? Project { get; set; }
 
-    // Navegación hacia el referido (si este lead fue referido por alguien)
-    public Referral? Referral { get; set; }
-
     // Razón de finalización del lead
     public LeadCompletionReason? CompletionReason { get; set; }
 

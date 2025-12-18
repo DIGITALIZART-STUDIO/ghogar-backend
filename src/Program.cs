@@ -3,7 +3,6 @@ using GestionHogar.Configuration;
 using GestionHogar.Controllers;
 using GestionHogar.Controllers.ApiPeru;
 using GestionHogar.Controllers.ExcelExport;
-using GestionHogar.Controllers.Notifications;
 using GestionHogar.Model;
 using GestionHogar.Services;
 using GestionHogar.Utils;
@@ -25,18 +24,6 @@ builder
         options.JsonSerializerOptions.Converters.Add(
             new System.Text.Json.Serialization.JsonStringEnumConverter()
         );
-        options.JsonSerializerOptions.ReferenceHandler = System
-            .Text
-            .Json
-            .Serialization
-            .ReferenceHandler
-            .IgnoreCycles;
-        options.JsonSerializerOptions.DefaultIgnoreCondition = System
-            .Text
-            .Json
-            .Serialization
-            .JsonIgnoreCondition
-            .WhenWritingNull;
     });
 
 // Configure file upload limits
@@ -208,8 +195,6 @@ var modules = new IModule[]
     new ExcelExportModule(),
     new EmailModule(),
     new UserHigherRankModule(),
-    new LandingModule(),
-    new NotificationModule(),
 };
 
 // Register dashboard services
@@ -223,12 +208,6 @@ foreach (var module in modules)
 builder.Services.AddScoped<WordTemplateService>();
 builder.Services.AddScoped<SofficeConverterService>();
 builder.Services.AddScoped<ICloudflareService, CloudflareService>();
-
-// Background services
-builder.Services.AddHostedService<LeadExpirationService>();
-
-// Health checks
-builder.Services.AddHealthChecks().AddCheck<LeadExpirationHealthCheck>("lead-expiration-service");
 
 // Register controllers explicitly to avoid constructor conflicts
 builder.Services.AddScoped<UsersController>();
@@ -265,56 +244,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-    // Apply database migrations automatically with retry logic
-    using (var scope = app.Services.CreateScope())
-    {
-        var services = scope.ServiceProvider;
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        var context = services.GetRequiredService<DatabaseContext>();
-
-        // Retry configuration
-        const int maxRetries = 10;
-        const int initialDelayMs = 2000;
-        var currentDelay = initialDelayMs;
-
-        for (int attempt = 1; attempt <= maxRetries; attempt++)
-        {
-            try
-            {
-                logger.LogInformation($"🔍 Checking database connection (attempt {attempt}/{maxRetries})...");
-
-                context.Database.OpenConnection();
-                context.Database.CloseConnection();
-
-                var pendingMigrations = context.Database.GetPendingMigrations();
-                if (pendingMigrations.Any())
-                {
-                    logger.LogInformation($"📦 Applying {pendingMigrations.Count()} pending migrations...");
-                    context.Database.Migrate();
-                    logger.LogInformation("✅ Migrations applied successfully");
-                }
-                else
-                {
-                    logger.LogInformation("✅ Database is up to date");
-                }
-
-                break;
-            }
-            catch (Exception ex)
-            {
-                if (attempt == maxRetries)
-                {
-                    logger.LogError(ex, "❌ Failed to connect to database after {MaxRetries} attempts", maxRetries);
-                    throw;
-                }
-
-                logger.LogWarning("⚠️ Connection failed, retrying in {Delay}ms...", currentDelay);
-                Thread.Sleep(currentDelay);
-                currentDelay = Math.Min(currentDelay * 2, 30000);
-            }
-        }
-    }
-
 // Seed the database
 using (var scope = app.Services.CreateScope())
 {
@@ -336,7 +265,6 @@ app.UseAuthorization();
 app.UseSecurityStampValidator();
 app.UseAuthenticationMiddleware();
 app.MapControllers();
-app.MapHealthChecks("/api/healthz");
 
 // Libraries startup
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;

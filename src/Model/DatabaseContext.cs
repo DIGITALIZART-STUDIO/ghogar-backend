@@ -42,17 +42,7 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
 
-    public DbSet<PaymentTransactionPayment> PaymentTransactionPayments { get; set; } = null!;
-
     public DbSet<OtpCode> OtpCodes { get; set; } = null!;
-
-    public DbSet<Referral> Referrals { get; set; } = null!;
-
-    public DbSet<SupervisorSalesAdvisor> SupervisorSalesAdvisors { get; set; } = null!;
-
-    public DbSet<Notification> Notifications { get; set; } = null!;
-
-    public DbSet<ApiPeruConsultation> ApiPeruConsultations { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -69,31 +59,13 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
             .HasMany(pt => pt.Payments)
             .WithMany()
             .UsingEntity(
-                "PaymentTransactionPaymentLegacy", // Cambiar nombre para evitar conflicto
+                "PaymentTransactionPayments",
                 l => l.HasOne(typeof(Payment)).WithMany().HasForeignKey("PaymentId"),
                 r =>
                     r.HasOne(typeof(PaymentTransaction))
                         .WithMany()
                         .HasForeignKey("PaymentTransactionId")
             );
-
-        // NUEVA: Configuración de la entidad PaymentTransactionPayment
-        builder.Entity<PaymentTransactionPayment>(entity =>
-        {
-            entity.HasKey(ptp => new { ptp.PaymentTransactionId, ptp.PaymentId });
-
-            entity
-                .HasOne(ptp => ptp.PaymentTransaction)
-                .WithMany(pt => pt.PaymentDetails)
-                .HasForeignKey(ptp => ptp.PaymentTransactionId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity
-                .HasOne(ptp => ptp.Payment)
-                .WithMany()
-                .HasForeignKey(ptp => ptp.PaymentId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
 
         // Configuración de OtpCode
         builder.Entity<OtpCode>(entity =>
@@ -118,53 +90,6 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
                 e.IsActive,
             });
             entity.HasIndex(e => e.ExpiresAt);
-        });
-
-        // Configuración de SupervisorSalesAdvisor
-        builder.Entity<SupervisorSalesAdvisor>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-
-            // Relación con Supervisor (User)
-            entity
-                .HasOne(e => e.Supervisor)
-                .WithMany()
-                .HasForeignKey(e => e.SupervisorId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // Relación con SalesAdvisor (User)
-            entity
-                .HasOne(e => e.SalesAdvisor)
-                .WithMany()
-                .HasForeignKey(e => e.SalesAdvisorId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // Índices para optimizar consultas
-            entity.HasIndex(e => e.SupervisorId);
-            entity.HasIndex(e => e.SalesAdvisorId);
-            entity.HasIndex(e => new { e.SupervisorId, e.SalesAdvisorId }).IsUnique();
-        });
-
-        // Configuración de ApiPeruConsultation
-        builder.Entity<ApiPeruConsultation>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-
-            // Configurar propiedades
-            entity.Property(e => e.DocumentNumber).IsRequired().HasMaxLength(20);
-            entity.Property(e => e.DocumentType).IsRequired().HasMaxLength(10);
-            entity.Property(e => e.ResponseData).IsRequired();
-            entity.Property(e => e.CompanyName).HasMaxLength(500);
-            entity.Property(e => e.PersonName).HasMaxLength(500);
-            entity.Property(e => e.Address).HasMaxLength(1000);
-            entity.Property(e => e.Status).HasMaxLength(50);
-            entity.Property(e => e.Condition).HasMaxLength(50);
-
-            // Índices para optimizar consultas
-            entity.HasIndex(e => new { e.DocumentNumber, e.DocumentType });
-            entity.HasIndex(e => e.ConsultedAt);
-            entity.HasIndex(e => e.CompanyName);
-            entity.HasIndex(e => e.PersonName);
         });
     }
 

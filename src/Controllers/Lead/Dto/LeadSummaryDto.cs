@@ -27,7 +27,6 @@ public class LeadSummaryDto
                 Name = lead.Client.Name!,
                 Dni = lead.Client.Dni,
                 Ruc = lead.Client.Ruc,
-                PhoneNumber = lead.Client.PhoneNumber,
             },
             Status = lead.Status,
             ExpirationDate = lead.ExpirationDate,

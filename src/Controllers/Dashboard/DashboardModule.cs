@@ -8,9 +8,6 @@ public static class DashboardModule
     {
         services.AddScoped<GetDashboardAdminDataUseCase>();
         services.AddScoped<GetAdvisorDashboardDataUseCase>();
-        services.AddScoped<GetFinanceManagerDashboardDataUseCase>();
-        services.AddScoped<GetSupervisorDashboardDataUseCase>();
-        services.AddScoped<GetManagerDashboardDataUseCase>();
         services.AddScoped<DashboardController>();
 
         return services;

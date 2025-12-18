@@ -21,12 +21,7 @@ public class PaymentTransaction : BaseModel
     public Reservation? Reservation { get; set; }
 
     // Relación con las cuotas (pagos programados) que cubre esta transacción
-    // MANTENER para compatibilidad hacia atrás
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
-
-    // NUEVA: Relación detallada con montos específicos por cuota
-    public ICollection<PaymentTransactionPayment> PaymentDetails { get; set; } =
-        new List<PaymentTransactionPayment>();
 
     // Forma de pago
     [Required]
@@ -50,23 +45,5 @@ public class PaymentTransaction : BaseModel
             .Entity<PaymentTransaction>()
             .Property(p => p.PaymentDate)
             .HasConversion(dateTimeOffsetToUtcConverter);
-
-        // Configurar la nueva entidad PaymentTransactionPayment
-        modelBuilder.Entity<PaymentTransactionPayment>(entity =>
-        {
-            entity.HasKey(ptp => new { ptp.PaymentTransactionId, ptp.PaymentId });
-
-            entity
-                .HasOne(ptp => ptp.PaymentTransaction)
-                .WithMany(pt => pt.PaymentDetails)
-                .HasForeignKey(ptp => ptp.PaymentTransactionId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity
-                .HasOne(ptp => ptp.Payment)
-                .WithMany()
-                .HasForeignKey(ptp => ptp.PaymentId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
     }
 }

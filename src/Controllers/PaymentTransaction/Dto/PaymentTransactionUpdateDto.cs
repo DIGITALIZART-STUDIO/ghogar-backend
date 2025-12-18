@@ -23,10 +23,6 @@ public class PaymentTransactionUpdateDTO
     [StringLength(500)]
     public string? ComprobanteUrl { get; set; }
 
-    /// <summary>
-    /// Lista de IDs de cuotas específicas a pagar.
-    /// Si no se proporciona, el sistema asignará automáticamente las cuotas
-    /// desde la última hacia atrás (fecha más lejana a más temprana).
-    /// </summary>
-    public List<Guid>? PaymentIds { get; set; }
+    [Required]
+    public List<Guid> PaymentIds { get; set; } = new();
 }
