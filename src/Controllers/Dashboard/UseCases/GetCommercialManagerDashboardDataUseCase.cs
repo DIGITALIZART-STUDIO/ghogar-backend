@@ -2,16 +2,16 @@ using GestionHogar.Controllers;
 using GestionHogar.Model;
 using Microsoft.EntityFrameworkCore;
 
-public class GetSupervisorDashboardDataUseCase
+public class GetCommercialManagerDashboardDataUseCase
 {
     private readonly DatabaseContext _db;
 
-    public GetSupervisorDashboardDataUseCase(DatabaseContext db)
+    public GetCommercialManagerDashboardDataUseCase(DatabaseContext db)
     {
         _db = db;
     }
 
-    public async Task<SupervisorDashboardDto> ExecuteAsync(Guid supervisorId, int? year = null)
+    public async Task<SupervisorDashboardDto> ExecuteAsync(int? year = null)
     {
         var now = DateTime.UtcNow;
         var yearToUse = year ?? now.Year;
@@ -19,21 +19,34 @@ public class GetSupervisorDashboardDataUseCase
         var startDate = new DateTime(yearToUse, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var endDate = new DateTime(yearToUse + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        // --- OBTENER ASESORES ASIGNADOS AL SUPERVISOR ---
-        var assignedAdvisorIds = await _db
-            .SupervisorSalesAdvisors.Where(ssa => ssa.SupervisorId == supervisorId && ssa.IsActive)
-            .Select(ssa => ssa.SalesAdvisorId)
-            .ToListAsync();
+        // --- OBTENER TODOS LOS ASESORES Y SUPERVISORES ---
+        // Obtener los IDs de los roles SalesAdvisor y Supervisor
+        var salesAdvisorRole = await _db.Roles.FirstOrDefaultAsync(r => r.Name == "SalesAdvisor");
+        var supervisorRole = await _db.Roles.FirstOrDefaultAsync(r => r.Name == "Supervisor");
 
-        // Si no hay asesores asignados, retornar dashboard vacío
-        if (!assignedAdvisorIds.Any())
+        if (salesAdvisorRole == null || supervisorRole == null)
         {
             return new SupervisorDashboardDto();
         }
 
-        // --- CONSULTAS OPTIMIZADAS: Cargar todos los datos necesarios FILTRADOS POR ASESORES ASIGNADOS ---
+        // Obtener todos los usuarios con roles SalesAdvisor o Supervisor
+        var advisorAndSupervisorIds = await (
+            from ur in _db.UserRoles
+            where (ur.RoleId == salesAdvisorRole.Id || ur.RoleId == supervisorRole.Id)
+            select ur.UserId
+        )
+            .Distinct()
+            .ToListAsync();
 
-        // 1. Cargar leads del año asignados a los asesores del supervisor
+        // Si no hay asesores ni supervisores, retornar dashboard vacío
+        if (!advisorAndSupervisorIds.Any())
+        {
+            return new SupervisorDashboardDto();
+        }
+
+        // --- CONSULTAS OPTIMIZADAS: Cargar todos los datos necesarios FILTRADOS POR ASESORES Y SUPERVISORES ---
+
+        // 1. Cargar leads del año asignados a los asesores y supervisores
         var allLeads = await _db
             .Leads.Include(l => l.Client)
             .Include(l => l.AssignedTo)
@@ -42,43 +55,43 @@ public class GetSupervisorDashboardDataUseCase
                 l.EntryDate >= startDate
                 && l.EntryDate < endDate
                 && l.AssignedToId.HasValue
-                && assignedAdvisorIds.Contains(l.AssignedToId!.Value)
+                && advisorAndSupervisorIds.Contains(l.AssignedToId!.Value)
             )
             .ToListAsync();
 
-        // 2. Cargar tareas del año asignadas a los asesores del supervisor
+        // 2. Cargar tareas del año asignadas a los asesores y supervisores
         var allTasks = await _db
             .LeadTasks.Include(lt => lt.AssignedTo)
             .Where(lt =>
                 lt.CreatedAt >= startDate
                 && lt.CreatedAt < endDate
-                && assignedAdvisorIds.Contains(lt.AssignedToId)
+                && advisorAndSupervisorIds.Contains(lt.AssignedToId)
             )
             .ToListAsync();
 
-        // 3. Cargar cotizaciones del año de los asesores del supervisor
+        // 3. Cargar cotizaciones del año de los asesores y supervisores
         var allQuotations = await _db
             .Quotations.Where(q =>
                 q.CreatedAt >= startDate
                 && q.CreatedAt < endDate
-                && assignedAdvisorIds.Contains(q.AdvisorId)
+                && advisorAndSupervisorIds.Contains(q.AdvisorId)
             )
             .ToListAsync();
 
-        // 4. Cargar reservaciones del año de los asesores del supervisor
+        // 4. Cargar reservaciones del año de los asesores y supervisores
         var allReservations = await _db
             .Reservations.Include(r => r.Quotation)
             .Where(r =>
                 r.ReservationDate >= DateOnly.FromDateTime(startDate)
                 && r.ReservationDate < DateOnly.FromDateTime(endDate)
                 && r.Quotation != null
-                && assignedAdvisorIds.Contains(r.Quotation!.AdvisorId)
+                && advisorAndSupervisorIds.Contains(r.Quotation!.AdvisorId)
             )
             .ToListAsync();
 
-        // 5. Cargar solo los usuarios (asesores) asignados al supervisor
+        // 5. Cargar todos los usuarios (asesores y supervisores)
         var allUsers = await _db
-            .Users.Where(u => u.IsActive && assignedAdvisorIds.Contains(u.Id))
+            .Users.Where(u => u.IsActive && advisorAndSupervisorIds.Contains(u.Id))
             .ToListAsync();
 
         // --- CÁLCULOS EN MEMORIA (más eficiente) ---
@@ -109,7 +122,7 @@ public class GetSupervisorDashboardDataUseCase
             AvgConversionRate = avgConversionRate,
         };
 
-        // Rendimiento de asesores
+        // Rendimiento de asesores y supervisores
         var advisors = new List<AdvisorPerformanceDto>();
         foreach (var user in allUsers)
         {
@@ -127,7 +140,7 @@ public class GetSupervisorDashboardDataUseCase
                     ? Math.Round((leadsCompleted / (double)leadsAssigned) * 100, 1)
                     : 0;
 
-            // Solo incluir asesores con leads asignados
+            // Solo incluir usuarios con leads asignados
             if (leadsAssigned > 0)
             {
                 advisors.Add(
@@ -153,12 +166,12 @@ public class GetSupervisorDashboardDataUseCase
         // Ordenar por eficiencia descendente
         advisors = advisors.OrderByDescending(a => a.Efficiency).ToList();
 
-        // --- TEAM DATA (similar al admin pero solo para asesores asignados) ---
+        // --- TEAM DATA (similar al supervisor pero para todos los asesores y supervisores) ---
         // Pre-cargar todos los datos necesarios en consultas optimizadas
         var userRolesDict = await (
             from ur in _db.UserRoles
             join r in _db.Roles on ur.RoleId equals r.Id
-            where assignedAdvisorIds.Contains(ur.UserId)
+            where advisorAndSupervisorIds.Contains(ur.UserId)
             select new { UserId = ur.UserId, RoleName = r.Name }
         )
             .GroupBy(x => x.UserId)

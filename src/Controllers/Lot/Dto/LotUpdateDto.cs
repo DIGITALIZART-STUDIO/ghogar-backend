@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using GestionHogar.Model;
@@ -20,6 +21,8 @@ public class LotUpdateDTO
 
     public bool? IsActive { get; set; }
 
+    public Guid? BlockId { get; set; }
+
     public void ApplyTo(Lot lot)
     {
         if (!string.IsNullOrWhiteSpace(LotNumber))
@@ -36,6 +39,9 @@ public class LotUpdateDTO
 
         if (IsActive.HasValue)
             lot.IsActive = IsActive.Value;
+
+        if (BlockId.HasValue)
+            lot.BlockId = BlockId.Value;
 
         lot.ModifiedAt = DateTime.UtcNow;
     }

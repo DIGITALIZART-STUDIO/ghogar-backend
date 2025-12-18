@@ -691,6 +691,11 @@ public class QuotationService(
         if (lot == null)
             throw new InvalidOperationException($"Lote con ID {dto.LotId} no encontrado");
 
+        if (lot.Status == LotStatus.Reserved)
+            throw new InvalidOperationException(
+                "No se puede crear una cotización para un lote que está reservado"
+            );
+
         if (lot.Status != LotStatus.Available && lot.Status != LotStatus.Quoted)
             throw new InvalidOperationException(
                 $"El lote no está disponible para cotizar. Estado actual: {GetLotStatusSpanish(lot.Status)}"
@@ -698,14 +703,6 @@ public class QuotationService(
 
         if (!lot.IsActive || !lot.Block.IsActive || !lot.Block.Project.IsActive)
             throw new InvalidOperationException("El lote, bloque o proyecto no está activo");
-
-        // **NUEVO: Verificar que no hay una cotización activa para este lote**
-        var activeQuotation = await _context.Quotations.FirstOrDefaultAsync(q =>
-            q.LotId == dto.LotId && q.Status == QuotationStatus.ISSUED
-        );
-
-        if (activeQuotation != null)
-            throw new InvalidOperationException("Ya existe una cotización activa para este lote");
 
         // Generar código automáticamente
         var code = await GenerateQuotationCodeAsync();

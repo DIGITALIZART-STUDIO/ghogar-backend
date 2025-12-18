@@ -169,6 +169,16 @@ public class ClientsController : ControllerBase
         ClientCreateDto clientDto
     )
     {
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState
+                .Where(x => x.Value?.Errors.Count > 0)
+                .SelectMany(x => x.Value!.Errors.Select(e => $"{x.Key}: {e.ErrorMessage}"))
+                .ToList();
+            var errorMessage = string.Join("; ", errors);
+            return BadRequest(new { message = errorMessage, error = errorMessage });
+        }
+
         try
         {
             var client = new GestionHogar.Model.Client
@@ -197,7 +207,7 @@ public class ClientsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message, error = ex.Message });
         }
     }
 
