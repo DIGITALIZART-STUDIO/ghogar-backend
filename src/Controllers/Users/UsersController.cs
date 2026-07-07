@@ -32,13 +32,17 @@ public class UsersController(
         try
         {
             var userId = User.GetCurrentUserIdOrThrow();
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
                 return Unauthorized("Usuario no encontrado");
 
             var userRoles = await userManager.GetRolesAsync(user);
             if (userRoles == null)
                 return Unauthorized("No se pudieron obtener los roles del usuario");
+
+            var normalizedName = GestionHogar.Model.User.NormalizeName(user.Name);
+            if (normalizedName != null)
+                user.Name = normalizedName;
 
             return Ok(new UserGetDTO() { User = user, Roles = userRoles });
         }
@@ -196,6 +200,12 @@ public class UsersController(
     [HttpPost]
     public async Task<ActionResult> CreateUser([FromBody] UserCreateDTO dto)
     {
+        var normalizedName = GestionHogar.Model.User.NormalizeName(dto.Name);
+        if (normalizedName == null)
+            return BadRequest("El nombre es obligatorio");
+        if (normalizedName.Length > GestionHogar.Model.User.NameMaxLength)
+            return BadRequest("El nombre no puede superar los 250 caracteres");
+
         // check email is not already in use
         var existingUser = await userManager.FindByEmailAsync(dto.Email);
         if (existingUser != null)
@@ -208,11 +218,11 @@ public class UsersController(
 
         // generate username from name: lowercase, replace spaces with underscores,
         // only alphanumeric characters
-        var username = GestionHogar.Model.User.CreateUsername(dto.Name);
+        var username = GestionHogar.Model.User.CreateUsername(normalizedName);
 
         var newUser = new User
         {
-            Name = dto.Name,
+            Name = normalizedName,
             UserName = username,
             Email = dto.Email,
             PhoneNumber = dto.Phone,
@@ -268,14 +278,20 @@ public class UsersController(
     [HttpPut("{userId}")]
     public async Task<ActionResult> UpdateUser(Guid userId, [FromBody] UserUpdateDTO dto)
     {
+        var normalizedName = GestionHogar.Model.User.NormalizeName(dto.Name);
+        if (normalizedName == null)
+            return BadRequest("El nombre es obligatorio");
+        if (normalizedName.Length > GestionHogar.Model.User.NameMaxLength)
+            return BadRequest("El nombre no puede superar los 250 caracteres");
+
         var user = await userManager.FindByIdAsync(userId.ToString());
         if (user == null)
             return NotFound("Usuario no encontrado");
 
-        user.Name = dto.Name;
+        user.Name = normalizedName;
         user.Email = dto.Email;
         user.PhoneNumber = dto.Phone;
-        user.UserName = GestionHogar.Model.User.CreateUsername(dto.Name);
+        user.UserName = GestionHogar.Model.User.CreateUsername(normalizedName);
 
         var result = await userManager.UpdateAsync(user);
         if (!result.Succeeded)
