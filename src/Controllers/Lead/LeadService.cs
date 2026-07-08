@@ -14,16 +14,35 @@ public class LeadService : ILeadService
     private readonly DatabaseContext _context;
     private readonly ILogger<LeadService> _logger;
     private readonly INotificationService _notificationService;
+    private readonly IClientService _clientService;
 
     public LeadService(
         DatabaseContext context,
         ILogger<LeadService> logger,
-        INotificationService notificationService
+        INotificationService notificationService,
+        IClientService clientService
     )
     {
         _context = context;
         _logger = logger;
         _notificationService = notificationService;
+        _clientService = clientService;
+    }
+
+    public static string NormalizePhoneNumber(string phoneNumber)
+    {
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            return string.Empty;
+        }
+
+        var normalized = phoneNumber.Trim();
+        if (!normalized.StartsWith('+'))
+        {
+            normalized = "+" + normalized;
+        }
+
+        return normalized;
     }
 
     public async Task<string> GenerateLeadCodeAsync()
@@ -287,6 +306,73 @@ public class LeadService : ILeadService
         }
 
         return lead;
+    }
+
+    public async Task<LeadCreateFromPhoneResultDto> CreateLeadFromPhoneAsync(
+        LeadCreateFromPhoneDto dto
+    )
+    {
+        if (string.IsNullOrWhiteSpace(dto.PhoneNumber))
+        {
+            throw new ArgumentException("El número de teléfono es obligatorio.");
+        }
+
+        var phoneNumber = NormalizePhoneNumber(dto.PhoneNumber);
+
+        if (dto.ProjectId.HasValue)
+        {
+            var projectExists = await _context.Projects.AnyAsync(p =>
+                p.Id == dto.ProjectId.Value && p.IsActive
+            );
+            if (!projectExists)
+            {
+                throw new ArgumentException(
+                    $"No se encontró el proyecto con ID {dto.ProjectId.Value} o no está activo."
+                );
+            }
+        }
+
+        var existingClient = await _clientService.GetClientByPhoneNumberAsync(phoneNumber);
+        bool clientCreated;
+
+        Client client;
+        if (existingClient != null)
+        {
+            client = existingClient;
+            clientCreated = false;
+        }
+        else
+        {
+            client = await _clientService.CreateClientAsync(
+                new Client
+                {
+                    PhoneNumber = phoneNumber,
+                    Type = ClientType.Natural,
+                    SeparateProperty = false,
+                }
+            );
+            clientCreated = true;
+        }
+
+        var lead = new Lead
+        {
+            Code = "",
+            ClientId = client.Id,
+            AssignedToId = dto.AssignedToId,
+            Status = LeadStatus.Registered,
+            CaptureSource = dto.CaptureSource,
+            ProjectId = dto.ProjectId,
+        };
+
+        var createdLead = await CreateLeadAsync(lead);
+
+        return new LeadCreateFromPhoneResultDto
+        {
+            Lead = createdLead,
+            ClientId = client.Id,
+            ClientCreated = clientCreated,
+            ClientExisted = !clientCreated,
+        };
     }
 
     public async Task<Lead?> UpdateLeadAsync(Guid id, Lead updatedLead)

@@ -1057,13 +1057,7 @@ public class ClientsController : ControllerBase
                             }
 
                             // Asegurar que el teléfono tenga el prefijo "+"
-                            if (
-                                !string.IsNullOrWhiteSpace(phoneNumber)
-                                && !phoneNumber.StartsWith("+")
-                            )
-                            {
-                                phoneNumber = "+" + phoneNumber;
-                            }
+                            phoneNumber = LeadService.NormalizePhoneNumber(phoneNumber);
 
                             // Validar datos mínimos requeridos
                             if (string.IsNullOrEmpty(phoneNumber))
