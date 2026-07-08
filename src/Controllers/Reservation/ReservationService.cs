@@ -2115,12 +2115,12 @@ public class ReservationService : IReservationService
         var templatePath = "Templates/cronograma_de_pagos.ods";
         var templateBytes = await File.ReadAllBytesAsync(templatePath);
 
-        // Fill template with dynamic rows (row 19 is 0-based, so 20 in 1-based)
+        // Fill template with dynamic rows
         var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholdersWithDynamicRows(
             templateBytes,
             staticPlaceholders,
             dynamicRowsData,
-            20 // Template row number (converting from 0-based 19 to 1-based 20)
+            13 // Template row number for payment installment placeholders
         );
         if (fillError != null)
             throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
@@ -2203,12 +2203,12 @@ public class ReservationService : IReservationService
         var templatePath = "Templates/pagos_realizados.ods";
         var templateBytes = await File.ReadAllBytesAsync(templatePath);
 
-        // Fill template with dynamic rows (row 24 is the template row)
+        // Fill template with dynamic rows
         var (filledBytes, fillError) = _odsTemplateService.ReplacePlaceholdersWithDynamicRows(
             templateBytes,
             staticPlaceholders,
             dynamicRowsData,
-            23 // Template row number
+            16 // Template row number for processed payment placeholders
         );
         if (fillError != null)
             throw new ArgumentException($"Error al procesar plantilla ODS: {fillError}");
