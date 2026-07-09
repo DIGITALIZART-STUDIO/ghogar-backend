@@ -1,15 +1,27 @@
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
 
 namespace GestionHogar.Model;
 
 public class User : IdentityUser<Guid>, IEntity
 {
+    public const int NameMaxLength = 250;
+
     public DateTime? LastLogin { get; set; }
     public required string Name { get; set; }
     public bool IsActive { get; set; } = true;
     public bool MustChangePassword { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime ModifiedAt { get; set; } = DateTime.UtcNow;
+
+    public static string? NormalizeName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        var normalized = Regex.Replace(name.Trim(), @"\s+", " ");
+        return normalized.Length == 0 ? null : normalized;
+    }
 
     public static string CreateUsername(string name)
     {

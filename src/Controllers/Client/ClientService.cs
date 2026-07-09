@@ -402,6 +402,37 @@ public class ClientService : IClientService
             .ToListAsync();
     }
 
+    public IQueryable<Client> ApplyCurrentUserClientsFilter(
+        IQueryable<Client> query,
+        Guid currentUserId,
+        Guid? projectId = null,
+        Guid? alwaysIncludeClientId = null
+    )
+    {
+        query = query.Where(c => c.IsActive);
+
+        if (projectId.HasValue)
+        {
+            query = query.Where(c =>
+                (alwaysIncludeClientId.HasValue && c.Id == alwaysIncludeClientId.Value)
+                || _context.Leads.Any(l =>
+                    l.ClientId == c.Id
+                    && l.AssignedToId == currentUserId
+                    && l.ProjectId == projectId.Value
+                )
+            );
+        }
+        else
+        {
+            query = query.Where(c =>
+                (alwaysIncludeClientId.HasValue && c.Id == alwaysIncludeClientId.Value)
+                || _context.Leads.Any(l => l.ClientId == c.Id && l.AssignedToId == currentUserId)
+            );
+        }
+
+        return query;
+    }
+
     public async Task<IEnumerable<ClientSummaryDto>> GetClientsByCurrentUserSummaryAsync(
         Guid? currentUserId = null,
         Guid? projectId = null,
@@ -442,13 +473,11 @@ public class ClientService : IClientService
         // Si useCurrentUser=true, aplicar el filtro normal (solo sus propios clientes)
         else if (useCurrentUser && currentUserId.HasValue)
         {
-            query = query.Where(c =>
-                _context.Leads.Any(l => l.ClientId == c.Id && l.AssignedToId == currentUserId.Value)
-            );
+            query = ApplyCurrentUserClientsFilter(query, currentUserId.Value, projectId);
         }
 
-        // Aplicar filtro por proyecto si se especifica
-        if (projectId.HasValue)
+        // Aplicar filtro por proyecto si se especifica (cuando no se aplicó ya en el filtro de usuario actual)
+        if (projectId.HasValue && !(useCurrentUser && currentUserId.HasValue))
         {
             if (!useCurrentUser && supervisorId.HasValue)
             {
@@ -472,16 +501,6 @@ public class ClientService : IClientService
                             l.AssignedToId.HasValue
                             && assignedSalesAdvisorIds.Contains(l.AssignedToId.Value)
                         )
-                    )
-                );
-            }
-            else if (useCurrentUser && currentUserId.HasValue)
-            {
-                query = query.Where(c =>
-                    _context.Leads.Any(l =>
-                        l.ClientId == c.Id
-                        && l.AssignedToId == currentUserId.Value
-                        && l.ProjectId == projectId.Value
                     )
                 );
             }

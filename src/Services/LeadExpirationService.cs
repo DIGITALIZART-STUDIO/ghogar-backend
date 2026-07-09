@@ -3,6 +3,7 @@ using Cronos;
 using GestionHogar.Controllers;
 using GestionHogar.Controllers.Notifications.Dto;
 using GestionHogar.Model;
+using GestionHogar.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -48,7 +49,7 @@ public class LeadExpirationService : BackgroundService
         _configuration = configuration;
 
         // Configuración del cron schedule
-        var cronSchedule = configuration["LeadExpiration:CronSchedule"] ?? "0 0 0,8,16 * * *";
+        var cronSchedule = configuration["LeadExpiration:CronSchedule"] ?? "0 5 5 * * *";
         _logger.LogInformation("🔧 Configurando cron schedule: '{CronSchedule}'", cronSchedule);
         _cronExpression = CronExpression.Parse(cronSchedule, CronFormat.IncludeSeconds);
 

@@ -124,6 +124,43 @@ public class LeadsController : ControllerBase
         }
     }
 
+    // POST: api/leads/from-phone
+    [HttpPost("from-phone")]
+    public async Task<ActionResult<LeadCreateFromPhoneResultDto>> CreateLeadFromPhone(
+        LeadCreateFromPhoneDto dto
+    )
+    {
+        try
+        {
+            User.GetCurrentUserIdOrThrow();
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var result = await _leadService.CreateLeadFromPhoneAsync(dto);
+            return CreatedAtAction(
+                nameof(GetLead),
+                new { id = result.Lead.Id },
+                result
+            );
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al crear lead desde teléfono");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     // PUT: api/leads/{id}
     [HttpPut("{id}")]
     public async Task<ActionResult<Lead>> UpdateLead(Guid id, LeadUpdateDto leadDto)

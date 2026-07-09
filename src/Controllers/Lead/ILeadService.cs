@@ -23,6 +23,7 @@ public interface ILeadService
     );
     Task<Lead?> GetLeadByIdAsync(Guid id);
     Task<Lead> CreateLeadAsync(Lead lead);
+    Task<LeadCreateFromPhoneResultDto> CreateLeadFromPhoneAsync(LeadCreateFromPhoneDto dto);
     Task<Lead?> UpdateLeadAsync(Guid id, Lead lead);
     Task<bool> DeleteLeadAsync(Guid id);
     Task<bool> ActivateLeadAsync(Guid id);

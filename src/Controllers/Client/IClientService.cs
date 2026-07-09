@@ -37,6 +37,13 @@ public interface IClientService
         bool useCurrentUser = true
     );
 
+    IQueryable<Client> ApplyCurrentUserClientsFilter(
+        IQueryable<Client> query,
+        Guid currentUserId,
+        Guid? projectId = null,
+        Guid? alwaysIncludeClientId = null
+    );
+
     Task<Client> GetClientByDniAsync(string dni);
 
     Task<Client> GetClientByPhoneNumberAsync(string phoneNumber);

@@ -1,4 +1,5 @@
 using GestionHogar.Model;
+using GestionHogar.Utils;
 using Microsoft.EntityFrameworkCore;
 
 namespace GestionHogar.Controllers;
@@ -330,8 +331,18 @@ public class GetManagerDashboardDataUseCase
 
         // Alerta: Leads próximos a expirar
         var expiringLeads = allLeads.Count(l =>
-            l.ExpirationDate <= now.AddDays(2) && l.Status != LeadStatus.Completed
-        );
+        {
+            if (l.Status == LeadStatus.Completed || l.Status == LeadStatus.Canceled)
+                return false;
+
+            var referenceDate = LeadExpirationHelper.GetReferenceDate(
+                l.EntryDate,
+                l.CreatedAt,
+                l.LastRecycledAt
+            );
+            return LeadExpirationHelper.GetDaysUntilExpiration(referenceDate) <= 2
+                && !LeadExpirationHelper.IsCalendarExpired(referenceDate);
+        });
         if (expiringLeads > 0)
         {
             alerts.Add(

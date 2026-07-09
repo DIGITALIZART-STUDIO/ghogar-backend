@@ -90,6 +90,7 @@ public class QuotationService(
         var quotations = await _context
             .Quotations.Include(q => q.Lead)
             .ThenInclude(l => l!.Client)
+            .Include(q => q.Advisor)
             .Include(q => q.Lot) // **NUEVO: Incluir el lote**
             .ThenInclude(l => l!.Block)
             .ThenInclude(b => b.Project)
@@ -100,9 +101,7 @@ public class QuotationService(
         return quotations.Select(QuotationSummaryDTO.FromEntity);
     }
 
-    public async Task<
-        PaginatedResponseV2<QuotationSummaryDTO>
-    > GetQuotationsByAdvisorIdPaginatedAsync(
+    public Task<PaginatedResponseV2<QuotationSummaryDTO>> GetQuotationsByAdvisorIdPaginatedAsync(
         Guid advisorId,
         int page,
         int pageSize,
@@ -114,14 +113,47 @@ public class QuotationService(
         string? orderBy = null
     )
     {
+        return GetQuotationsPaginatedAsync(
+            page,
+            pageSize,
+            paginationService,
+            search,
+            status,
+            clientId,
+            projectId,
+            orderBy,
+            advisorId
+        );
+    }
+
+    public async Task<
+        PaginatedResponseV2<QuotationSummaryDTO>
+    > GetQuotationsPaginatedAsync(
+        int page,
+        int pageSize,
+        PaginationService paginationService,
+        string? search = null,
+        QuotationStatus[]? status = null,
+        Guid[]? clientId = null,
+        Guid? projectId = null,
+        string? orderBy = null,
+        Guid? advisorId = null
+    )
+    {
         // Construir consulta base
         var query = _context
             .Quotations.Include(q => q.Lead)
             .ThenInclude(l => l!.Client)
+            .Include(q => q.Advisor)
             .Include(q => q.Lot)
             .ThenInclude(l => l!.Block)
             .ThenInclude(b => b.Project)
-            .Where(q => q.AdvisorId == advisorId);
+            .AsQueryable();
+
+        if (advisorId.HasValue)
+        {
+            query = query.Where(q => q.AdvisorId == advisorId.Value);
+        }
 
         // Aplicar filtro de búsqueda si se proporciona
         if (!string.IsNullOrWhiteSpace(search))
@@ -328,6 +360,7 @@ public class QuotationService(
         var query = _context
             .Quotations.Include(q => q.Lead)
             .ThenInclude(l => l!.Client)
+            .Include(q => q.Advisor)
             .Include(q => q.Lot)
             .ThenInclude(l => l!.Block)
             .ThenInclude(b => b.Project)
