@@ -39,6 +39,44 @@ public class QuotationsController : ControllerBase
         }
     }
 
+    [HttpGet("paginated")]
+    [AuthorizeCurrentUser("SuperAdmin", "Admin", "Supervisor", "Manager", "FinanceManager")]
+    public async Task<
+        ActionResult<PaginatedResponseV2<QuotationSummaryDTO>>
+    > GetQuotationsPaginated(
+        [FromServices] PaginationService paginationService,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] QuotationStatus[]? status = null,
+        [FromQuery] Guid[]? clientId = null,
+        [FromQuery] Guid? projectId = null,
+        [FromQuery] string? orderBy = null,
+        [FromQuery] Guid? advisorId = null
+    )
+    {
+        try
+        {
+            var result = await _quotationService.GetQuotationsPaginatedAsync(
+                page,
+                pageSize,
+                paginationService,
+                search,
+                status,
+                clientId,
+                projectId,
+                orderBy,
+                advisorId
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener cotizaciones paginadas");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<QuotationDTO>> GetQuotationById(Guid id)
     {

@@ -1,6 +1,7 @@
 using System;
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
+using GestionHogar.Utils;
 
 namespace GestionHogar.Controllers.Dtos;
 
@@ -14,9 +15,18 @@ public class LeadSummaryDto
     public DateTime ExpirationDate { get; set; }
     public string? ProjectName { get; set; }
     public int RecycleCount { get; set; }
+    public bool IsExpired { get; set; }
+    public int DaysUntilExpiration { get; set; }
+    public string ExpirationLabel { get; set; } = string.Empty;
 
     public static LeadSummaryDto FromEntity(Lead lead)
     {
+        var referenceDate = LeadExpirationHelper.GetReferenceDate(
+            lead.EntryDate,
+            lead.CreatedAt,
+            lead.LastRecycledAt
+        );
+
         return new LeadSummaryDto
         {
             Id = lead.Id,
@@ -33,6 +43,9 @@ public class LeadSummaryDto
             ExpirationDate = lead.ExpirationDate,
             ProjectName = lead.Project?.Name,
             RecycleCount = lead.RecycleCount,
+            IsExpired = LeadExpirationHelper.IsCalendarExpired(referenceDate),
+            DaysUntilExpiration = LeadExpirationHelper.GetDaysUntilExpiration(referenceDate),
+            ExpirationLabel = LeadExpirationHelper.GetExpirationLabel(referenceDate),
         };
     }
 }

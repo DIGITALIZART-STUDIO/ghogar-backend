@@ -1,5 +1,6 @@
 using GestionHogar.Controllers;
 using GestionHogar.Model;
+using GestionHogar.Utils;
 using Microsoft.EntityFrameworkCore;
 
 public class GetCommercialManagerDashboardDataUseCase
@@ -230,7 +231,13 @@ public class GetCommercialManagerDashboardDataUseCase
                 ClientPhone = l.Client?.PhoneNumber ?? "",
                 CaptureSource = l.CaptureSource.ToString(),
                 Status = l.Status.ToString(),
-                DaysUntilExpiration = (int)(l.ExpirationDate - now).TotalDays,
+                DaysUntilExpiration = LeadExpirationHelper.GetDaysUntilExpiration(
+                    LeadExpirationHelper.GetReferenceDate(
+                        l.EntryDate,
+                        l.CreatedAt,
+                        l.LastRecycledAt
+                    )
+                ),
                 AssignedTo = l.AssignedTo?.Name,
                 ProjectName = l.Project?.Name ?? "Sin proyecto",
                 EntryDate = l.EntryDate,
@@ -389,7 +396,12 @@ public class GetCommercialManagerDashboardDataUseCase
     // Métodos auxiliares
     private string GetPriorityForLead(Lead lead, DateTime now)
     {
-        var daysUntilExpiration = (lead.ExpirationDate - now).TotalDays;
+        var referenceDate = LeadExpirationHelper.GetReferenceDate(
+            lead.EntryDate,
+            lead.CreatedAt,
+            lead.LastRecycledAt
+        );
+        var daysUntilExpiration = LeadExpirationHelper.GetDaysUntilExpiration(referenceDate);
 
         if (daysUntilExpiration <= 1 || !lead.AssignedToId.HasValue)
             return "high";

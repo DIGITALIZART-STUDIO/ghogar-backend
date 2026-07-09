@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+using GestionHogar.Utils;
 
 namespace GestionHogar.Model;
 
@@ -98,13 +99,29 @@ public class Lead : IEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime ModifiedAt { get; set; } = DateTime.UtcNow;
 
+    [NotMapped]
+    public DateTime ExpirationReferenceDate =>
+        LeadExpirationHelper.GetReferenceDate(EntryDate, CreatedAt, LastRecycledAt);
+
+    [NotMapped]
+    public bool IsExpired =>
+        LeadExpirationHelper.IsCalendarExpired(ExpirationReferenceDate);
+
+    [NotMapped]
+    public int DaysUntilExpiration =>
+        LeadExpirationHelper.GetDaysUntilExpiration(ExpirationReferenceDate);
+
+    [NotMapped]
+    public string ExpirationLabel =>
+        LeadExpirationHelper.GetExpirationLabel(ExpirationReferenceDate);
+
     // Método para reciclar un lead expirado
     public void RecycleLead(Guid userId)
     {
         if (Status == LeadStatus.Expired || Status == LeadStatus.Canceled)
         {
             Status = LeadStatus.InFollowUp;
-            ExpirationDate = DateTime.UtcNow.AddDays(7);
+            ExpirationDate = LeadExpirationHelper.GetExpirationDateUtc(DateTime.UtcNow);
             RecycleCount++;
             LastRecycledAt = DateTime.UtcNow;
             LastRecycledById = userId;

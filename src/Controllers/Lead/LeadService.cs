@@ -4,6 +4,7 @@ using GestionHogar.Controllers;
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Controllers.Notifications.Dto;
 using GestionHogar.Model;
+using GestionHogar.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -290,7 +291,7 @@ public class LeadService : ILeadService
 
         // Asegurarnos de que se establezcan las fechas correctamente
         lead.EntryDate = DateTime.UtcNow;
-        lead.ExpirationDate = DateTime.UtcNow.AddDays(7);
+        lead.ExpirationDate = LeadExpirationHelper.GetExpirationDateUtc(lead.EntryDate);
 
         _context.Leads.Add(lead);
         await _context.SaveChangesAsync();
@@ -461,8 +462,13 @@ public class LeadService : ILeadService
 
         lead.IsActive = true;
 
-        // Si la fecha de expiración ya pasó, lo ponemos en Expired, si no, en Registered
-        if (lead.ExpirationDate < DateTime.UtcNow)
+        // Si ya expiró según días calendario Lima, lo ponemos en Expired; si no, en Registered
+        var referenceDate = LeadExpirationHelper.GetReferenceDate(
+            lead.EntryDate,
+            lead.CreatedAt,
+            lead.LastRecycledAt
+        );
+        if (LeadExpirationHelper.IsCalendarExpired(referenceDate))
             lead.Status = LeadStatus.Expired;
         else
             lead.Status = LeadStatus.Registered;
@@ -1052,6 +1058,7 @@ public class LeadService : ILeadService
                 if (!clientsWithUserLeads.Contains(client.Id))
                 {
                     // Crear un LeadSummaryDto virtual para este cliente
+                    var virtualReferenceDate = DateTime.UtcNow;
                     var virtualLead = new LeadSummaryDto
                     {
                         Id = client.Id, // ID temporal para el lead virtual
@@ -1065,9 +1072,18 @@ public class LeadService : ILeadService
                             PhoneNumber = client.PhoneNumber,
                         },
                         Status = LeadStatus.Registered, // Estado por defecto
-                        ExpirationDate = DateTime.UtcNow.AddDays(7), // Fecha de expiración por defecto
+                        ExpirationDate = LeadExpirationHelper.GetExpirationDateUtc(
+                            virtualReferenceDate
+                        ),
                         ProjectName = null, // Sin proyecto asignado
                         RecycleCount = 0, // Sin reciclajes
+                        IsExpired = LeadExpirationHelper.IsCalendarExpired(virtualReferenceDate),
+                        DaysUntilExpiration = LeadExpirationHelper.GetDaysUntilExpiration(
+                            virtualReferenceDate
+                        ),
+                        ExpirationLabel = LeadExpirationHelper.GetExpirationLabel(
+                            virtualReferenceDate
+                        ),
                     };
 
                     result.Add(virtualLead);
@@ -1229,6 +1245,7 @@ public class LeadService : ILeadService
                 if (!clientsWithUserLeads.Contains(client.Id))
                 {
                     // Crear un LeadSummaryDto virtual para este cliente
+                    var virtualReferenceDate = DateTime.UtcNow;
                     var virtualLead = new LeadSummaryDto
                     {
                         Id = client.Id,
@@ -1242,9 +1259,18 @@ public class LeadService : ILeadService
                             PhoneNumber = client.PhoneNumber,
                         },
                         Status = LeadStatus.Registered,
-                        ExpirationDate = DateTime.UtcNow.AddDays(7),
+                        ExpirationDate = LeadExpirationHelper.GetExpirationDateUtc(
+                            virtualReferenceDate
+                        ),
                         ProjectName = null,
                         RecycleCount = 0,
+                        IsExpired = LeadExpirationHelper.IsCalendarExpired(virtualReferenceDate),
+                        DaysUntilExpiration = LeadExpirationHelper.GetDaysUntilExpiration(
+                            virtualReferenceDate
+                        ),
+                        ExpirationLabel = LeadExpirationHelper.GetExpirationLabel(
+                            virtualReferenceDate
+                        ),
                     };
 
                     result.Add(virtualLead);
@@ -1465,7 +1491,6 @@ public class LeadService : ILeadService
     {
         var now = DateTime.UtcNow;
 
-        // Buscar leads activos con fecha de expiración anterior a ahora y que no estén ya marcados como expirados
         var expiredLeads = await _context
             .Leads.Where(l =>
                 l.IsActive
@@ -1482,7 +1507,8 @@ public class LeadService : ILeadService
             lead.ModifiedAt = now;
         }
 
-        await _context.SaveChangesAsync();
+        if (expiredLeads.Count > 0)
+            await _context.SaveChangesAsync();
 
         return expiredLeads.Count;
     }
@@ -1785,9 +1811,13 @@ public class LeadService : ILeadService
         User senderUser
     )
     {
-        var now = DateTime.UtcNow;
-        var timeRemaining = lead.ExpirationDate - now;
-        var daysRemaining = (int)timeRemaining.TotalDays;
+        var referenceDate = LeadExpirationHelper.GetReferenceDate(
+            lead.EntryDate,
+            lead.CreatedAt,
+            lead.LastRecycledAt
+        );
+        var daysRemaining = LeadExpirationHelper.GetDaysUntilExpiration(referenceDate);
+        var isCalendarExpired = LeadExpirationHelper.IsCalendarExpired(referenceDate);
 
         // Obtener tareas del lead
         var tasks = await _context
@@ -1800,7 +1830,7 @@ public class LeadService : ILeadService
         var totalTasks = tasks.Count;
 
         // Determinar tipo de notificación basado en el estado y tiempo
-        if (daysRemaining <= 0)
+        if (isCalendarExpired)
         {
             // Lead expirado
             var statusMessage = GetLeadStatusMessage(lead, hasCallTask, hasFollowUpTask);

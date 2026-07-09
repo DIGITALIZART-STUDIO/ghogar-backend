@@ -1,4 +1,5 @@
 using GestionHogar.Model;
+using GestionHogar.Utils;
 using Microsoft.EntityFrameworkCore;
 
 public class GetAdvisorDashboardDataUseCase
@@ -96,7 +97,13 @@ public class GetAdvisorDashboardDataUseCase
                 ClientEmail = l.Client?.Email,
                 CaptureSource = l.CaptureSource.ToString(),
                 Status = l.Status.ToString(),
-                DaysUntilExpiration = (int)(l.ExpirationDate - now).TotalDays,
+                DaysUntilExpiration = LeadExpirationHelper.GetDaysUntilExpiration(
+                    LeadExpirationHelper.GetReferenceDate(
+                        l.EntryDate,
+                        l.CreatedAt,
+                        l.LastRecycledAt
+                    )
+                ),
                 ProjectName = l.Project?.Name ?? "Sin proyecto",
                 EntryDate = l.EntryDate,
                 LastContact = l.ModifiedAt, // TODO: Implementar tracking de último contacto
@@ -286,7 +293,12 @@ public class GetAdvisorDashboardDataUseCase
 
     private string GetPriorityForLead(Lead lead)
     {
-        var daysUntilExpiration = (lead.ExpirationDate - DateTime.UtcNow).TotalDays;
+        var referenceDate = LeadExpirationHelper.GetReferenceDate(
+            lead.EntryDate,
+            lead.CreatedAt,
+            lead.LastRecycledAt
+        );
+        var daysUntilExpiration = LeadExpirationHelper.GetDaysUntilExpiration(referenceDate);
 
         if (daysUntilExpiration <= 1)
             return "high";

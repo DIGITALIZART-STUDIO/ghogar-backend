@@ -21,6 +21,9 @@ public class QuotationSummaryDTO
     public required decimal AreaAtQuotation { get; set; } // Cambiado de Area a AreaAtQuotation
     public required string Currency { get; set; } // Cambiado de Area a AreaAtQuotation
 
+    public Guid AdvisorId { get; set; }
+    public string AdvisorName { get; set; } = string.Empty;
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public QuotationStatus Status { get; set; }
     public string StatusText { get; set; } = string.Empty;
@@ -73,6 +76,8 @@ public class QuotationSummaryDTO
             QuotationDate = quotation.QuotationDate,
             Currency = quotation.Currency,
             CreatedAt = quotation.CreatedAt,
+            AdvisorId = quotation.AdvisorId,
+            AdvisorName = quotation.Advisor?.Name ?? "Asesor no especificado",
         };
     }
 
