@@ -462,13 +462,15 @@ public class ClientsController : ControllerBase
     [HttpGet("paginated-search")]
     public async Task<
         ActionResult<PaginatedResponseV2<GestionHogar.Model.Client>>
-    > GetClientsPaginated(
+    > GetClientsPaginatedSearch(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? search = null,
         [FromQuery] string? orderBy = null,
         [FromQuery] string? orderDirection = "asc",
-        [FromQuery] string? preselectedId = null
+        [FromQuery] string? preselectedId = null,
+        [FromQuery] bool useCurrentUser = false,
+        [FromQuery] Guid? projectId = null
     )
     {
         try
@@ -489,8 +491,29 @@ public class ClientsController : ControllerBase
             // Construir consulta base
             var query = _context.Clients.AsQueryable();
 
+            // Parsear preselectedId antes de aplicar filtros (para incluir el cliente al editar)
+            Guid? preselectedGuid = null;
+            if (
+                !string.IsNullOrWhiteSpace(preselectedId)
+                && Guid.TryParse(preselectedId, out var parsedGuid)
+            )
+            {
+                preselectedGuid = parsedGuid;
+            }
+
+            if (useCurrentUser)
+            {
+                var includeClientId =
+                    preselectedGuid.HasValue && page == 1 ? preselectedGuid : null;
+                query = _clientService.ApplyCurrentUserClientsFilter(
+                    query,
+                    currentUserId,
+                    projectId,
+                    includeClientId
+                );
+            }
             // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar clientes que tienen leads asignados a sus SalesAdvisors o al propio supervisor
-            if (isSupervisor)
+            else if (isSupervisor)
             {
                 // Obtener los IDs de los SalesAdvisors asignados a este supervisor
                 var assignedSalesAdvisorIds = await _context
@@ -520,14 +543,8 @@ public class ClientsController : ControllerBase
             }
 
             // Lógica para preselectedId - incluir en la query base
-            Guid? preselectedGuid = null;
-            if (
-                !string.IsNullOrWhiteSpace(preselectedId)
-                && Guid.TryParse(preselectedId, out var parsedGuid)
-            )
+            if (preselectedGuid.HasValue)
             {
-                preselectedGuid = parsedGuid;
-
                 if (page == 1)
                 {
                     // En la primera página: incluir el cliente preseleccionado al inicio
@@ -690,6 +707,10 @@ public class ClientsController : ControllerBase
             );
 
             return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
         }
         catch (Exception ex)
         {
