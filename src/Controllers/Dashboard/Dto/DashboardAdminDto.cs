@@ -1,3 +1,5 @@
+using GestionHogar.Controllers;
+
 public class LotStatusDto
 {
     public string Status { get; set; } = "";
@@ -7,11 +9,32 @@ public class LotStatusDto
 
 public class TeamMemberDto
 {
+    public Guid UserId { get; set; }
     public string Name { get; set; } = "";
     public string Role { get; set; } = "";
     public int Quotations { get; set; }
     public int Reservations { get; set; }
     public double Efficiency { get; set; }
+}
+
+public class AdminTeamMemberActivityDto
+{
+    public Guid UserId { get; set; }
+    public string UserName { get; set; } = "";
+    public List<RecentLeadDto> Leads { get; set; } = new();
+    public List<AdminTeamMemberTaskDto> Tasks { get; set; } = new();
+}
+
+public class AdminTeamMemberTaskDto
+{
+    public Guid Id { get; set; }
+    public Guid LeadId { get; set; }
+    public string Description { get; set; } = "";
+    public string Type { get; set; } = "";
+    public bool IsCompleted { get; set; }
+    public DateTime ScheduledDate { get; set; }
+    public DateTime? CompletedDate { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 public class LeadStatusDto
@@ -165,6 +188,7 @@ public class DashboardAdminDto
 
     public List<LotStatusDto> LotsByStatus { get; set; } = new();
     public List<TeamMemberDto> TeamData { get; set; } = new();
+    public List<RecentLeadDto> RecentLeads { get; set; } = new();
     public List<LeadStatusDto> LeadsByStatus { get; set; } = new();
     public List<LeadSourceDto> LeadSources { get; set; } = new();
     public ClientAnalysisDto ClientAnalysis { get; set; } = new();

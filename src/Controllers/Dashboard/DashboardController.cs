@@ -10,6 +10,7 @@ namespace GestionHogar.Controllers;
 public class DashboardController : ControllerBase
 {
     private readonly GetDashboardAdminDataUseCase _getDashboardAdminDataUseCase;
+    private readonly GetAdminTeamMemberActivityUseCase _getAdminTeamMemberActivityUseCase;
     private readonly GetAdvisorDashboardDataUseCase _getAdvisorDashboardDataUseCase;
     private readonly GetFinanceManagerDashboardDataUseCase _getFinanceManagerDashboardDataUseCase;
     private readonly GetSupervisorDashboardDataUseCase _getSupervisorDashboardDataUseCase;
@@ -18,6 +19,7 @@ public class DashboardController : ControllerBase
 
     public DashboardController(
         GetDashboardAdminDataUseCase getDashboardAdminDataUseCase,
+        GetAdminTeamMemberActivityUseCase getAdminTeamMemberActivityUseCase,
         GetAdvisorDashboardDataUseCase getAdvisorDashboardDataUseCase,
         GetFinanceManagerDashboardDataUseCase getFinanceManagerDashboardDataUseCase,
         GetSupervisorDashboardDataUseCase getSupervisorDashboardDataUseCase,
@@ -26,6 +28,7 @@ public class DashboardController : ControllerBase
     )
     {
         _getDashboardAdminDataUseCase = getDashboardAdminDataUseCase;
+        _getAdminTeamMemberActivityUseCase = getAdminTeamMemberActivityUseCase;
         _getAdvisorDashboardDataUseCase = getAdvisorDashboardDataUseCase;
         _getFinanceManagerDashboardDataUseCase = getFinanceManagerDashboardDataUseCase;
         _getSupervisorDashboardDataUseCase = getSupervisorDashboardDataUseCase;
@@ -33,11 +36,57 @@ public class DashboardController : ControllerBase
         _getCommercialManagerDashboardDataUseCase = getCommercialManagerDashboardDataUseCase;
     }
 
+    /// <summary>
+    /// Dashboard admin. from/to (opcionales, juntos) tienen prioridad sobre year.
+    /// </summary>
     [HttpGet("admin")]
-    [AuthorizeCurrentUser]
-    public async Task<ActionResult<DashboardAdminDto>> GetDashboard([FromQuery] int? year)
+    [AuthorizeCurrentUser("Admin", "SuperAdmin")]
+    [ProducesResponseType(typeof(DashboardAdminDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<DashboardAdminDto>> GetDashboard(
+        [FromQuery] int? year,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to
+    )
     {
-        var result = await _getDashboardAdminDataUseCase.ExecuteAsync(year);
+        var dateError = ValidateFromTo(from, to);
+        if (dateError != null)
+            return BadRequest(dateError);
+
+        var result = await _getDashboardAdminDataUseCase.ExecuteAsync(year, from, to);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Actividad reciente de un SalesAdvisor (leads y tareas del rango).
+    /// </summary>
+    [HttpGet("admin/team-member/{userId:guid}/activity")]
+    [AuthorizeCurrentUser("Admin", "SuperAdmin")]
+    [ProducesResponseType(typeof(AdminTeamMemberActivityDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<AdminTeamMemberActivityDto>> GetAdminTeamMemberActivity(
+        Guid userId,
+        [FromQuery] int? year,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to
+    )
+    {
+        var dateError = ValidateFromTo(from, to);
+        if (dateError != null)
+            return BadRequest(dateError);
+
+        var result = await _getAdminTeamMemberActivityUseCase.ExecuteAsync(
+            userId,
+            from,
+            to,
+            year
+        );
+        if (result == null)
+            return NotFound();
+
         return Ok(result);
     }
 
@@ -136,5 +185,16 @@ public class DashboardController : ControllerBase
         {
             return StatusCode(500, $"Error interno del servidor: {ex.Message}");
         }
+    }
+
+    private static string? ValidateFromTo(DateOnly? from, DateOnly? to)
+    {
+        if (from.HasValue != to.HasValue)
+            return "Los parámetros from y to deben enviarse juntos.";
+
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+            return "El parámetro from no puede ser mayor que to.";
+
+        return null;
     }
 }

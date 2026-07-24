@@ -7,6 +7,7 @@ public static class DashboardModule
     public static IServiceCollection AddDashboardServices(this IServiceCollection services)
     {
         services.AddScoped<GetDashboardAdminDataUseCase>();
+        services.AddScoped<GetAdminTeamMemberActivityUseCase>();
         services.AddScoped<GetAdvisorDashboardDataUseCase>();
         services.AddScoped<GetFinanceManagerDashboardDataUseCase>();
         services.AddScoped<GetSupervisorDashboardDataUseCase>();
