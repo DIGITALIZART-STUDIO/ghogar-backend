@@ -219,6 +219,7 @@ var modules = new IModule[]
     new UserHigherRankModule(),
     new LandingModule(),
     new NotificationModule(),
+    new ReportsModule(),
 };
 
 // Register dashboard services
