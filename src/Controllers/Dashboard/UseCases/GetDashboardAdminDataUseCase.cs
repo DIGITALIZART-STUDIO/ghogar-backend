@@ -1,5 +1,7 @@
 using System.Text.Json;
+using GestionHogar.Controllers;
 using GestionHogar.Model;
+using GestionHogar.Utils;
 using Microsoft.EntityFrameworkCore;
 
 public class GetDashboardAdminDataUseCase
@@ -11,13 +13,23 @@ public class GetDashboardAdminDataUseCase
         _db = db;
     }
 
-    public async Task<DashboardAdminDto> ExecuteAsync(int? year = null)
+    public async Task<DashboardAdminDto> ExecuteAsync(
+        int? year = null,
+        DateOnly? from = null,
+        DateOnly? to = null
+    )
     {
         var now = DateTime.UtcNow;
         var yearToUse = year ?? now.Year;
 
+        // Rango basado en year (métricas que ya dependían de year)
         var startDate = new DateTime(yearToUse, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var endDate = new DateTime(yearToUse + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        // Rango efectivo para tab Leads / teamData (from/to gana sobre year)
+        var (rangeStart, rangeEnd) = ResolveEffectiveRange(yearToUse, from, to);
+        var rangeStartDateOnly = DateOnly.FromDateTime(rangeStart);
+        var rangeEndDateOnly = DateOnly.FromDateTime(rangeEnd);
 
         var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var monthEnd = monthStart.AddMonths(1);
@@ -29,7 +41,15 @@ public class GetDashboardAdminDataUseCase
             && r.ReservationDate < DateOnly.FromDateTime(endDate)
         );
 
-        var leadsCount = await _db.Leads.CountAsync();
+        var periodLeadsCount = await _db.Leads.CountAsync(l =>
+            l.EntryDate >= rangeStart && l.EntryDate < rangeEnd
+        );
+
+        var periodCompletedSalesCount = await _db.Reservations.CountAsync(r =>
+            r.Status == ReservationStatus.CANCELED
+            && r.ReservationDate >= rangeStartDateOnly
+            && r.ReservationDate < rangeEndDateOnly
+        );
 
         var reservationsCount = await _db.Reservations.CountAsync(r =>
             r.ReservationDate >= DateOnly.FromDateTime(startDate)
@@ -87,7 +107,9 @@ public class GetDashboardAdminDataUseCase
                 .AverageAsync(q => (decimal?)q.FinalPrice) ?? 0;
 
         double conversionRate =
-            leadsCount > 0 ? Math.Round((completedSalesCount / (double)leadsCount) * 100, 2) : 0;
+            periodLeadsCount > 0
+                ? Math.Round((periodCompletedSalesCount / (double)periodLeadsCount) * 100, 2)
+                : 0;
 
         double operationalEfficiency =
             completedSalesCount > 0
@@ -109,15 +131,17 @@ public class GetDashboardAdminDataUseCase
             })
             .ToList();
 
-        // Leads por estado (sin porcentaje)
+        // Leads por estado (filtrados por EntryDate en rango efectivo)
         var leadsByStatus = await _db
-            .Leads.GroupBy(l => l.Status)
+            .Leads.Where(l => l.EntryDate >= rangeStart && l.EntryDate < rangeEnd)
+            .GroupBy(l => l.Status)
             .Select(g => new LeadStatusDto { Status = g.Key.ToString(), Count = g.Count() })
             .ToListAsync();
 
-        // Fuentes de captación (agrupamiento en memoria para evitar división por cero)
+        // Fuentes de captación (filtradas por EntryDate en rango efectivo)
         var sourcesGrouped = await _db
-            .Leads.GroupBy(l => l.CaptureSource)
+            .Leads.Where(l => l.EntryDate >= rangeStart && l.EntryDate < rangeEnd)
+            .GroupBy(l => l.CaptureSource)
             .Select(g => new { Source = g.Key.ToString(), Count = g.Count() })
             .ToListAsync();
         var totalLeadsSources = sourcesGrouped.Sum(g => g.Count);
@@ -133,36 +157,41 @@ public class GetDashboardAdminDataUseCase
             })
             .ToList();
 
-        // Equipo de trabajo con rol principal (optimizado para evitar N+1)
-        var users = await _db.Users.ToListAsync();
+        // Ranking de equipo: solo SalesAdvisor activos, métricas del rango efectivo
+        var salesAdvisorRole = await _db.Roles.FirstOrDefaultAsync(r => r.Name == "SalesAdvisor");
+        var salesAdvisorIds =
+            salesAdvisorRole == null
+                ? new HashSet<Guid>()
+                : (
+                    await _db
+                        .UserRoles.Where(ur => ur.RoleId == salesAdvisorRole.Id)
+                        .Select(ur => ur.UserId)
+                        .ToListAsync()
+                ).ToHashSet();
 
-        // Pre-cargar todos los datos necesarios en consultas optimizadas
-        var userRolesDict = await (
-            from ur in _db.UserRoles
-            join r in _db.Roles on ur.RoleId equals r.Id
-            select new { UserId = ur.UserId, RoleName = r.Name }
-        )
-            .GroupBy(x => x.UserId)
-            .ToDictionaryAsync(
-                g => g.Key,
-                g => g.First().RoleName // Toma el primer rol si hay múltiples
-            );
+        var salesAdvisors = await _db
+            .Users.Where(u => u.IsActive && salesAdvisorIds.Contains(u.Id))
+            .ToListAsync();
 
         var quotationsByAdvisor = await _db
-            .Quotations.GroupBy(q => q.AdvisorId)
+            .Quotations.Where(q => q.CreatedAt >= rangeStart && q.CreatedAt < rangeEnd)
+            .GroupBy(q => q.AdvisorId)
             .Select(g => new { AdvisorId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.AdvisorId, x => x.Count);
 
+        // ReservationDate siempre existe; se usa como fecha de filtro del rango
         var reservationsByAdvisor = await _db
             .Reservations.Include(r => r.Quotation)
+            .Where(r =>
+                r.ReservationDate >= rangeStartDateOnly && r.ReservationDate < rangeEndDateOnly
+            )
             .GroupBy(r => r.Quotation.AdvisorId)
             .Select(g => new { AdvisorId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.AdvisorId, x => x.Count);
 
         var teamData = new List<TeamMemberDto>();
-        foreach (var u in users)
+        foreach (var u in salesAdvisors)
         {
-            var role = userRolesDict.GetValueOrDefault(u.Id, "Sin rol");
             var quotations = quotationsByAdvisor.GetValueOrDefault(u.Id, 0);
             var reservations = reservationsByAdvisor.GetValueOrDefault(u.Id, 0);
 
@@ -172,8 +201,9 @@ public class GetDashboardAdminDataUseCase
             teamData.Add(
                 new TeamMemberDto
                 {
+                    UserId = u.Id,
                     Name = u.Name,
-                    Role = role,
+                    Role = "SalesAdvisor",
                     Quotations = quotations,
                     Reservations = reservations,
                     Efficiency = efficiency,
@@ -181,11 +211,42 @@ public class GetDashboardAdminDataUseCase
             );
         }
 
-        // Selecciona solo el top 10 por eficiencia
         teamData = teamData
             .OrderByDescending(t => t.Efficiency)
             .ThenByDescending(t => t.Reservations)
+            .ThenBy(t => t.Name)
+            .ToList();
+
+        // Leads recientes del rango (máx. 10, EntryDate DESC)
+        var recentLeadsEntities = await _db
+            .Leads.Include(l => l.Client)
+            .Include(l => l.AssignedTo)
+            .Include(l => l.Project)
+            .Where(l => l.EntryDate >= rangeStart && l.EntryDate < rangeEnd)
+            .OrderByDescending(l => l.EntryDate)
             .Take(10)
+            .ToListAsync();
+
+        var recentLeads = recentLeadsEntities
+            .Select(l => new RecentLeadDto
+            {
+                Id = l.Id,
+                ClientName = l.Client?.Name ?? "Sin cliente",
+                ClientPhone = l.Client?.PhoneNumber ?? "",
+                CaptureSource = l.CaptureSource.ToString(),
+                Status = l.Status.ToString(),
+                DaysUntilExpiration = LeadExpirationHelper.GetDaysUntilExpiration(
+                    LeadExpirationHelper.GetReferenceDate(
+                        l.EntryDate,
+                        l.CreatedAt,
+                        l.LastRecycledAt
+                    )
+                ),
+                AssignedTo = l.AssignedTo?.Name,
+                ProjectName = l.Project?.Name ?? "Sin proyecto",
+                EntryDate = l.EntryDate,
+                Priority = GetPriorityForLead(l),
+            })
             .ToList();
 
         // --- Análisis de clientes ---
@@ -618,19 +679,27 @@ public class GetDashboardAdminDataUseCase
             TotalLots = totalLots,
             TotalClients = await _db.Clients.CountAsync(),
             ActiveLeads = await _db.Leads.CountAsync(l =>
-                l.IsActive
+                l.EntryDate >= rangeStart
+                && l.EntryDate < rangeEnd
+                && l.IsActive
                 && l.Status != LeadStatus.Expired
                 && l.Status != LeadStatus.Canceled
                 && l.Status != LeadStatus.Completed
             ),
-            ExpiredLeads = await _db.Leads.CountAsync(l => l.Status == LeadStatus.Expired),
+            ExpiredLeads = await _db.Leads.CountAsync(l =>
+                l.EntryDate >= rangeStart
+                && l.EntryDate < rangeEnd
+                && l.Status == LeadStatus.Expired
+            ),
             ActiveQuotations = await _db.Quotations.CountAsync(q =>
-                q.Status == QuotationStatus.ISSUED || q.Status == QuotationStatus.ACCEPTED
+                q.CreatedAt >= rangeStart
+                && q.CreatedAt < rangeEnd
+                && (q.Status == QuotationStatus.ISSUED || q.Status == QuotationStatus.ACCEPTED)
             ),
             PendingReservations = await _db.Reservations.CountAsync(r =>
                 r.Status == ReservationStatus.ISSUED
-                && r.ReservationDate >= DateOnly.FromDateTime(startDate)
-                && r.ReservationDate < DateOnly.FromDateTime(endDate)
+                && r.ReservationDate >= rangeStartDateOnly
+                && r.ReservationDate < rangeEndDateOnly
             ),
             CompletedSales = completedSalesCount,
             AnnualRevenue = annualRevenue,
@@ -642,6 +711,7 @@ public class GetDashboardAdminDataUseCase
             LeadsByStatus = leadsByStatus,
             LeadSources = leadSources,
             TeamData = teamData,
+            RecentLeads = recentLeads,
             ClientAnalysis = clientAnalysis,
             ProjectMetrics = projectMetrics,
             PaymentMetrics = paymentMetrics,
@@ -658,5 +728,43 @@ public class GetDashboardAdminDataUseCase
         };
 
         return dto;
+    }
+
+    /// <summary>
+    /// Resuelve el rango efectivo: from/to (to inclusivo hasta fin de día UTC) gana sobre year.
+    /// </summary>
+    private static (DateTime RangeStart, DateTime RangeEndExclusive) ResolveEffectiveRange(
+        int yearToUse,
+        DateOnly? from,
+        DateOnly? to
+    )
+    {
+        if (from.HasValue && to.HasValue)
+        {
+            var rangeStart = from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            // to inclusivo → exclusivo al día siguiente
+            var rangeEnd = to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            return (rangeStart, rangeEnd);
+        }
+
+        var yearStart = new DateTime(yearToUse, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var yearEnd = new DateTime(yearToUse + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        return (yearStart, yearEnd);
+    }
+
+    private static string GetPriorityForLead(Lead lead)
+    {
+        var referenceDate = LeadExpirationHelper.GetReferenceDate(
+            lead.EntryDate,
+            lead.CreatedAt,
+            lead.LastRecycledAt
+        );
+        var daysUntilExpiration = LeadExpirationHelper.GetDaysUntilExpiration(referenceDate);
+
+        if (daysUntilExpiration <= 1 || !lead.AssignedToId.HasValue)
+            return "high";
+        if (daysUntilExpiration <= 3)
+            return "medium";
+        return "low";
     }
 }
