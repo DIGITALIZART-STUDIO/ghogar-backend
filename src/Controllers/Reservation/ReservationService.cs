@@ -613,7 +613,8 @@ public class ReservationService : IReservationService
             AmountPaid = 0, // Inicializar en 0 porque aún no se ha pagado
             TotalAmountRequired = reservationDto.AmountPaid, // El monto del DTO es lo que debe pagar
             RemainingAmount = reservationDto.AmountPaid, // Al inicio, todo está pendiente
-            Currency = reservationDto.Currency,
+            // La moneda siempre se deriva de la cotización asociada (nunca del valor enviado por el cliente)
+            Currency = MapQuotationCurrency(quotation.Currency),
             PaymentMethod = reservationDto.PaymentMethod,
             BankName = reservationDto.BankName,
             ExchangeRate = reservationDto.ExchangeRate,
@@ -629,6 +630,23 @@ public class ReservationService : IReservationService
         _context.Reservations.Add(reservation);
         await _context.SaveChangesAsync();
         return reservation;
+    }
+
+    /// <summary>
+    /// Mapea el código de moneda de la cotización (string, ej. "PEN", "USD")
+    /// al enum de moneda usado por las separaciones.
+    /// Lanza ArgumentException si la moneda de la cotización no está soportada.
+    /// </summary>
+    private static Currency MapQuotationCurrency(string quotationCurrency)
+    {
+        return quotationCurrency.Trim().ToUpperInvariant() switch
+        {
+            "PEN" => Currency.SOLES,
+            "USD" => Currency.DOLARES,
+            _ => throw new ArgumentException(
+                $"La moneda de la cotización ('{quotationCurrency}') no está soportada para separaciones. Valores soportados: PEN, USD."
+            ),
+        };
     }
 
     public async Task<bool> ToggleContractValidationStatusAsync(Guid reservationId)
@@ -904,7 +922,8 @@ public class ReservationService : IReservationService
         reservation.ReservationDate = reservationDto.ReservationDate;
         reservation.TotalAmountRequired = reservationDto.AmountPaid; // El monto del DTO es lo que debe pagar
         reservation.RemainingAmount = reservationDto.AmountPaid - reservation.AmountPaid; // Recalcular pendiente
-        reservation.Currency = reservationDto.Currency;
+        // La moneda siempre se deriva de la cotización asociada (nunca del valor enviado por el cliente)
+        reservation.Currency = MapQuotationCurrency(reservation.Quotation.Currency);
         reservation.Status = reservationDto.Status;
         reservation.PaymentMethod = reservationDto.PaymentMethod;
         reservation.BankName = reservationDto.BankName;
