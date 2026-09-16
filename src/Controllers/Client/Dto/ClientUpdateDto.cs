@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using GestionHogar.Model;
+using GestionHogar.Utils;
 
 namespace GestionHogar.Controllers.Dtos;
 
@@ -19,7 +20,7 @@ public class ClientUpdateDto
 
     public string? PhoneNumber { get; set; }
 
-    [EmailAddress]
+    [OptionalEmailAddress]
     public string? Email { get; set; }
 
     public string? Address { get; set; }

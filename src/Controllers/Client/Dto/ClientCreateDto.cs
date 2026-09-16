@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using GestionHogar.Model;
+using GestionHogar.Utils;
 
 namespace GestionHogar.Controllers.Dtos;
 
@@ -10,11 +11,11 @@ public class ClientCreateDto
 
     public string? CoOwners { get; set; } // JSON con los copropietarios
 
-    // Solo requerido para Type = Natural
+    // Opcional. Si se envía, debe tener 8 caracteres
     [StringLength(8)]
     public string? Dni { get; set; }
 
-    // Solo requerido para Type = Juridico
+    // Opcional. Si se envía, debe tener 11 caracteres
     [StringLength(11)]
     public string? Ruc { get; set; }
 
@@ -23,12 +24,10 @@ public class ClientCreateDto
     [Required]
     public required string PhoneNumber { get; set; }
 
-    [Required]
-    [EmailAddress]
-    public required string Email { get; set; }
+    [OptionalEmailAddress]
+    public string? Email { get; set; }
 
-    [Required]
-    public required string Address { get; set; }
+    public string? Address { get; set; }
 
     public string? Country { get; set; }
 

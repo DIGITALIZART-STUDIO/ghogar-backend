@@ -164,6 +164,12 @@ public class ClientService : IClientService
             throw new ArgumentException(errorMessage);
         }
 
+        client.Dni = string.IsNullOrWhiteSpace(client.Dni) ? null : client.Dni;
+        client.Ruc = string.IsNullOrWhiteSpace(client.Ruc) ? null : client.Ruc;
+        client.Email = string.IsNullOrWhiteSpace(client.Email) ? null : client.Email;
+        client.Address = string.IsNullOrWhiteSpace(client.Address) ? null : client.Address;
+        client.Country = string.IsNullOrWhiteSpace(client.Country) ? null : client.Country;
+
         // Verificar que no exista otro cliente con el mismo DNI
         if (client.Type == ClientType.Natural && !string.IsNullOrEmpty(client.Dni))
         {
@@ -280,13 +286,13 @@ public class ClientService : IClientService
         // Actualizar propiedades
         client.Name = updatedClient.Name;
         client.CoOwners = updatedClient.CoOwners;
-        client.Dni = updatedClient.Dni;
-        client.Ruc = updatedClient.Ruc;
+        client.Dni = string.IsNullOrWhiteSpace(updatedClient.Dni) ? null : updatedClient.Dni;
+        client.Ruc = string.IsNullOrWhiteSpace(updatedClient.Ruc) ? null : updatedClient.Ruc;
         client.CompanyName = updatedClient.CompanyName;
         client.PhoneNumber = updatedClient.PhoneNumber;
-        client.Email = updatedClient.Email;
-        client.Address = updatedClient.Address;
-        client.Country = updatedClient.Country;
+        client.Email = string.IsNullOrWhiteSpace(updatedClient.Email) ? null : updatedClient.Email;
+        client.Address = string.IsNullOrWhiteSpace(updatedClient.Address) ? null : updatedClient.Address;
+        client.Country = string.IsNullOrWhiteSpace(updatedClient.Country) ? null : updatedClient.Country;
         client.Type = updatedClient.Type;
         client.SeparateProperty = updatedClient.SeparateProperty;
         client.SeparatePropertyData = updatedClient.SeparatePropertyData;
