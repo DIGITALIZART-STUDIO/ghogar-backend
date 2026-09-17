@@ -137,7 +137,10 @@ public class QuotationService(
         Guid[]? clientId = null,
         Guid? projectId = null,
         string? orderBy = null,
-        Guid? advisorId = null
+        Guid? advisorId = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     )
     {
         // Construir consulta base
@@ -149,6 +152,13 @@ public class QuotationService(
             .ThenInclude(l => l!.Block)
             .ThenInclude(b => b.Project)
             .AsQueryable();
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar cotizaciones de sus SalesAdvisors asignados
+        if (isSupervisor && currentUserId.HasValue)
+        {
+            var assignedSalesAdvisorIds = await GetSupervisorTeamUserIdsAsync(currentUserId.Value);
+            query = query.Where(q => assignedSalesAdvisorIds.Contains(q.AdvisorId));
+        }
 
         if (advisorId.HasValue)
         {
@@ -343,7 +353,8 @@ public class QuotationService(
         string? search = null,
         string? orderBy = null,
         string? orderDirection = "asc",
-        string? preselectedId = null
+        string? preselectedId = null,
+        IList<string>? currentUserRoles = null
     )
     {
         // Lógica para preselectedId - incluir en la query base
@@ -365,10 +376,26 @@ public class QuotationService(
             .ThenInclude(l => l!.Block)
             .ThenInclude(b => b.Project)
             .Where(q => q.Status == QuotationStatus.ACCEPTED)
-            // Solo cotizaciones del usuario actual
-            .Where(q => q.AdvisorId == currentUserId)
             // Excluir cotizaciones que ya tienen reservas activas
             .Where(q => !_context.Reservations.Any(r => r.QuotationId == q.Id && r.IsActive));
+
+        var isCommercialManager =
+            currentUserRoles != null && currentUserRoles.Contains("CommercialManager");
+        var isSupervisorRole =
+            currentUserRoles != null && currentUserRoles.Contains("Supervisor");
+
+        if (!isCommercialManager)
+        {
+            if (isSupervisorRole)
+            {
+                var assignedSalesAdvisorIds = await GetSupervisorTeamUserIdsAsync(currentUserId);
+                query = query.Where(q => assignedSalesAdvisorIds.Contains(q.AdvisorId));
+            }
+            else
+            {
+                query = query.Where(q => q.AdvisorId == currentUserId);
+            }
+        }
 
         // Aplicar filtro de búsqueda si se proporciona
         if (!string.IsNullOrWhiteSpace(search))
@@ -666,6 +693,7 @@ public class QuotationService(
                 || role == "Supervisor"
                 || role == "Manager"
                 || role == "FinanceManager"
+                || role == "CommercialManager"
             )
         );
 
@@ -1450,12 +1478,13 @@ public class QuotationService(
                 || r == "Manager"
                 || r == "FinanceManager"
                 || r == "SuperAdmin"
+                || r == "CommercialManager"
             )
         )
             return new SendOtpResponseDto
             {
                 Success = false,
-                Message = "Solo un Admin, Supervisor o Gerente puede recibir el OTP",
+                Message = "Solo un Admin, Supervisor, Gerente o Gerente Comercial puede recibir el OTP",
             };
 
         // Verifica que el asesor existe y está activo
@@ -1718,5 +1747,18 @@ public class QuotationService(
         <div style=""text-align: center; margin: 30px 0;"">
             <a href=""{businessUrl}"" class=""btn"">Acceder a la Plataforma</a>
         </div>";
+    }
+
+    private async Task<List<Guid>> GetSupervisorTeamUserIdsAsync(Guid supervisorId)
+    {
+        var assignedSalesAdvisorIds = await _context
+            .SupervisorSalesAdvisors.Where(ssa =>
+                ssa.SupervisorId == supervisorId && ssa.IsActive
+            )
+            .Select(ssa => ssa.SalesAdvisorId)
+            .ToListAsync();
+
+        assignedSalesAdvisorIds.Add(supervisorId);
+        return assignedSalesAdvisorIds;
     }
 }

@@ -40,7 +40,14 @@ public class QuotationsController : ControllerBase
     }
 
     [HttpGet("paginated")]
-    [AuthorizeCurrentUser("SuperAdmin", "Admin", "Supervisor", "Manager", "FinanceManager")]
+    [AuthorizeCurrentUser(
+        "SuperAdmin",
+        "Admin",
+        "Supervisor",
+        "Manager",
+        "FinanceManager",
+        "CommercialManager"
+    )]
     public async Task<
         ActionResult<PaginatedResponseV2<QuotationSummaryDTO>>
     > GetQuotationsPaginated(
@@ -57,6 +64,10 @@ public class QuotationsController : ControllerBase
     {
         try
         {
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+            var isSupervisor = currentUserRoles.Contains("Supervisor");
+
             var result = await _quotationService.GetQuotationsPaginatedAsync(
                 page,
                 pageSize,
@@ -66,9 +77,16 @@ public class QuotationsController : ControllerBase
                 clientId,
                 projectId,
                 orderBy,
-                advisorId
+                advisorId,
+                currentUserId,
+                currentUserRoles,
+                isSupervisor
             );
             return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
         }
         catch (Exception ex)
         {
@@ -202,8 +220,8 @@ public class QuotationsController : ControllerBase
     {
         try
         {
-            // Obtener el usuario actual
             var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
 
             var quotations = await _quotationService.GetAcceptedQuotationsByAdvisorPaginatedAsync(
                 currentUserId,
@@ -212,7 +230,8 @@ public class QuotationsController : ControllerBase
                 search,
                 orderBy,
                 orderDirection,
-                preselectedId
+                preselectedId,
+                currentUserRoles
             );
             return Ok(quotations);
         }

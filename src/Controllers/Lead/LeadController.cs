@@ -579,18 +579,6 @@ public class LeadsController : ControllerBase
             var currentUserId = User.GetCurrentUserIdOrThrow();
             var currentUserRoles = User.GetCurrentUserRoles().ToList();
 
-            // Verificar si el usuario tiene roles mayores a SalesAdvisor
-            var hasHigherRole = currentUserRoles.Any(role =>
-                role != "SalesAdvisor"
-                && (
-                    role == "SuperAdmin"
-                    || role == "Admin"
-                    || role == "Supervisor"
-                    || role == "Manager"
-                    || role == "FinanceManager"
-                )
-            );
-
             // Permitir acceso a todos los usuarios (SalesAdvisor y roles mayores)
             // La lógica de filtrado se maneja en el servicio según el rol
             var leads = await _leadService.GetAvailableLeadsForQuotationByUserAsync(

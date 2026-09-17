@@ -14,7 +14,10 @@ public interface IReservationService
         ReservationStatus[]? status = null,
         PaymentMethod[]? paymentMethod = null,
         Guid? projectId = null,
-        string? orderBy = null
+        string? orderBy = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     );
     Task<PaginatedResponseV2<ReservationDto>> GetReservationsByAdvisorIdPaginatedAsync(
         Guid advisorId,

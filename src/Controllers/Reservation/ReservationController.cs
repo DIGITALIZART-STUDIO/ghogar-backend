@@ -47,17 +47,35 @@ public class ReservationsController : ControllerBase
         [FromQuery] string? orderBy = null
     )
     {
-        var result = await _reservationService.GetAllReservationsPaginatedAsync(
-            page,
-            pageSize,
-            paginationService,
-            search,
-            status,
-            paymentMethod,
-            projectId,
-            orderBy
-        );
-        return Ok(result);
+        try
+        {
+            var currentUserId = User.GetCurrentUserIdOrThrow();
+            var currentUserRoles = User.GetCurrentUserRoles().ToList();
+            var isSupervisor = currentUserRoles.Contains("Supervisor");
+
+            var result = await _reservationService.GetAllReservationsPaginatedAsync(
+                page,
+                pageSize,
+                paginationService,
+                search,
+                status,
+                paymentMethod,
+                projectId,
+                orderBy,
+                currentUserId,
+                currentUserRoles,
+                isSupervisor
+            );
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized("No se pudo identificar al usuario actual");
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, "Error interno del servidor");
+        }
     }
 
     [HttpGet("advisor/paginated")]
