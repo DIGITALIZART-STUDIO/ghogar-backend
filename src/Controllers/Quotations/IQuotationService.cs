@@ -30,7 +30,10 @@ public interface IQuotationService
         Guid[]? clientId = null,
         Guid? projectId = null,
         string? orderBy = null,
-        Guid? advisorId = null
+        Guid? advisorId = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     );
     Task<PaginatedResponseV2<QuotationSummaryDTO>> GetAcceptedQuotationsByAdvisorPaginatedAsync(
         Guid currentUserId,
@@ -39,7 +42,8 @@ public interface IQuotationService
         string? search = null,
         string? orderBy = null,
         string? orderDirection = "asc",
-        string? preselectedId = null
+        string? preselectedId = null,
+        IList<string>? currentUserRoles = null
     );
     Task<QuotationDTO> CreateQuotationAsync(
         QuotationCreateDTO dto,

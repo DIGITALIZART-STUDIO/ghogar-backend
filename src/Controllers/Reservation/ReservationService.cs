@@ -75,17 +75,34 @@ public class ReservationService : IReservationService
         ReservationStatus[]? status = null,
         PaymentMethod[]? paymentMethod = null,
         Guid? projectId = null,
-        string? orderBy = null
+        string? orderBy = null,
+        Guid? currentUserId = null,
+        IList<string>? currentUserRoles = null,
+        bool isSupervisor = false
     )
     {
         var query = _context
             .Reservations.Include(r => r.Client)
+            .Include(r => r.Quotation)
+            .ThenInclude(q => q.Lead)
             .Include(r => r.Quotation)
             .ThenInclude(q => q.Lot)
             .ThenInclude(l => l.Block)
             .ThenInclude(b => b.Project)
             .Where(r => r.IsActive)
             .AsQueryable();
+
+        // FILTRO ESPECIAL PARA SUPERVISORES: Solo mostrar separaciones de sus SalesAdvisors asignados
+        if (isSupervisor && currentUserId.HasValue)
+        {
+            var assignedSalesAdvisorIds = await GetSupervisorTeamUserIdsAsync(currentUserId.Value);
+
+            query = query.Where(r =>
+                r.Quotation.Lead != null
+                && r.Quotation.Lead.AssignedToId.HasValue
+                && assignedSalesAdvisorIds.Contains(r.Quotation.Lead.AssignedToId.Value)
+            );
+        }
 
         // Aplicar filtro de búsqueda
         if (!string.IsNullOrWhiteSpace(search))
@@ -2911,5 +2928,18 @@ public class ReservationService : IReservationService
         {
             return new List<PaymentHistoryDto>();
         }
+    }
+
+    private async Task<List<Guid>> GetSupervisorTeamUserIdsAsync(Guid supervisorId)
+    {
+        var assignedSalesAdvisorIds = await _context
+            .SupervisorSalesAdvisors.Where(ssa =>
+                ssa.SupervisorId == supervisorId && ssa.IsActive
+            )
+            .Select(ssa => ssa.SalesAdvisorId)
+            .ToListAsync();
+
+        assignedSalesAdvisorIds.Add(supervisorId);
+        return assignedSalesAdvisorIds;
     }
 }

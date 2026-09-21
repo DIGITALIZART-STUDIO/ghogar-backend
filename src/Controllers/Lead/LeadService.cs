@@ -794,6 +794,7 @@ public class LeadService : ILeadService
             { "Asesor de Ventas", "SalesAdvisor" },
             { "Gerente", "Manager" },
             { "Gerente de Finanzas", "FinanceManager" },
+            { "Gerente Comercial", "CommercialManager" },
         };
 
         var query = _context
@@ -996,6 +997,7 @@ public class LeadService : ILeadService
                     || role == "Supervisor"
                     || role == "Manager"
                     || role == "FinanceManager"
+                    || role == "CommercialManager"
                 )
             ) ?? false;
 
@@ -1178,6 +1180,7 @@ public class LeadService : ILeadService
                 || role == "Supervisor"
                 || role == "Manager"
                 || role == "FinanceManager"
+                || role == "CommercialManager"
             )
         );
 
