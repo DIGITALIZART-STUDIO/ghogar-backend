@@ -22,7 +22,7 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
         _currentUserId = currentUserId != null ? Guid.Parse(currentUserId) : null;
     }
 
-    public required DbSet<Audit> Audits { get; set; }
+    public DbSet<Audit> Audits { get; set; } = null!;
     public DbSet<Client> Clients { get; set; } = null!;
 
     public DbSet<Lead> Leads { get; set; }
@@ -32,6 +32,7 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
     public DbSet<Quotation> Quotations { get; set; }
 
     public DbSet<Project> Projects { get; set; } = null!;
+    public DbSet<ProjectContractTemplate> ProjectContractTemplates { get; set; } = null!;
     public DbSet<Block> Blocks { get; set; } = null!;
 
     public DbSet<Lot> Lots { get; set; } = null!;
@@ -143,6 +144,19 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
             entity.HasIndex(e => e.SupervisorId);
             entity.HasIndex(e => e.SalesAdvisorId);
             entity.HasIndex(e => new { e.SupervisorId, e.SalesAdvisorId }).IsUnique();
+        });
+
+        builder.Entity<ProjectContractTemplate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ProjectId).IsUnique();
+            entity.Property(e => e.HtmlContent).IsRequired();
+
+            entity
+                .HasOne(e => e.Project)
+                .WithOne(p => p.ContractTemplate)
+                .HasForeignKey<ProjectContractTemplate>(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Configuración de ApiPeruConsultation

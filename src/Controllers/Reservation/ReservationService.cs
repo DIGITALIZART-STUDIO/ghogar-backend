@@ -13,24 +13,24 @@ public class ReservationService : IReservationService
     private readonly PaginationService _paginationService;
     private readonly OdsTemplateService _odsTemplateService;
     private readonly SofficeConverterService _sofficeConverterService;
-    private readonly WordTemplateService _wordTemplateService;
     private readonly ICloudflareService _cloudflareService;
+    private readonly IProjectContractService _projectContractService;
 
     public ReservationService(
         DatabaseContext context,
         PaginationService paginationService,
         OdsTemplateService odsTemplateService,
         SofficeConverterService sofficeConverterService,
-        WordTemplateService wordTemplateService,
-        ICloudflareService cloudflareService
+        ICloudflareService cloudflareService,
+        IProjectContractService projectContractService
     )
     {
         _context = context;
         _paginationService = paginationService;
         _odsTemplateService = odsTemplateService;
         _sofficeConverterService = sofficeConverterService;
-        _wordTemplateService = wordTemplateService;
         _cloudflareService = cloudflareService;
+        _projectContractService = projectContractService;
     }
 
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
@@ -2478,6 +2478,9 @@ public class ReservationService : IReservationService
         var lot = quotation?.Lot;
         var block = quotation?.Lot?.Block;
 
+        if (project == null)
+            throw new ArgumentException("La reserva no tiene un proyecto asociado");
+
         // Generate contract number
         // FIXME: Generate from actual data
         var contractNumber =
@@ -2575,10 +2578,6 @@ public class ReservationService : IReservationService
             }
         }
 
-        // Load template
-        var templatePath = "Templates/plantilla_contrato_gestion_hogar.docx";
-        using var inputFileStream = new FileStream(templatePath, FileMode.Open, FileAccess.Read);
-
         var placeholders = new Dictionary<string, string>()
         {
             { "{nro_contrato}", contractNumber },
@@ -2592,6 +2591,8 @@ public class ReservationService : IReservationService
             { "{provincia_cliente}", "" },
             { "{departamento_cliente}", client?.Country ?? "" },
             { "{nombre_proyecto}", project?.Name ?? "" },
+            { "{nro_lote}", lot?.LotNumber ?? "" },
+            { "{manzana}", block?.Name ?? "" },
             { "{precio_dolares_metro_cuadrado}", $"$ {quotation?.PricePerM2AtQuotation ?? 0:N2}" },
             { "{area_terreno}", $"{quotation?.AreaAtQuotation ?? 0:N2}" },
             { "{precio_departamento_dolares}", $"$ {quotation?.FinalPrice ?? 0:N2}" },
@@ -2620,15 +2621,7 @@ public class ReservationService : IReservationService
             { "{representantes_legales}", allCoOwnersText },
         };
 
-        // Fill template
-        var (filledBytes, fillError) = _wordTemplateService.ReplacePlaceholders(
-            inputFileStream,
-            placeholders
-        );
-        if (fillError != null)
-            throw new ArgumentException($"Error al procesar plantilla de contrato: {fillError}");
-
-        return filledBytes;
+        return await _projectContractService.RenderFilledDocxAsync(project.Id, placeholders);
     }
 
     /// <summary>
@@ -2933,9 +2926,7 @@ public class ReservationService : IReservationService
     private async Task<List<Guid>> GetSupervisorTeamUserIdsAsync(Guid supervisorId)
     {
         var assignedSalesAdvisorIds = await _context
-            .SupervisorSalesAdvisors.Where(ssa =>
-                ssa.SupervisorId == supervisorId && ssa.IsActive
-            )
+            .SupervisorSalesAdvisors.Where(ssa => ssa.SupervisorId == supervisorId && ssa.IsActive)
             .Select(ssa => ssa.SalesAdvisorId)
             .ToListAsync();
 

@@ -13,18 +13,10 @@ namespace GestionHogar.Controllers;
 public class ReservationsController : ControllerBase
 {
     private readonly IReservationService _reservationService;
-    private readonly WordTemplateService _wordTemplateService;
-    private readonly SofficeConverterService _sofficeConverterService;
 
-    public ReservationsController(
-        IReservationService reservationService,
-        WordTemplateService wordTemplateService,
-        SofficeConverterService sofficeConverterService
-    )
+    public ReservationsController(IReservationService reservationService)
     {
         _reservationService = reservationService;
-        _wordTemplateService = wordTemplateService;
-        _sofficeConverterService = sofficeConverterService;
     }
 
     // GET: api/reservations
@@ -377,7 +369,7 @@ public class ReservationsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
     }
 
@@ -396,7 +388,7 @@ public class ReservationsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
     }
 

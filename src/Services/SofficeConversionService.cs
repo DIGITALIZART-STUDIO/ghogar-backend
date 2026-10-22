@@ -99,7 +99,20 @@ public class SofficeConverterService(ILogger<SofficeConverterService> logger)
                 return ([], $"Error converting to {outputExtension}: {error}");
             }
 
-            // Read the converted file
+            // Read the converted file (LibreOffice keeps the input base name)
+            if (!System.IO.File.Exists(outputFilePath))
+            {
+                var inputBaseName = Path.GetFileNameWithoutExtension(tempFilePath);
+                var fallback = Directory
+                    .GetFiles(tempDir, $"{inputBaseName}*.{outputExtension}")
+                    .OrderByDescending(System.IO.File.GetLastWriteTimeUtc)
+                    .FirstOrDefault();
+                if (fallback == null)
+                    return ([], $"Converted {outputExtension} file was not generated");
+
+                outputFilePath = fallback;
+            }
+
             var outputBytes = System.IO.File.ReadAllBytes(outputFilePath);
 
             return (outputBytes, null);

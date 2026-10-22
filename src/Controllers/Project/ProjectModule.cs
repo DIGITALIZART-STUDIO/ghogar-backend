@@ -9,6 +9,8 @@ public class ProjectModule : IModule
     public IServiceCollection SetupModule(IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<IProjectService, ProjectService>();
+        services.AddScoped<ContractHtmlService>();
+        services.AddScoped<IProjectContractService, ProjectContractService>();
         return services;
     }
 }

@@ -630,6 +630,42 @@ namespace GestionHogar.Migrations
                     b.ToTable("Projects");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.ProjectContractTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("HtmlContent")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ModifiedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId")
+                        .IsUnique();
+
+                    b.ToTable("ProjectContractTemplates");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Quotation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1228,6 +1264,17 @@ namespace GestionHogar.Migrations
                     b.Navigation("PaymentTransaction");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.ProjectContractTemplate", b =>
+                {
+                    b.HasOne("GestionHogar.Model.Project", "Project")
+                        .WithOne("ContractTemplate")
+                        .HasForeignKey("GestionHogar.Model.ProjectContractTemplate", "ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Quotation", b =>
                 {
                     b.HasOne("GestionHogar.Model.User", "Advisor")
@@ -1407,6 +1454,8 @@ namespace GestionHogar.Migrations
             modelBuilder.Entity("GestionHogar.Model.Project", b =>
                 {
                     b.Navigation("Blocks");
+
+                    b.Navigation("ContractTemplate");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.Reservation", b =>
