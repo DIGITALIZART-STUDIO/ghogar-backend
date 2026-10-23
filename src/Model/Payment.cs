@@ -5,12 +5,20 @@ namespace GestionHogar.Model;
 
 public class Payment : BaseModel
 {
-    // Relación con la reserva
-    [Required]
-    public Guid ReservationId { get; set; }
+    // Relación con la reserva (auditoría / transición; el dueño es el contrato)
+    public Guid? ReservationId { get; set; }
 
     [ForeignKey("ReservationId")]
-    public required Reservation Reservation { get; set; }
+    public Reservation? Reservation { get; set; }
+
+    public Guid? ContractId { get; set; }
+
+    [ForeignKey("ContractId")]
+    public Contract? Contract { get; set; }
+
+    public PaymentType Type { get; set; } = PaymentType.Installment;
+
+    public int Sequence { get; set; }
 
     // Fecha de vencimiento de la cuota
     [Required]

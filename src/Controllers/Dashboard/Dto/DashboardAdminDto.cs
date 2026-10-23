@@ -152,6 +152,7 @@ public class PaymentMethodDto
 public class UpcomingPaymentDto
 {
     public Guid ReservationId { get; set; }
+    public Guid? ContractId { get; set; }
     public string ClientName { get; set; } = "";
     public DateTime DueDate { get; set; }
     public decimal AmountDue { get; set; }

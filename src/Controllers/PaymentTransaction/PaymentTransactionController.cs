@@ -71,6 +71,48 @@ public class PaymentTransactionController : ControllerBase
         }
     }
 
+    [HttpGet("by-contract/{contractId:guid}")]
+    public async Task<ActionResult<IEnumerable<PaymentTransactionDTO>>> GetByContractId(
+        Guid contractId
+    )
+    {
+        try
+        {
+            var result = await _service.GetByContractIdAsync(contractId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener transacciones por ContractId");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    [HttpGet("quota-status/by-contract/{contractId:guid}/{excludeTransactionId:guid?}")]
+    public async Task<ActionResult<PaymentQuotaStatusDTO>> GetQuotaStatusByContract(
+        Guid contractId,
+        Guid? excludeTransactionId
+    )
+    {
+        try
+        {
+            var result = await _service.GetQuotaStatusByContractAsync(
+                contractId,
+                excludeTransactionId
+            );
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener estado de cuotas del contrato");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     [HttpGet("quota-status/by-reservation/{reservationId:guid}/{excludeTransactionId:guid?}")]
     public async Task<ActionResult<PaymentQuotaStatusDTO>> GetQuotaStatus(
         Guid reservationId,

@@ -45,11 +45,64 @@ public class PaymentService(DatabaseContext context) : IPaymentService
                 {
                     Id = payment.Id,
                     ReservationId = payment.ReservationId,
+                    ContractId = payment.ContractId,
+                    Type = payment.Type,
+                    Sequence = payment.Sequence,
                     DueDate = payment.DueDate,
                     AmountDue = payment.AmountDue,
                     AmountPaid = totalPaidForThisPayment,
                     RemainingAmount = Math.Max(0, remainingAmount), // No permitir valores negativos
                     Paid = isPaid,
+                    CreatedAt = payment.CreatedAt,
+                    ModifiedAt = payment.ModifiedAt,
+                }
+            );
+        }
+
+        return result;
+    }
+
+    public async Task<IEnumerable<PaymentDto>> GetPaymentScheduleByContractIdAsync(Guid contractId)
+    {
+        var payments = await context
+            .Payments.Where(p => p.ContractId == contractId && p.IsActive)
+            .OrderBy(p => p.Sequence)
+            .ThenBy(p => p.DueDate)
+            .ToListAsync();
+
+        var paymentIds = payments.Select(p => p.Id).ToList();
+        var paymentDetails = await context
+            .PaymentTransactionPayments.Where(ptp => paymentIds.Contains(ptp.PaymentId))
+            .ToListAsync();
+
+        var paymentsByPaymentId = paymentDetails
+            .GroupBy(ptp => ptp.PaymentId)
+            .ToDictionary(g => g.Key, g => g.Sum(ptp => ptp.AmountPaid));
+
+        var result = new List<PaymentDto>();
+
+        foreach (var payment in payments)
+        {
+            var totalPaidForThisPayment = paymentsByPaymentId.GetValueOrDefault(payment.Id, 0);
+            if (payment.Paid)
+            {
+                totalPaidForThisPayment = Math.Max(totalPaidForThisPayment, payment.AmountDue);
+            }
+            var remainingAmount = payment.AmountDue - totalPaidForThisPayment;
+
+            result.Add(
+                new PaymentDto
+                {
+                    Id = payment.Id,
+                    ReservationId = payment.ReservationId,
+                    ContractId = payment.ContractId,
+                    Type = payment.Type,
+                    Sequence = payment.Sequence,
+                    DueDate = payment.DueDate,
+                    AmountDue = payment.AmountDue,
+                    AmountPaid = totalPaidForThisPayment,
+                    RemainingAmount = Math.Max(0, remainingAmount),
+                    Paid = remainingAmount <= 0,
                     CreatedAt = payment.CreatedAt,
                     ModifiedAt = payment.ModifiedAt,
                 }

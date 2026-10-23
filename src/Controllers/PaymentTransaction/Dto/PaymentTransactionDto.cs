@@ -8,6 +8,7 @@ public class PaymentTransactionDTO
     public DateTimeOffset PaymentDate { get; set; }
     public decimal AmountPaid { get; set; }
     public Guid? ReservationId { get; set; }
+    public Guid? ContractId { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public string? ReferenceNumber { get; set; }
     public string? ComprobanteUrl { get; set; }
@@ -29,6 +30,7 @@ public class PaymentTransactionDTO
             PaymentDate = transaction.PaymentDate,
             AmountPaid = transaction.AmountPaid,
             ReservationId = transaction.ReservationId,
+            ContractId = transaction.ContractId,
             PaymentMethod = transaction.PaymentMethod,
             ReferenceNumber = transaction.ReferenceNumber,
             ComprobanteUrl = transaction.ComprobanteUrl,
@@ -89,7 +91,8 @@ public class PaymentDetailDTO
 public class PaymentQuotaSimpleDTO
 {
     public Guid Id { get; set; }
-    public Guid ReservationId { get; set; }
+    public Guid? ReservationId { get; set; }
+    public Guid? ContractId { get; set; }
     public string ClientName { get; set; } = string.Empty;
     public string QuotationCode { get; set; } = string.Empty;
     public decimal AmountDue { get; set; }

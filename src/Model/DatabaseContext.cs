@@ -39,6 +39,8 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
 
     public DbSet<Reservation> Reservations { get; set; } = null!;
 
+    public DbSet<Contract> Contracts { get; set; } = null!;
+
     public DbSet<Payment> Payments { get; set; } = null!;
 
     public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
@@ -60,6 +62,7 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
         base.OnModelCreating(builder);
         Audit.SetUp(builder);
         BaseModel.SetUp<Reservation>(builder);
+        BaseModel.SetUp<Contract>(builder);
         BaseModel.SetUp<Payment>(builder);
         BaseModel.SetUp<PaymentTransaction>(builder);
         PaymentTransaction.SetUp<PaymentTransaction>(builder);
@@ -144,6 +147,43 @@ public class DatabaseContext(DbContextOptions<DatabaseContext> options)
             entity.HasIndex(e => e.SupervisorId);
             entity.HasIndex(e => e.SalesAdvisorId);
             entity.HasIndex(e => new { e.SupervisorId, e.SalesAdvisorId }).IsUnique();
+        });
+
+        builder.Entity<Contract>(entity =>
+        {
+            entity
+                .HasOne(c => c.Reservation)
+                .WithOne(r => r.Contract)
+                .HasForeignKey<Contract>(c => c.ReservationId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity
+                .HasOne(c => c.Lot)
+                .WithMany()
+                .HasForeignKey(c => c.LotId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity
+                .HasOne(c => c.Client)
+                .WithMany()
+                .HasForeignKey(c => c.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity
+                .HasIndex(c => c.LotId)
+                .HasFilter("\"IsActive\" = TRUE AND \"Status\" NOT IN (3, 4)")
+                .IsUnique()
+                .HasDatabaseName("IX_Contract_ActiveLot");
+        });
+
+        builder.Entity<Payment>(entity =>
+        {
+            entity
+                .HasOne(p => p.Contract)
+                .WithMany(c => c.Payments)
+                .HasForeignKey(p => p.ContractId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<ProjectContractTemplate>(entity =>

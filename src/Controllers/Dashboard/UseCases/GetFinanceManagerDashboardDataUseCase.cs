@@ -68,18 +68,29 @@ public class GetFinanceManagerDashboardDataUseCase
         var reservations = await reservationsQuery.ToListAsync();
 
         // 3. Obtener solo datos necesarios de pagos programados
-        var paymentsQuery = _db.Payments.Select(p => new
-        {
-            p.Id,
-            p.AmountDue,
-            p.DueDate,
-            p.Paid,
-            p.ReservationId,
-            ProjectId = p.Reservation.Quotation.Lot.Block.ProjectId,
-            ProjectName = p.Reservation.Quotation.Lot.Block.Project.Name,
-            ClientName = p.Reservation.Client.Name,
-            LotNumber = p.Reservation.Quotation.Lot.LotNumber,
-        });
+        var paymentsQuery = _db
+            .Payments.Where(p => p.IsActive)
+            .Select(p => new
+            {
+                p.Id,
+                p.AmountDue,
+                p.DueDate,
+                p.Paid,
+                p.ReservationId,
+                p.ContractId,
+                ProjectId = p.Contract != null
+                    ? p.Contract.Lot.Block.ProjectId
+                    : p.Reservation!.Quotation.Lot.Block.ProjectId,
+                ProjectName = p.Contract != null
+                    ? p.Contract.Lot.Block.Project.Name
+                    : p.Reservation!.Quotation.Lot.Block.Project.Name,
+                ClientName = p.Contract != null
+                    ? p.Contract.Client.Name ?? p.Contract.Client.CompanyName
+                    : p.Reservation!.Client.Name,
+                LotNumber = p.Contract != null
+                    ? p.Contract.Lot.LotNumber
+                    : p.Reservation!.Quotation.Lot.LotNumber,
+            });
 
         if (projectId.HasValue)
         {
@@ -89,19 +100,23 @@ public class GetFinanceManagerDashboardDataUseCase
         var payments = await paymentsQuery.ToListAsync();
 
         // 4. Obtener solo datos necesarios de transacciones de pago
-        var paymentTransactionsQuery = _db
+            var paymentTransactionsQuery = _db
             .PaymentTransactions.Where(pt => pt.PaymentDate.Year == yearToUse)
             .Select(pt => new
             {
                 pt.Id,
                 pt.AmountPaid,
                 pt.PaymentDate,
-                ProjectId = pt.Reservation != null
-                    ? pt.Reservation.Quotation.Lot.Block.ProjectId
-                    : (Guid?)null,
-                ProjectName = pt.Reservation != null
-                    ? pt.Reservation.Quotation.Lot.Block.Project.Name
-                    : null,
+                ProjectId = pt.Contract != null
+                    ? pt.Contract.Lot.Block.ProjectId
+                    : pt.Reservation != null
+                        ? pt.Reservation.Quotation.Lot.Block.ProjectId
+                        : (Guid?)null,
+                ProjectName = pt.Contract != null
+                    ? pt.Contract.Lot.Block.Project.Name
+                    : pt.Reservation != null
+                        ? pt.Reservation.Quotation.Lot.Block.Project.Name
+                        : null,
             });
 
         if (projectId.HasValue)
@@ -416,8 +431,9 @@ public class GetFinanceManagerDashboardDataUseCase
                 : "current";
 
             // Calcular cuota actual usando datos ya cargados
+            var scheduleKey = payment.ContractId ?? payment.ReservationId;
             var allPaymentsForReservation = payments
-                .Where(p => p.ReservationId == payment.ReservationId)
+                .Where(p => (p.ContractId ?? p.ReservationId) == scheduleKey)
                 .OrderBy(p => (DateTime)p.DueDate)
                 .ToList();
 

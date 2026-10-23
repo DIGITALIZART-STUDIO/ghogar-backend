@@ -28,6 +28,7 @@ public class ClientsController : ControllerBase
     private readonly IExcelExportService _excelExportService;
     private readonly OptimizedPaginationService _paginationService;
     private readonly IExcelTemplateService _excelTemplateService;
+    private readonly IContractService _contractService;
 
     public ClientsController(
         IClientService clientService,
@@ -35,7 +36,8 @@ public class ClientsController : ControllerBase
         DatabaseContext context,
         IExcelExportService excelExportService,
         OptimizedPaginationService paginationService,
-        IExcelTemplateService excelTemplateService
+        IExcelTemplateService excelTemplateService,
+        IContractService contractService
     )
     {
         _clientService = clientService;
@@ -44,6 +46,7 @@ public class ClientsController : ControllerBase
         _excelExportService = excelExportService;
         _paginationService = paginationService;
         _excelTemplateService = excelTemplateService;
+        _contractService = contractService;
     }
 
     // GET: api/clients
@@ -160,6 +163,28 @@ public class ClientsController : ControllerBase
             return NotFound();
 
         return Ok(client);
+    }
+
+    [HttpGet("{id}/contracts")]
+    public async Task<ActionResult<IEnumerable<ContractDto>>> GetClientContracts(Guid id)
+    {
+        var client = await _clientService.GetClientByIdAsync(id);
+        if (client == null)
+            return NotFound();
+
+        var contracts = await _contractService.GetByClientIdAsync(id);
+        return Ok(contracts);
+    }
+
+    [HttpGet("{id}/financial-summary")]
+    public async Task<ActionResult<ClientFinancialSummaryDto>> GetClientFinancialSummary(Guid id)
+    {
+        var client = await _clientService.GetClientByIdAsync(id);
+        if (client == null)
+            return NotFound();
+
+        var summary = await _contractService.GetFinancialSummaryByClientIdAsync(id);
+        return Ok(summary);
     }
 
     // POST: api/clients

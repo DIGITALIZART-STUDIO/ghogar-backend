@@ -214,6 +214,100 @@ namespace GestionHogar.Migrations
                     b.ToTable("Clients");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.Contract", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AdvisorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AmountFinanced")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CoOwners")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<int>("Currency")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("DownPaymentAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("ExchangeRate")
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("LotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ModifiedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<int>("MonthsFinanced")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Origin")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("QuotationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReservationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("SignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TotalPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdvisorId");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("LotId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Contract_ActiveLot")
+                        .HasFilter("\"IsActive\" = TRUE AND \"Status\" NOT IN (3, 4)");
+
+                    b.HasIndex("QuotationId");
+
+                    b.HasIndex(new[] { "Code" }, "IX_Contract_Code")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "ReservationId" }, "IX_Contract_ReservationId")
+                        .IsUnique();
+
+                    b.ToTable("Contracts");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Lead", b =>
                 {
                     b.Property<Guid>("Id")
@@ -493,6 +587,9 @@ namespace GestionHogar.Migrations
                     b.Property<decimal>("AmountDue")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -512,10 +609,18 @@ namespace GestionHogar.Migrations
                     b.Property<bool>("Paid")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("ReservationId")
+                    b.Property<Guid?>("ReservationId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ContractId");
 
                     b.HasIndex("ReservationId");
 
@@ -534,6 +639,9 @@ namespace GestionHogar.Migrations
                     b.Property<string>("ComprobanteUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -561,6 +669,8 @@ namespace GestionHogar.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ContractId");
 
                     b.HasIndex("ReservationId");
 
@@ -1132,6 +1242,44 @@ namespace GestionHogar.Migrations
                     b.Navigation("Project");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.Contract", b =>
+                {
+                    b.HasOne("GestionHogar.Model.User", "Advisor")
+                        .WithMany()
+                        .HasForeignKey("AdvisorId");
+
+                    b.HasOne("GestionHogar.Model.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GestionHogar.Model.Lot", "Lot")
+                        .WithMany()
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GestionHogar.Model.Quotation", "Quotation")
+                        .WithMany()
+                        .HasForeignKey("QuotationId");
+
+                    b.HasOne("GestionHogar.Model.Reservation", "Reservation")
+                        .WithOne("Contract")
+                        .HasForeignKey("GestionHogar.Model.Contract", "ReservationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Advisor");
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Lot");
+
+                    b.Navigation("Quotation");
+
+                    b.Navigation("Reservation");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Lead", b =>
                 {
                     b.HasOne("GestionHogar.Model.User", "AssignedTo")
@@ -1227,20 +1375,31 @@ namespace GestionHogar.Migrations
 
             modelBuilder.Entity("GestionHogar.Model.Payment", b =>
                 {
+                    b.HasOne("GestionHogar.Model.Contract", "Contract")
+                        .WithMany("Payments")
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("GestionHogar.Model.Reservation", "Reservation")
                         .WithMany("Payments")
-                        .HasForeignKey("ReservationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("ReservationId");
+
+                    b.Navigation("Contract");
 
                     b.Navigation("Reservation");
                 });
 
             modelBuilder.Entity("GestionHogar.Model.PaymentTransaction", b =>
                 {
+                    b.HasOne("GestionHogar.Model.Contract", "Contract")
+                        .WithMany("PaymentTransactions")
+                        .HasForeignKey("ContractId");
+
                     b.HasOne("GestionHogar.Model.Reservation", "Reservation")
                         .WithMany()
                         .HasForeignKey("ReservationId");
+
+                    b.Navigation("Contract");
 
                     b.Navigation("Reservation");
                 });
@@ -1441,6 +1600,13 @@ namespace GestionHogar.Migrations
                     b.Navigation("Referrals");
                 });
 
+            modelBuilder.Entity("GestionHogar.Model.Contract", b =>
+                {
+                    b.Navigation("PaymentTransactions");
+
+                    b.Navigation("Payments");
+                });
+
             modelBuilder.Entity("GestionHogar.Model.Lead", b =>
                 {
                     b.Navigation("Referral");
@@ -1460,6 +1626,8 @@ namespace GestionHogar.Migrations
 
             modelBuilder.Entity("GestionHogar.Model.Reservation", b =>
                 {
+                    b.Navigation("Contract");
+
                     b.Navigation("Payments");
                 });
 #pragma warning restore 612, 618

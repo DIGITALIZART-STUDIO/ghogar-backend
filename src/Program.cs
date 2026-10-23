@@ -209,6 +209,7 @@ var modules = new IModule[]
     new BlockModule(),
     new LotModule(),
     new ReservationModule(),
+    new ContractModule(),
     new ExchangeRateModule(),
     new PaymentModule(),
     new ApiPeruModule(),

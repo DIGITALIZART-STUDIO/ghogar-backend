@@ -84,6 +84,8 @@ public class Reservation : BaseModel
 
     // Navegación hacia los pagos programados
     public ICollection<Payment> Payments { get; set; } = [];
+
+    public Contract? Contract { get; set; }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

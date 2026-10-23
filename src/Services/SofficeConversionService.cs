@@ -72,18 +72,25 @@ public class SofficeConverterService(ILogger<SofficeConverterService> logger)
 
         var tempFilePath = Path.Combine(tempDir, $"file_{unixms}.{inputExtension}");
         var outputFilePath = Path.Combine(tempDir, $"file_{unixms}.{outputExtension}");
+        var profileDir = Path.Combine(tempDir, $"lo_profile_{unixms}");
         try
         {
             System.IO.File.WriteAllBytes(tempFilePath, inputBytes);
 
-            // Call LibreOffice to convert to whatever format
+            // Writer/Web (HTML) has no default "docx" filter; the OOXML filter must be named.
+            var convertTarget = outputExtension.Equals("docx", StringComparison.OrdinalIgnoreCase)
+                ? "docx:MS Word 2007 XML"
+                : outputExtension;
+            Directory.CreateDirectory(profileDir);
+            var profileUri = new Uri(profileDir).AbsoluteUri;
+
             var process = new System.Diagnostics.Process
             {
                 StartInfo = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "soffice",
                     Arguments =
-                        $"--headless --convert-to {outputExtension} --outdir \"{tempDir}\" \"{tempFilePath}\"",
+                        $"--headless --norestore --nolockcheck -env:UserInstallation={profileUri} --convert-to \"{convertTarget}\" --outdir \"{tempDir}\" \"{tempFilePath}\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -91,12 +98,28 @@ public class SofficeConverterService(ILogger<SofficeConverterService> logger)
                 },
             };
             process.Start();
-            process.WaitForExit();
+            if (!process.WaitForExit(120_000))
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    // ignored
+                }
+                return ([], $"Timeout converting to {outputExtension}");
+            }
 
+            var stderr = process.StandardError.ReadToEnd();
             if (process.ExitCode != 0)
             {
-                var error = process.StandardError.ReadToEnd();
-                return ([], $"Error converting to {outputExtension}: {error}");
+                logger.LogError(
+                    "LibreOffice convert failed. Exit={ExitCode} Stderr={Stderr}",
+                    process.ExitCode,
+                    stderr
+                );
+                return ([], $"Error converting to {outputExtension}: {stderr}");
             }
 
             // Read the converted file (LibreOffice keeps the input base name)
@@ -128,6 +151,8 @@ public class SofficeConverterService(ILogger<SofficeConverterService> logger)
                 System.IO.File.Delete(tempFilePath);
             if (System.IO.File.Exists(outputFilePath))
                 System.IO.File.Delete(outputFilePath);
+            if (Directory.Exists(profileDir))
+                Directory.Delete(profileDir, recursive: true);
         }
     }
 }

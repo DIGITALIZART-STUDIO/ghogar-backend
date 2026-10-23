@@ -1,5 +1,6 @@
 using GestionHogar.Controllers.Dtos;
 using GestionHogar.Model;
+using GestionHogar.Utils;
 using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -15,6 +16,7 @@ public class ReservationService : IReservationService
     private readonly SofficeConverterService _sofficeConverterService;
     private readonly ICloudflareService _cloudflareService;
     private readonly IProjectContractService _projectContractService;
+    private readonly IContractService _contractService;
 
     public ReservationService(
         DatabaseContext context,
@@ -22,7 +24,8 @@ public class ReservationService : IReservationService
         OdsTemplateService odsTemplateService,
         SofficeConverterService sofficeConverterService,
         ICloudflareService cloudflareService,
-        IProjectContractService projectContractService
+        IProjectContractService projectContractService,
+        IContractService contractService
     )
     {
         _context = context;
@@ -31,6 +34,7 @@ public class ReservationService : IReservationService
         _sofficeConverterService = sofficeConverterService;
         _cloudflareService = cloudflareService;
         _projectContractService = projectContractService;
+        _contractService = contractService;
     }
 
     public async Task<IEnumerable<ReservationDto>> GetAllReservationsAsync()
@@ -631,7 +635,7 @@ public class ReservationService : IReservationService
             TotalAmountRequired = reservationDto.AmountPaid, // El monto del DTO es lo que debe pagar
             RemainingAmount = reservationDto.AmountPaid, // Al inicio, todo está pendiente
             // La moneda siempre se deriva de la cotización asociada (nunca del valor enviado por el cliente)
-            Currency = MapQuotationCurrency(quotation.Currency),
+            Currency = CurrencyMapping.FromIsoCode(quotation.Currency, "cotización"),
             PaymentMethod = reservationDto.PaymentMethod,
             BankName = reservationDto.BankName,
             ExchangeRate = reservationDto.ExchangeRate,
@@ -649,28 +653,20 @@ public class ReservationService : IReservationService
         return reservation;
     }
 
-    /// <summary>
-    /// Mapea el código de moneda de la cotización (string, ej. "PEN", "USD")
-    /// al enum de moneda usado por las separaciones.
-    /// Lanza ArgumentException si la moneda de la cotización no está soportada.
-    /// </summary>
-    private static Currency MapQuotationCurrency(string quotationCurrency)
-    {
-        return quotationCurrency.Trim().ToUpperInvariant() switch
-        {
-            "PEN" => Currency.SOLES,
-            "USD" => Currency.DOLARES,
-            _ => throw new ArgumentException(
-                $"La moneda de la cotización ('{quotationCurrency}') no está soportada para separaciones. Valores soportados: PEN, USD."
-            ),
-        };
-    }
-
     public async Task<bool> ToggleContractValidationStatusAsync(Guid reservationId)
     {
         var reservation = await _context.Reservations.FindAsync(reservationId);
         if (reservation == null)
             return false;
+
+        var contract = await _context.Contracts.FirstOrDefaultAsync(c =>
+            c.ReservationId == reservationId && c.IsActive
+        );
+        if (contract != null)
+        {
+            await _contractService.ToggleValidationStatusAsync(contract.Id);
+            return true;
+        }
 
         reservation.ContractValidationStatus =
             reservation.ContractValidationStatus == ContractValidationStatus.Validated
@@ -940,8 +936,8 @@ public class ReservationService : IReservationService
         reservation.TotalAmountRequired = reservationDto.AmountPaid; // El monto del DTO es lo que debe pagar
         reservation.RemainingAmount = reservationDto.AmountPaid - reservation.AmountPaid; // Recalcular pendiente
         // La moneda siempre se deriva de la cotización asociada (nunca del valor enviado por el cliente)
-        reservation.Currency = MapQuotationCurrency(reservation.Quotation.Currency);
-        reservation.Status = reservationDto.Status;
+        reservation.Currency = CurrencyMapping.FromIsoCode(reservation.Quotation.Currency, "cotización");
+        // El status comercial solo cambia por ChangeStatusAsync (gozne de contrato/cronograma).
         reservation.PaymentMethod = reservationDto.PaymentMethod;
         reservation.BankName = reservationDto.BankName;
         reservation.ExchangeRate = reservationDto.ExchangeRate;
@@ -1075,6 +1071,14 @@ public class ReservationService : IReservationService
             return null;
 
         var previousStatus = reservation.Status;
+        if (
+            previousStatus == ReservationStatus.CANCELED
+            && statusEnum != ReservationStatus.CANCELED
+        )
+        {
+            await _contractService.RescindIfLeavingPaidReservationAsync(reservation.Id);
+        }
+
         reservation.Status = statusEnum;
         reservation.ModifiedAt = DateTime.UtcNow;
 
@@ -1179,26 +1183,17 @@ public class ReservationService : IReservationService
         if (statusEnum == ReservationStatus.CANCELED)
         {
             reservation.ContractValidationStatus = ContractValidationStatus.PendingValidation;
-            // Generar payment schedule solo si no existían previamente (evitar duplicados)
+            await _context.SaveChangesAsync();
             if (previousStatus != ReservationStatus.CANCELED)
             {
-                // Verificar si ya existen payments para esta reserva antes de generar nuevos
-                var existingPayments = await _context
-                    .Payments.Where(p => p.ReservationId == reservation.Id && p.IsActive)
-                    .AnyAsync();
-
-                if (!existingPayments)
-                {
-                    await GeneratePaymentScheduleAsync(reservation);
-                }
+                await _contractService.CreateFromPaidReservationAsync(reservation.Id);
             }
         }
         else
         {
             reservation.ContractValidationStatus = ContractValidationStatus.None;
+            await _context.SaveChangesAsync();
         }
-
-        await _context.SaveChangesAsync();
 
         // Return the updated reservation as DTO
         return new ReservationDto
@@ -1335,52 +1330,6 @@ public class ReservationService : IReservationService
         await _context.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Generates payment schedule when reservation status changes to CANCELED (which means "paid").
-    /// Creates n monthly payment entities based on the quotation's financing terms.
-    /// </summary>
-    private Task GeneratePaymentScheduleAsync(Reservation reservation)
-    {
-        var quotation = reservation.Quotation;
-
-        // Get the financed amount and months from the quotation
-        var financedAmount = quotation.AmountFinanced;
-        var monthsFinanced = quotation.MonthsFinanced;
-
-        // Parse quotation date (it's stored as string, ugh...)
-        if (!DateTime.TryParse(quotation.QuotationDate, out var quotationDate))
-        {
-            quotationDate = DateTime.UtcNow;
-        }
-
-        // Calculate monthly payment amount
-        var monthlyPayment = financedAmount / monthsFinanced;
-
-        // Generate payment entities
-        var payments = new List<Payment>();
-
-        for (int i = 1; i <= monthsFinanced; i++)
-        {
-            var dueDate = quotationDate.AddMonths(i);
-
-            var payment = new Payment
-            {
-                ReservationId = reservation.Id,
-                Reservation = reservation,
-                DueDate = DateTime.SpecifyKind(dueDate, DateTimeKind.Utc),
-                AmountDue = monthlyPayment,
-                Paid = false,
-            };
-
-            payments.Add(payment);
-        }
-
-        // Add all payments to the context
-        _context.Payments.AddRange(payments);
-
-        return Task.CompletedTask;
-    }
-
     public async Task<byte[]> GenerateReservationPdfAsync(Guid reservationId)
     {
         var reservation =
@@ -1454,7 +1403,12 @@ public class ReservationService : IReservationService
                                         .Cell()
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text($"S/ {reservation.TotalAmountRequired:N2}");
+                                        .Text(
+                                            CurrencyMapping.FormatAmount(
+                                                reservation.TotalAmountRequired,
+                                                Currency.SOLES
+                                            )
+                                        );
                                 }
                                 else
                                 {
@@ -1469,7 +1423,12 @@ public class ReservationService : IReservationService
                                         .Cell()
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
-                                        .Text($"$ {reservation.TotalAmountRequired:N2}");
+                                        .Text(
+                                            CurrencyMapping.FormatAmount(
+                                                reservation.TotalAmountRequired,
+                                                Currency.DOLARES
+                                            )
+                                        );
                                 }
                                 else
                                 {
@@ -1783,8 +1742,6 @@ public class ReservationService : IReservationService
                                         .PaddingVertical(5)
                                         .Text("Importe de Separación");
 
-                                    var currencySymbol =
-                                        reservation.Currency == Currency.SOLES ? "S/" : "$";
                                     table
                                         .Cell()
                                         .ColumnSpan(5)
@@ -1792,7 +1749,10 @@ public class ReservationService : IReservationService
                                         .BorderBottom(1)
                                         .BorderColor(Colors.Black)
                                         .Text(
-                                            $"{currencySymbol} {reservation.TotalAmountRequired:N2}"
+                                            CurrencyMapping.FormatAmount(
+                                                reservation.TotalAmountRequired,
+                                                reservation.Currency
+                                            )
                                         );
                                 }
                             });
@@ -1980,7 +1940,12 @@ public class ReservationService : IReservationService
                                     .Border(1)
                                     .BorderColor(Colors.Black)
                                     .Padding(5)
-                                    .Text($"$ {quotation?.FinalPrice ?? 0:N2}");
+                                    .Text(
+                                        CurrencyMapping.FormatAmount(
+                                            quotation?.FinalPrice ?? 0,
+                                            reservation.Currency
+                                        )
+                                    );
                             });
 
                         x.Item()
@@ -2088,6 +2053,12 @@ public class ReservationService : IReservationService
 
     public async Task<byte[]> GenerateSchedulePdfAsync(Guid reservationId)
     {
+        var contract = await _context.Contracts.FirstOrDefaultAsync(c =>
+            c.ReservationId == reservationId && c.IsActive
+        );
+        if (contract != null)
+            return await _contractService.GenerateSchedulePdfAsync(contract.Id);
+
         // Fetch the reservation with all related data
         var reservation =
             await _context
@@ -2111,7 +2082,7 @@ public class ReservationService : IReservationService
         var totalSaleAmount = quotation?.FinalPrice ?? 0;
 
         // Format currency symbol
-        var currencySymbol = reservation.Currency == Currency.SOLES ? "S/" : "$";
+        var currencySymbol = CurrencyMapping.Symbol(reservation.Currency);
 
         // Static placeholders (unique data)
         var staticPlaceholders = new Dictionary<string, string>()
@@ -2196,7 +2167,7 @@ public class ReservationService : IReservationService
         var currentBalance = creditAmount - totalPaidAmount;
 
         // Format currency symbol
-        var currencySymbol = reservation.Currency == Currency.SOLES ? "S/" : "$";
+        var currencySymbol = CurrencyMapping.Symbol(reservation.Currency);
 
         // Static placeholders (unique data)
         var staticPlaceholders = new Dictionary<string, string>()
@@ -2288,7 +2259,7 @@ public class ReservationService : IReservationService
         };
 
         // Format currency
-        var currencySymbol = reservation.Currency == Currency.SOLES ? "S/" : "$";
+        var currencySymbol = CurrencyMapping.Symbol(reservation.Currency);
 
         // Load the ODS template
         var templatePath = "Templates/recibo.ods";
@@ -2334,7 +2305,7 @@ public class ReservationService : IReservationService
     private string ConvertAmountToWords(decimal amount, Currency currency)
     {
         // This is a basic implementation - you might want to use a more comprehensive library
-        var currencyName = currency == Currency.SOLES ? "SOLES" : "DÓLARES";
+        var currencyName = CurrencyMapping.NameInWords(currency);
         var integerPart = (int)Math.Floor(amount);
         var decimalPart = (int)Math.Round((amount - integerPart) * 100);
 
@@ -2446,6 +2417,12 @@ public class ReservationService : IReservationService
 
     public async Task<byte[]> GenerateContractPdfAsync(Guid reservationId)
     {
+        var contract = await _context.Contracts.FirstOrDefaultAsync(c =>
+            c.ReservationId == reservationId && c.IsActive
+        );
+        if (contract != null)
+            return await _contractService.GenerateContractPdfAsync(contract.Id);
+
         var docxBytes = await GenerateContractDocxAsync(reservationId);
 
         // Convert to PDF
@@ -2458,6 +2435,12 @@ public class ReservationService : IReservationService
 
     public async Task<byte[]> GenerateContractDocxAsync(Guid reservationId)
     {
+        var contract = await _context.Contracts.FirstOrDefaultAsync(c =>
+            c.ReservationId == reservationId && c.IsActive
+        );
+        if (contract != null)
+            return await _contractService.GenerateContractDocxAsync(contract.Id);
+
         // Fetch the reservation with all related data
         var reservation =
             await _context
@@ -2593,26 +2576,26 @@ public class ReservationService : IReservationService
             { "{nombre_proyecto}", project?.Name ?? "" },
             { "{nro_lote}", lot?.LotNumber ?? "" },
             { "{manzana}", block?.Name ?? "" },
-            { "{precio_dolares_metro_cuadrado}", $"$ {quotation?.PricePerM2AtQuotation ?? 0:N2}" },
+            { "{precio_dolares_metro_cuadrado}", CurrencyMapping.FormatAmount(quotation?.PricePerM2AtQuotation ?? 0, reservation.Currency) },
             { "{area_terreno}", $"{quotation?.AreaAtQuotation ?? 0:N2}" },
-            { "{precio_departamento_dolares}", $"$ {quotation?.FinalPrice ?? 0:N2}" },
+            { "{precio_departamento_dolares}", CurrencyMapping.FormatAmount(quotation?.FinalPrice ?? 0, reservation.Currency) },
             {
                 "{precio_departamento_dolares_letras}",
-                ConvertAmountToWords(quotation?.FinalPrice ?? 0, Currency.DOLARES)
+                ConvertAmountToWords(quotation?.FinalPrice ?? 0, reservation.Currency)
             },
             { "{precio_cochera_dolares}", "" }, // Parking space price - you might need to add this
             { "{precio_cochera_dolares_letras}", "" },
             { "{area_cochera}", "" }, // Parking space area
             { "{nro_signada_cochera}", "" }, // Parking space number
-            { "{precio_total_dolares}", $"$ {quotation?.FinalPrice ?? 0:N2}" },
+            { "{precio_total_dolares}", CurrencyMapping.FormatAmount(quotation?.FinalPrice ?? 0, reservation.Currency) },
             {
                 "{precio_total_dolares_letras}",
-                ConvertAmountToWords(quotation?.FinalPrice ?? 0, Currency.DOLARES)
+                ConvertAmountToWords(quotation?.FinalPrice ?? 0, reservation.Currency)
             },
-            { "{precio_inicial_dolares}", $"$ {reservation.AmountPaid:N2}" },
+            { "{precio_inicial_dolares}", CurrencyMapping.FormatAmount(reservation.AmountPaid, reservation.Currency) },
             {
                 "{precio_inicial_dolares_letras}",
-                ConvertAmountToWords(reservation.AmountPaid, Currency.DOLARES)
+                ConvertAmountToWords(reservation.AmountPaid, reservation.Currency)
             },
             {
                 "{fecha_suscripcion_contrato_letras}",
