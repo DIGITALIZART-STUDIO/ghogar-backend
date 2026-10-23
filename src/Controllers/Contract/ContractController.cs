@@ -118,6 +118,48 @@ public class ContractsController(
         }
     }
 
+    [HttpPost("{id:guid}/schedule/preview")]
+    public async Task<ActionResult<IEnumerable<PaymentDto>>> PreviewSchedule(
+        Guid id,
+        [FromBody] ContractSchedulePreviewDto dto
+    )
+    {
+        try
+        {
+            var schedule = await contractService.PreviewScheduleAsync(id, dto);
+            return Ok(schedule);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPut("{id:guid}/schedule")]
+    public async Task<ActionResult<ContractDto>> UpdateSchedule(
+        Guid id,
+        [FromBody] UpdateContractScheduleDto dto
+    )
+    {
+        try
+        {
+            var updated = await contractService.UpdateScheduleAsync(id, dto);
+            return Ok(updated);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     [HttpPut("{id:guid}/rescind")]
     public async Task<ActionResult<ContractDto>> Rescind(Guid id)
     {

@@ -9,44 +9,34 @@ namespace GestionHogar.Tests.Services;
 public class ContractUpdateTests
 {
     [Fact]
-    public async Task Update_RebuildsOnlyUnpaidInstallments()
+    public async Task Update_RejectsCommercialTermChangesWithoutScheduleEndpoint()
     {
         var context = CreateContext();
         var graph = await SeedLotAndClientAsync(context);
         var service = new ContractService(context, new PaymentService(context));
         var created = await service.CreateAsync(DirectDto(graph.Client.Id, graph.Lot.Id));
 
-        var firstInstallment = await context.Payments.SingleAsync(p =>
-            p.ContractId == created.Id && p.Type == PaymentType.Installment && p.Sequence == 1
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () =>
+                service.UpdateAsync(
+                    created.Id,
+                    new UpdateContractDto
+                    {
+                        TotalPrice = 40000,
+                        DownPaymentAmount = 4000,
+                        MonthsFinanced = 4,
+                        ExchangeRate = 1,
+                    }
+                )
         );
-        firstInstallment.Paid = true;
-        await context.SaveChangesAsync();
+        Assert.Contains("recalcula y guarda el cronograma", ex.Message, StringComparison.OrdinalIgnoreCase);
 
-        var updated = await service.UpdateAsync(
-            created.Id,
-            new UpdateContractDto
-            {
-                TotalPrice = 40000,
-                DownPaymentAmount = 4000,
-                MonthsFinanced = 4,
-                ExchangeRate = 1,
-            }
-        );
-
-        Assert.Equal(4, updated.MonthsFinanced);
-        var installments = await context
-            .Payments.Where(p =>
+        Assert.Equal(
+            2,
+            await context.Payments.CountAsync(p =>
                 p.ContractId == created.Id && p.Type == PaymentType.Installment && p.IsActive
             )
-            .OrderBy(p => p.Sequence)
-            .ToListAsync();
-        Assert.Equal(4, installments.Count);
-        Assert.True(installments[0].Paid);
-        Assert.Equal(18000, installments[0].AmountDue);
-        Assert.Equal(3, installments.Count(p => !p.Paid));
-        Assert.Equal(18000, installments.Where(p => !p.Paid).Sum(p => p.AmountDue));
-        Assert.Equal(4000, updated.NextPaymentAmount);
-        Assert.Equal(22000, updated.RemainingAmount);
+        );
     }
 
     [Fact]
@@ -83,39 +73,27 @@ public class ContractUpdateTests
     }
 
     [Fact]
-    public async Task Update_RebuildsDownPaymentWhenUnlocked()
+    public async Task Update_RejectsDownPaymentChangeWithoutScheduleEndpoint()
     {
         var context = CreateContext();
         var graph = await SeedLotAndClientAsync(context);
         var service = new ContractService(context, new PaymentService(context));
         var created = await service.CreateAsync(DirectDto(graph.Client.Id, graph.Lot.Id));
 
-        var updated = await service.UpdateAsync(
-            created.Id,
-            new UpdateContractDto
-            {
-                TotalPrice = 50000,
-                DownPaymentAmount = 10000,
-                MonthsFinanced = 2,
-                ExchangeRate = 1,
-            }
-        );
-
-        Assert.Equal(10000, updated.DownPaymentAmount);
-        Assert.Equal(40000, updated.AmountFinanced);
-        var downPayment = await context.Payments.SingleAsync(p =>
-            p.ContractId == created.Id && p.Type == PaymentType.DownPayment && p.IsActive
-        );
-        Assert.Equal(10000, downPayment.AmountDue);
-        Assert.False(downPayment.Paid);
-        Assert.Equal(
-            40000,
-            await context
-                .Payments.Where(p =>
-                    p.ContractId == created.Id && p.Type == PaymentType.Installment && p.IsActive
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () =>
+                service.UpdateAsync(
+                    created.Id,
+                    new UpdateContractDto
+                    {
+                        TotalPrice = 50000,
+                        DownPaymentAmount = 10000,
+                        MonthsFinanced = 2,
+                        ExchangeRate = 1,
+                    }
                 )
-                .SumAsync(p => p.AmountDue)
         );
+        Assert.Contains("recalcula y guarda el cronograma", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

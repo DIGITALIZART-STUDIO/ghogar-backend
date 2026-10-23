@@ -387,97 +387,140 @@ public class ContractService(
 
     public async Task<ContractDto> UpdateAsync(Guid contractId, UpdateContractDto dto)
     {
-        if (dto.DownPaymentAmount >= dto.TotalPrice)
-        {
-            throw new ArgumentException("La inicial debe ser menor al precio total.");
-        }
+        var edit = await LoadScheduleEditContextAsync(
+            contractId,
+            dto.TotalPrice,
+            dto.DownPaymentAmount,
+            dto.MonthsFinanced,
+            dto.StartDate
+        );
 
-        var contract =
-            await context
-                .Contracts.Include(c => c.Client)
-                .Include(c => c.Lot)
-                .ThenInclude(l => l.Block)
-                .ThenInclude(b => b.Project)
-                .Include(c => c.Quotation)
-                .Include(c => c.Payments)
-                .FirstOrDefaultAsync(c => c.Id == contractId && c.IsActive)
-            ?? throw new ArgumentException("Contrato no encontrado");
-
-        if (contract.Status is ContractStatus.Completed or ContractStatus.Rescinded)
+        if (AffectsSchedule(edit))
         {
             throw new InvalidOperationException(
-                "No se puede editar un contrato completado o rescindido."
+                "Para cambiar precio, inicial, plazo o fecha de inicio, recalcula y guarda el cronograma."
             );
         }
 
-        var startDate = dto.StartDate.HasValue
-            ? DateTime.SpecifyKind(dto.StartDate.Value.ToUniversalTime(), DateTimeKind.Utc)
-            : contract.StartDate;
-
-        var activePayments = contract.Payments.Where(p => p.IsActive).ToList();
-        var paymentIds = activePayments.Select(p => p.Id).ToList();
-        var paymentsWithReceipts = await context
-            .PaymentTransactionPayments.Where(d => paymentIds.Contains(d.PaymentId))
-            .Select(d => d.PaymentId)
-            .Distinct()
-            .ToListAsync();
-        var receiptSet = paymentsWithReceipts.ToHashSet();
-
-        bool IsLocked(Payment p) => p.Paid || receiptSet.Contains(p.Id);
-
-        var lockedInstallments = activePayments
-            .Where(p => p.Type == PaymentType.Installment && IsLocked(p))
-            .OrderBy(p => p.Sequence)
-            .ToList();
-
-        if (dto.MonthsFinanced < lockedInstallments.Count)
-        {
-            throw new InvalidOperationException(
-                $"El plazo no puede ser menor a las {lockedInstallments.Count} cuotas ya pagadas o con recibos."
-            );
-        }
-
-        var lockedInstallmentSum = lockedInstallments.Sum(p => p.AmountDue);
-        var amountFinanced = dto.TotalPrice - dto.DownPaymentAmount;
-        var remainingFinanced = amountFinanced - lockedInstallmentSum;
-        var remainingMonths = dto.MonthsFinanced - lockedInstallments.Count;
-
-        if (remainingFinanced < -0.01m)
-        {
-            throw new InvalidOperationException(
-                "El nuevo precio e inicial dejan un financiamiento menor a lo ya pagado en cuotas."
-            );
-        }
-
-        if (remainingMonths == 0 && remainingFinanced > 0.01m)
-        {
-            throw new InvalidOperationException(
-                "Queda saldo por financiar pero no hay meses libres. Aumenta el plazo o ajusta los montos."
-            );
-        }
-
-        var scheduleChanged =
-            contract.TotalPrice != dto.TotalPrice
-            || contract.DownPaymentAmount != dto.DownPaymentAmount
-            || contract.MonthsFinanced != dto.MonthsFinanced
-            || contract.StartDate != startDate;
-
-        contract.TotalPrice = dto.TotalPrice;
-        contract.DownPaymentAmount = dto.DownPaymentAmount;
-        contract.AmountFinanced = amountFinanced;
-        contract.MonthsFinanced = dto.MonthsFinanced;
-        contract.ExchangeRate = dto.ExchangeRate;
-        contract.StartDate = startDate;
-        contract.CoOwners = dto.CoOwners;
-        contract.ModifiedAt = DateTime.UtcNow;
-
-        if (scheduleChanged)
-        {
-            RebuildUnpaidSchedule(contract, activePayments, IsLocked, remainingFinanced, remainingMonths);
-        }
+        edit.Contract.ExchangeRate = dto.ExchangeRate;
+        edit.Contract.CoOwners = dto.CoOwners;
+        edit.Contract.ModifiedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
-        return await GetByIdAsync(contract.Id)
+        return await GetByIdAsync(edit.Contract.Id)
+            ?? throw new InvalidOperationException("No se pudo cargar el contrato actualizado");
+    }
+
+    public async Task<IEnumerable<PaymentDto>> PreviewScheduleAsync(
+        Guid contractId,
+        ContractSchedulePreviewDto dto
+    )
+    {
+        var edit = await LoadScheduleEditContextAsync(
+            contractId,
+            dto.TotalPrice,
+            dto.DownPaymentAmount,
+            dto.MonthsFinanced,
+            dto.StartDate
+        );
+        var current = (await paymentService.GetPaymentScheduleByContractIdAsync(contractId)).ToList();
+        var result = new List<PaymentDto>();
+
+        var downPayment = edit.ActivePayments.FirstOrDefault(p => p.Type == PaymentType.DownPayment);
+        var currentDownPayment = current.FirstOrDefault(p => p.Type == PaymentType.DownPayment);
+        if (downPayment != null && edit.IsLocked(downPayment) && currentDownPayment != null)
+        {
+            result.Add(currentDownPayment);
+        }
+        else
+        {
+            result.Add(
+                MapPreviewPayment(
+                    BuildDownPayment(
+                        edit.Contract.ReservationId,
+                        edit.Contract.Id,
+                        edit.StartDate,
+                        dto.DownPaymentAmount
+                    )
+                )
+            );
+        }
+
+        foreach (var locked in edit.LockedInstallments)
+        {
+            var mapped = current.FirstOrDefault(p => p.Id == locked.Id);
+            if (mapped != null)
+            {
+                result.Add(mapped);
+            }
+        }
+
+        foreach (
+            var created in BuildUnpaidInstallments(
+                edit.Contract.ReservationId,
+                edit.Contract.Id,
+                edit.StartDate,
+                edit.NextSequence,
+                edit.RemainingMonths,
+                edit.RemainingFinanced
+            )
+        )
+        {
+            result.Add(MapPreviewPayment(created));
+        }
+
+        return result.OrderBy(p => p.Sequence).ThenBy(p => p.DueDate).ToList();
+    }
+
+    public async Task<ContractDto> UpdateScheduleAsync(Guid contractId, UpdateContractScheduleDto dto)
+    {
+        var edit = await LoadScheduleEditContextAsync(
+            contractId,
+            dto.TotalPrice,
+            dto.DownPaymentAmount,
+            dto.MonthsFinanced,
+            dto.StartDate
+        );
+
+        if (AffectsSchedule(edit) && !dto.ApplyRecalculatedSchedule)
+        {
+            throw new InvalidOperationException(
+                "Recalcula las cuotas antes de guardar. El precio, la inicial, el plazo o la fecha de inicio cambiaron."
+            );
+        }
+
+        edit.Contract.TotalPrice = dto.TotalPrice;
+        edit.Contract.DownPaymentAmount = dto.DownPaymentAmount;
+        edit.Contract.AmountFinanced = edit.AmountFinanced;
+        edit.Contract.MonthsFinanced = dto.MonthsFinanced;
+        edit.Contract.ExchangeRate = dto.ExchangeRate;
+        edit.Contract.StartDate = edit.StartDate;
+        edit.Contract.CoOwners = dto.CoOwners;
+        edit.Contract.ModifiedAt = DateTime.UtcNow;
+
+        List<Payment> installments;
+        if (dto.ApplyRecalculatedSchedule)
+        {
+            installments = RebuildUnpaidSchedule(
+                edit.Contract,
+                edit.ActivePayments,
+                edit.IsLocked,
+                edit.RemainingFinanced,
+                edit.RemainingMonths
+            );
+        }
+        else
+        {
+            installments = edit
+                .ActivePayments.Where(p => p.Type == PaymentType.Installment && p.IsActive)
+                .OrderBy(p => p.Sequence)
+                .ToList();
+        }
+
+        ApplyInstallmentDueDates(installments, dto.Installments, edit.IsLocked);
+
+        await context.SaveChangesAsync();
+        return await GetByIdAsync(edit.Contract.Id)
             ?? throw new InvalidOperationException("No se pudo cargar el contrato actualizado");
     }
 
@@ -746,7 +789,128 @@ public class ContractService(
         return pdfBytes;
     }
 
-    private void RebuildUnpaidSchedule(
+    private sealed class ScheduleEditContext
+    {
+        public required Contract Contract { get; init; }
+        public required List<Payment> ActivePayments { get; init; }
+        public required Func<Payment, bool> IsLocked { get; init; }
+        public required List<Payment> LockedInstallments { get; init; }
+        public required DateTime StartDate { get; init; }
+        public required decimal AmountFinanced { get; init; }
+        public required decimal RemainingFinanced { get; init; }
+        public required int RemainingMonths { get; init; }
+        public int NextSequence =>
+            LockedInstallments.Count == 0 ? 1 : LockedInstallments.Max(p => p.Sequence) + 1;
+        public bool TermsAffectSchedule { get; init; }
+    }
+
+    private async Task<ScheduleEditContext> LoadScheduleEditContextAsync(
+        Guid contractId,
+        decimal totalPrice,
+        decimal downPaymentAmount,
+        int monthsFinanced,
+        DateTime? startDateValue
+    )
+    {
+        if (downPaymentAmount >= totalPrice)
+        {
+            throw new ArgumentException("La inicial debe ser menor al precio total.");
+        }
+
+        var contract =
+            await context
+                .Contracts.Include(c => c.Client)
+                .Include(c => c.Lot)
+                .ThenInclude(l => l.Block)
+                .ThenInclude(b => b.Project)
+                .Include(c => c.Quotation)
+                .Include(c => c.Payments)
+                .FirstOrDefaultAsync(c => c.Id == contractId && c.IsActive)
+            ?? throw new ArgumentException("Contrato no encontrado");
+
+        if (contract.Status is ContractStatus.Completed or ContractStatus.Rescinded)
+        {
+            throw new InvalidOperationException(
+                "No se puede editar un contrato completado o rescindido."
+            );
+        }
+
+        var startDate = startDateValue.HasValue
+            ? ToUtcDate(startDateValue.Value)
+            : ToUtcDate(contract.StartDate);
+
+        var activePayments = contract.Payments.Where(p => p.IsActive).ToList();
+        var paymentIds = activePayments.Select(p => p.Id).ToList();
+        var paymentsWithReceipts = await context
+            .PaymentTransactionPayments.Where(d => paymentIds.Contains(d.PaymentId))
+            .Select(d => d.PaymentId)
+            .Distinct()
+            .ToListAsync();
+        var receiptSet = paymentsWithReceipts.ToHashSet();
+
+        bool IsLocked(Payment p) => p.Paid || receiptSet.Contains(p.Id);
+
+        var lockedDownPayment = activePayments.FirstOrDefault(p =>
+            p.Type == PaymentType.DownPayment && IsLocked(p)
+        );
+        if (lockedDownPayment != null && contract.DownPaymentAmount != downPaymentAmount)
+        {
+            throw new InvalidOperationException(
+                "No se puede cambiar la inicial porque ya está pagada o tiene recibos."
+            );
+        }
+
+        var lockedInstallments = activePayments
+            .Where(p => p.Type == PaymentType.Installment && IsLocked(p))
+            .OrderBy(p => p.Sequence)
+            .ToList();
+
+        if (monthsFinanced < lockedInstallments.Count)
+        {
+            throw new InvalidOperationException(
+                $"El plazo no puede ser menor a las {lockedInstallments.Count} cuotas ya pagadas o con recibos."
+            );
+        }
+
+        var amountFinanced = totalPrice - downPaymentAmount;
+        var remainingFinanced = amountFinanced - lockedInstallments.Sum(p => p.AmountDue);
+        var remainingMonths = monthsFinanced - lockedInstallments.Count;
+
+        if (remainingFinanced < -0.01m)
+        {
+            throw new InvalidOperationException(
+                "El nuevo precio e inicial dejan un financiamiento menor a lo ya pagado en cuotas."
+            );
+        }
+
+        if (remainingMonths == 0 && remainingFinanced > 0.01m)
+        {
+            throw new InvalidOperationException(
+                "Queda saldo por financiar pero no hay meses libres. Aumenta el plazo o ajusta los montos."
+            );
+        }
+
+        return new ScheduleEditContext
+        {
+            Contract = contract,
+            ActivePayments = activePayments,
+            IsLocked = IsLocked,
+            LockedInstallments = lockedInstallments,
+            StartDate = startDate,
+            AmountFinanced = amountFinanced,
+            RemainingFinanced = remainingFinanced,
+            RemainingMonths = remainingMonths,
+            TermsAffectSchedule =
+                contract.TotalPrice != totalPrice
+                || contract.DownPaymentAmount != downPaymentAmount
+                || contract.MonthsFinanced != monthsFinanced
+                || ToUtcDate(contract.StartDate) != startDate,
+        };
+    }
+
+    private static bool AffectsSchedule(ScheduleEditContext edit) => edit.TermsAffectSchedule;
+
+    private List<Payment> RebuildUnpaidSchedule(
         Contract contract,
         List<Payment> activePayments,
         Func<Payment, bool> isLocked,
@@ -770,30 +934,129 @@ public class ContractService(
         );
         if (!hasLockedDownPayment)
         {
-            context.Payments.Add(
-                new Payment
-                {
-                    ReservationId = contract.ReservationId,
-                    ContractId = contract.Id,
-                    Contract = contract,
-                    Type = PaymentType.DownPayment,
-                    Sequence = 0,
-                    DueDate = contract.StartDate,
-                    AmountDue = contract.DownPaymentAmount,
-                    Paid = false,
-                }
+            var downPayment = BuildDownPayment(
+                contract.ReservationId,
+                contract.Id,
+                contract.StartDate,
+                contract.DownPaymentAmount
             );
+            downPayment.Contract = contract;
+            context.Payments.Add(downPayment);
         }
 
         var lockedInstallments = activePayments
             .Where(p => p.Type == PaymentType.Installment && p.IsActive && isLocked(p))
+            .OrderBy(p => p.Sequence)
             .ToList();
         var nextSequence =
             lockedInstallments.Count == 0 ? 1 : lockedInstallments.Max(p => p.Sequence) + 1;
 
+        var created = BuildUnpaidInstallments(
+            contract.ReservationId,
+            contract.Id,
+            contract.StartDate,
+            nextSequence,
+            remainingMonths,
+            remainingFinanced
+        );
+        foreach (var payment in created)
+        {
+            payment.Contract = contract;
+            context.Payments.Add(payment);
+        }
+
+        return lockedInstallments.Concat(created).OrderBy(p => p.Sequence).ToList();
+    }
+
+    private static void ApplyInstallmentDueDates(
+        List<Payment> installments,
+        List<UpdateContractScheduleItemDto> payload,
+        Func<Payment, bool> isLocked
+    )
+    {
+        if (payload.Count != installments.Count)
+        {
+            throw new InvalidOperationException(
+                "El cronograma enviado no coincide con las cuotas del contrato."
+            );
+        }
+
+        if (payload.Select(item => item.Sequence).Distinct().Count() != payload.Count)
+        {
+            throw new InvalidOperationException("Hay cuotas duplicadas en el cronograma.");
+        }
+
+        var payloadBySequence = payload.ToDictionary(item => item.Sequence);
+
+        foreach (var payment in installments)
+        {
+            if (!payloadBySequence.TryGetValue(payment.Sequence, out var item))
+            {
+                throw new InvalidOperationException($"Falta la cuota {payment.Sequence}.");
+            }
+
+            var dueDate = ToUtcDate(item.DueDate);
+            if (isLocked(payment))
+            {
+                if (ToUtcDate(payment.DueDate) != dueDate)
+                {
+                    throw new InvalidOperationException(
+                        "No se puede cambiar la fecha de una cuota pagada o con recibos."
+                    );
+                }
+
+                continue;
+            }
+
+            payment.DueDate = dueDate;
+            payment.ModifiedAt = DateTime.UtcNow;
+        }
+
+        DateTime? previous = null;
+        foreach (var payment in installments.OrderBy(p => p.Sequence))
+        {
+            var dueDate = ToUtcDate(payment.DueDate);
+            if (previous.HasValue && dueDate < previous.Value)
+            {
+                throw new InvalidOperationException(
+                    "Las fechas de las cuotas deben ir en orden cronológico."
+                );
+            }
+
+            previous = dueDate;
+        }
+    }
+
+    private static Payment BuildDownPayment(
+        Guid? reservationId,
+        Guid contractId,
+        DateTime startDate,
+        decimal amount
+    ) =>
+        new()
+        {
+            ReservationId = reservationId,
+            ContractId = contractId,
+            Type = PaymentType.DownPayment,
+            Sequence = 0,
+            DueDate = startDate,
+            AmountDue = amount,
+            Paid = false,
+        };
+
+    private static List<Payment> BuildUnpaidInstallments(
+        Guid? reservationId,
+        Guid contractId,
+        DateTime startDate,
+        int nextSequence,
+        int remainingMonths,
+        decimal remainingFinanced
+    )
+    {
+        var created = new List<Payment>();
         if (remainingMonths <= 0 || remainingFinanced <= 0.01m)
         {
-            return;
+            return created;
         }
 
         var monthly = Math.Round(remainingFinanced / remainingMonths, 2, MidpointRounding.AwayFromZero);
@@ -805,16 +1068,15 @@ public class ContractService(
                     ? Math.Round(remainingFinanced - allocated, 2, MidpointRounding.AwayFromZero)
                     : monthly;
             allocated += amountDue;
-            context.Payments.Add(
+            created.Add(
                 new Payment
                 {
-                    ReservationId = contract.ReservationId,
-                    ContractId = contract.Id,
-                    Contract = contract,
+                    ReservationId = reservationId,
+                    ContractId = contractId,
                     Type = PaymentType.Installment,
                     Sequence = nextSequence + i,
                     DueDate = DateTime.SpecifyKind(
-                        contract.StartDate.AddMonths(nextSequence + i),
+                        startDate.AddMonths(nextSequence + i),
                         DateTimeKind.Utc
                     ),
                     AmountDue = amountDue,
@@ -822,6 +1084,38 @@ public class ContractService(
                 }
             );
         }
+
+        return created;
+    }
+
+    private static PaymentDto MapPreviewPayment(Payment payment)
+    {
+        return new PaymentDto
+        {
+            Id = payment.Id,
+            ReservationId = payment.ReservationId,
+            ContractId = payment.ContractId,
+            Type = payment.Type,
+            Sequence = payment.Sequence,
+            DueDate = payment.DueDate,
+            AmountDue = payment.AmountDue,
+            AmountPaid = 0,
+            RemainingAmount = payment.AmountDue,
+            Paid = payment.Paid,
+            CreatedAt = payment.CreatedAt,
+            ModifiedAt = payment.ModifiedAt,
+        };
+    }
+
+    private static DateTime ToUtcDate(DateTime value)
+    {
+        DateTime utc = value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+        };
+        return DateTime.SpecifyKind(utc.Date, DateTimeKind.Utc);
     }
 
     private void GenerateSchedule(Contract contract, int paidInstallments, bool downPaymentPaid)

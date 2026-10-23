@@ -107,6 +107,60 @@ public class UpdateContractDto
     public string? CoOwners { get; set; }
 }
 
+public class ContractSchedulePreviewDto
+{
+    [Required]
+    [Range(0.01, double.MaxValue)]
+    public decimal TotalPrice { get; set; }
+
+    [Required]
+    [Range(0, double.MaxValue)]
+    public decimal DownPaymentAmount { get; set; }
+
+    [Required]
+    [Range(1, 360)]
+    public int MonthsFinanced { get; set; }
+
+    public DateTime? StartDate { get; set; }
+}
+
+public class UpdateContractScheduleItemDto
+{
+    [Required]
+    [Range(1, 360)]
+    public int Sequence { get; set; }
+
+    [Required]
+    public DateTime DueDate { get; set; }
+}
+
+public class UpdateContractScheduleDto
+{
+    [Required]
+    [Range(0.01, double.MaxValue)]
+    public decimal TotalPrice { get; set; }
+
+    [Required]
+    [Range(0, double.MaxValue)]
+    public decimal DownPaymentAmount { get; set; }
+
+    [Required]
+    [Range(1, 360)]
+    public int MonthsFinanced { get; set; }
+
+    [Range(0.000001, double.MaxValue)]
+    public decimal ExchangeRate { get; set; } = 1m;
+
+    public DateTime? StartDate { get; set; }
+
+    public string? CoOwners { get; set; }
+
+    public bool ApplyRecalculatedSchedule { get; set; }
+
+    [Required]
+    public List<UpdateContractScheduleItemDto> Installments { get; set; } = [];
+}
+
 public class ClientCurrencyBalanceDto
 {
     public Currency Currency { get; set; }

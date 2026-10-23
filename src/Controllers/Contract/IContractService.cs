@@ -35,6 +35,10 @@ public interface IContractService
 
     Task<ContractDto> UpdateAsync(Guid contractId, UpdateContractDto dto);
 
+    Task<IEnumerable<PaymentDto>> PreviewScheduleAsync(Guid contractId, ContractSchedulePreviewDto dto);
+
+    Task<ContractDto> UpdateScheduleAsync(Guid contractId, UpdateContractScheduleDto dto);
+
     Task<ContractDto> RescindAsync(Guid contractId);
 
     Task RescindIfLeavingPaidReservationAsync(Guid reservationId);
