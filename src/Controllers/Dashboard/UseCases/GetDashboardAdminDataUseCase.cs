@@ -613,8 +613,12 @@ public class GetDashboardAdminDataUseCase
         var next30Days = DateTime.UtcNow.AddDays(30);
         var upcomingPaymentsQuery = await _db
             .Payments.Include(p => p.Reservation)
-            .ThenInclude(r => r.Client)
-            .Where(p => !p.Paid && p.DueDate <= next30Days && p.DueDate >= DateTime.UtcNow)
+            .ThenInclude(r => r!.Client)
+            .Include(p => p.Contract)
+            .ThenInclude(c => c!.Client)
+            .Where(p =>
+                p.IsActive && !p.Paid && p.DueDate <= next30Days && p.DueDate >= DateTime.UtcNow
+            )
             .OrderBy(p => p.DueDate)
             .Take(10)
             .ToListAsync();
@@ -622,8 +626,13 @@ public class GetDashboardAdminDataUseCase
         var upcomingPayments = upcomingPaymentsQuery
             .Select(p => new UpcomingPaymentDto
             {
-                ReservationId = p.ReservationId,
-                ClientName = p.Reservation?.Client?.Name ?? "Cliente no encontrado",
+                ReservationId = p.ReservationId ?? p.Contract?.ReservationId ?? Guid.Empty,
+                ContractId = p.ContractId,
+                ClientName =
+                    p.Contract?.Client?.Name
+                    ?? p.Contract?.Client?.CompanyName
+                    ?? p.Reservation?.Client?.Name
+                    ?? "Cliente no encontrado",
                 AmountDue = p.AmountDue,
                 DueDate = p.DueDate,
                 DaysLeft = (int)(p.DueDate.Date - DateTime.UtcNow.Date).TotalDays,

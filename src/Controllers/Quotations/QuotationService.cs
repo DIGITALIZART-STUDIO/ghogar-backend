@@ -3,6 +3,7 @@ using GestionHogar.Configuration;
 using GestionHogar.Dtos;
 using GestionHogar.Model;
 using GestionHogar.Services;
+using GestionHogar.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using QuestPDF.Fluent;
@@ -955,6 +956,17 @@ public class QuotationService(
 
         var client = quotation.Lead?.Client;
         var exchangeRate = quotation.ExchangeRate;
+        var quotationCurrency = CurrencyMapping.FromIsoCode(quotation.Currency, "cotización");
+        var convertedCurrency = CurrencyMapping.Counterpart(quotationCurrency);
+        var convertedHeader =
+            convertedCurrency == Currency.SOLES ? "Precio en soles" : "Precio en dólares";
+        string PrimaryMoney(decimal amount) =>
+            CurrencyMapping.FormatAmount(amount, quotationCurrency);
+        string ConvertedMoney(decimal amount) =>
+            CurrencyMapping.FormatAmount(
+                CurrencyMapping.Convert(amount, quotationCurrency, exchangeRate),
+                convertedCurrency
+            );
 
         var document = Document.Create(container =>
         {
@@ -1210,7 +1222,7 @@ public class QuotationService(
                                         .Element(HeaderCellStyle)
                                         .AlignCenter()
                                         .Padding(5)
-                                        .Text("Precio en soles");
+                                        .Text(convertedHeader);
 
                                     static IContainer HeaderCellStyle(IContainer container)
                                     {
@@ -1231,9 +1243,9 @@ public class QuotationService(
                                     {
                                         Lugar = $"{quotation.Lot.Block.Name} - {quotation.Lot.LotNumber}",
                                         Area = $"{quotation.AreaAtQuotation} m2",
-                                        PrecioM2 = $"{quotation.PricePerM2AtQuotation}",
-                                        PrecioLista = $"{quotation.TotalPrice}",
-                                        PrecioSoles = "S/ 95,250.00",
+                                        PrecioM2 = PrimaryMoney(quotation.PricePerM2AtQuotation),
+                                        PrecioLista = PrimaryMoney(quotation.TotalPrice),
+                                        PrecioSoles = ConvertedMoney(quotation.FinalPrice),
                                     },
                                 };
 
@@ -1295,30 +1307,27 @@ public class QuotationService(
                                     .Element(DataCellStyle)
                                     .AlignLeft()
                                     .PaddingLeft(10)
-                                    .Text($"$ {quotation.Discount.ToString()}");
+                                    .Text(PrimaryMoney(quotation.Discount));
                                 table
                                     .Cell()
                                     .Element(DataCellStyle)
                                     .AlignLeft()
                                     .PaddingLeft(10)
-                                    .Text($"$ {quotation.FinalPrice}");
+                                    .Text(PrimaryMoney(quotation.FinalPrice));
                                 table
                                     .Cell()
                                     .Element(DataCellStyle)
                                     .AlignLeft()
                                     .PaddingLeft(10)
-                                    .Text(
-                                        $"S/ {(quotation.FinalPrice * exchangeRate).ToString("N2")}"
-                                    );
+                                    .Text(ConvertedMoney(quotation.FinalPrice));
 
                                 table.Cell().ColumnSpan(5).Text("");
 
                                 //
                                 // Inicial
                                 //
-                                var downPaymentDollars =
+                                var downPaymentAmount =
                                     (quotation.DownPayment / 100) * quotation.FinalPrice;
-                                var downPaymentSoles = downPaymentDollars * exchangeRate;
                                 table.Cell().Element(DataCellStyleThin).Text("Inicial");
                                 table
                                     .Cell()
@@ -1329,11 +1338,11 @@ public class QuotationService(
                                 table
                                     .Cell()
                                     .Element(DataCellStyleThin)
-                                    .Text($"$ {downPaymentDollars.ToString("N2")}");
+                                    .Text(PrimaryMoney(downPaymentAmount));
                                 table
                                     .Cell()
                                     .Element(DataCellStyleThin)
-                                    .Text($"S/ {downPaymentSoles.ToString("N2")}");
+                                    .Text(ConvertedMoney(downPaymentAmount));
 
                                 table.Cell().ColumnSpan(5).Text("");
 
@@ -1341,9 +1350,7 @@ public class QuotationService(
                                 // A Financiar
                                 //
                                 var financingPercentange = 100 - quotation.DownPayment;
-                                var financingAmountDollars =
-                                    quotation.FinalPrice - downPaymentDollars;
-                                var financingAmountSoles = financingAmountDollars * exchangeRate;
+                                var financingAmount = quotation.FinalPrice - downPaymentAmount;
                                 table.Cell().Element(DataCellStyleThin).Text("A financiar");
                                 table
                                     .Cell()
@@ -1354,20 +1361,21 @@ public class QuotationService(
                                 table
                                     .Cell()
                                     .Element(DataCellStyleThin)
-                                    .Text($"$ {financingAmountDollars.ToString("N2")}");
+                                    .Text(PrimaryMoney(financingAmount));
                                 table
                                     .Cell()
                                     .Element(DataCellStyleThin)
-                                    .Text($"S/ {financingAmountSoles.ToString("N2")}");
+                                    .Text(ConvertedMoney(financingAmount));
 
                                 table.Cell().ColumnSpan(5).Text("");
 
                                 //
                                 // Cuotas
                                 //
-                                var monthlyPaymentDollars =
-                                    financingAmountDollars / quotation.MonthsFinanced;
-                                var monthlyPaymentSoles = monthlyPaymentDollars * exchangeRate;
+                                var monthlyPayment =
+                                    quotation.MonthsFinanced > 0
+                                        ? financingAmount / quotation.MonthsFinanced
+                                        : 0;
                                 table.Cell();
                                 table
                                     .Cell()
@@ -1382,11 +1390,11 @@ public class QuotationService(
                                 table
                                     .Cell()
                                     .Element(DataCellStyleThin)
-                                    .Text($"$ {monthlyPaymentDollars.ToString("N2")}");
+                                    .Text(PrimaryMoney(monthlyPayment));
                                 table
                                     .Cell()
                                     .Element(DataCellStyleThin)
-                                    .Text($"S/ {monthlyPaymentSoles.ToString("N2")}");
+                                    .Text(ConvertedMoney(monthlyPayment));
 
                                 table.Cell().ColumnSpan(5).Text("");
                                 table.Cell().ColumnSpan(5).Text("");

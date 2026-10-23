@@ -6,7 +6,10 @@ namespace GestionHogar.Controllers.Dtos;
 public class PaymentDto
 {
     public Guid Id { get; set; }
-    public Guid ReservationId { get; set; }
+    public Guid? ReservationId { get; set; }
+    public Guid? ContractId { get; set; }
+    public PaymentType Type { get; set; }
+    public int Sequence { get; set; }
     public DateTime DueDate { get; set; }
     public decimal AmountDue { get; set; }
 

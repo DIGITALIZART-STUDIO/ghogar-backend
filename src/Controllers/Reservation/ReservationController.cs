@@ -13,18 +13,10 @@ namespace GestionHogar.Controllers;
 public class ReservationsController : ControllerBase
 {
     private readonly IReservationService _reservationService;
-    private readonly WordTemplateService _wordTemplateService;
-    private readonly SofficeConverterService _sofficeConverterService;
 
-    public ReservationsController(
-        IReservationService reservationService,
-        WordTemplateService wordTemplateService,
-        SofficeConverterService sofficeConverterService
-    )
+    public ReservationsController(IReservationService reservationService)
     {
         _reservationService = reservationService;
-        _wordTemplateService = wordTemplateService;
-        _sofficeConverterService = sofficeConverterService;
     }
 
     // GET: api/reservations
@@ -341,6 +333,10 @@ public class ReservationsController : ControllerBase
 
             return Ok(updatedReservation);
         }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
         catch (Exception ex)
         {
             return StatusCode(500, $"Error al cambiar el estado de la separacion: {ex.Message}");
@@ -377,7 +373,7 @@ public class ReservationsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
     }
 
@@ -396,7 +392,7 @@ public class ReservationsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
     }
 
@@ -480,70 +476,31 @@ public class ReservationsController : ControllerBase
 
     // POST: api/reservations/{id}/payment-history
     [HttpPost("{id}/payment-history")]
-    public async Task<ActionResult<PaymentHistoryDto>> AddPaymentToHistory(
-        Guid id,
-        AddPaymentHistoryDto paymentDto
-    )
+    public ActionResult AddPaymentToHistory(Guid id, AddPaymentHistoryDto paymentDto)
     {
-        try
-        {
-            var addedPayment = await _reservationService.AddPaymentToHistoryAsync(id, paymentDto);
-            return CreatedAtAction(nameof(GetPaymentHistory), new { id }, addedPayment);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"Error al agregar pago al historial: {ex.Message}");
-        }
+        return StatusCode(
+            410,
+            "El enganche se registra como cuota DownPayment del contrato. Use POST /api/PaymentTransaction con contractId."
+        );
     }
 
     // PUT: api/reservations/{id}/payment-history
     [HttpPut("{id}/payment-history")]
-    public async Task<ActionResult<PaymentHistoryDto>> UpdatePaymentInHistory(
-        Guid id,
-        UpdatePaymentHistoryDto paymentDto
-    )
+    public ActionResult UpdatePaymentInHistory(Guid id, UpdatePaymentHistoryDto paymentDto)
     {
-        try
-        {
-            var updatedPayment = await _reservationService.UpdatePaymentInHistoryAsync(
-                id,
-                paymentDto
-            );
-            return Ok(updatedPayment);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"Error al actualizar pago en el historial: {ex.Message}");
-        }
+        return StatusCode(
+            410,
+            "El enganche se registra como cuota DownPayment del contrato. Use POST /api/PaymentTransaction con contractId."
+        );
     }
 
     // DELETE: api/reservations/{id}/payment-history/{paymentId}
     [HttpDelete("{id}/payment-history/{paymentId}")]
-    public async Task<ActionResult> RemovePaymentFromHistory(Guid id, string paymentId)
+    public ActionResult RemovePaymentFromHistory(Guid id, string paymentId)
     {
-        try
-        {
-            var success = await _reservationService.RemovePaymentFromHistoryAsync(id, paymentId);
-            if (!success)
-                return NotFound();
-
-            return NoContent();
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"Error al eliminar pago del historial: {ex.Message}");
-        }
+        return StatusCode(
+            410,
+            "El enganche se registra como cuota DownPayment del contrato. Use POST /api/PaymentTransaction con contractId."
+        );
     }
 }

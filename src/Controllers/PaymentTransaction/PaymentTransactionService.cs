@@ -48,16 +48,35 @@ public class PaymentTransactionService : IPaymentTransactionService
         return transactions.Select(PaymentTransactionDTO.FromEntity);
     }
 
+    public async Task<IEnumerable<PaymentTransactionDTO>> GetByContractIdAsync(Guid contractId)
+    {
+        var transactions = await _context
+            .PaymentTransactions.Include(pt => pt.Payments)
+            .Where(pt => pt.ContractId == contractId)
+            .OrderByDescending(pt => pt.CreatedAt)
+            .ToListAsync();
+
+        return transactions.Select(PaymentTransactionDTO.FromEntity);
+    }
+
     public async Task<PaymentQuotaStatusDTO> GetQuotaStatusByReservationAsync(
         Guid reservationId,
         Guid? excludeTransactionId = null
     )
     {
+        var contract = await _context.Contracts.FirstOrDefaultAsync(c =>
+            c.ReservationId == reservationId && c.IsActive
+        );
+        if (contract != null)
+        {
+            return await GetQuotaStatusByContractAsync(contract.Id, excludeTransactionId);
+        }
+
         var payments = await _context
             .Payments.Include(p => p.Reservation)
-            .ThenInclude(r => r.Client)
+            .ThenInclude(r => r!.Client)
             .Include(p => p.Reservation)
-            .ThenInclude(r => r.Quotation)
+            .ThenInclude(r => r!.Quotation)
             .Where(p => p.ReservationId == reservationId)
             .OrderBy(p => p.DueDate)
             .ToListAsync();
@@ -105,12 +124,13 @@ public class PaymentTransactionService : IPaymentTransactionService
                     {
                         Id = payment.Id,
                         ReservationId = payment.ReservationId,
-                        ClientName = payment.Reservation.Client.Name!,
-                        QuotationCode = payment.Reservation.Quotation.Code,
+                        ContractId = payment.ContractId,
+                        ClientName = payment.Reservation?.Client?.Name ?? string.Empty,
+                        QuotationCode = payment.Reservation?.Quotation?.Code ?? string.Empty,
                         AmountDue = remainingAmount, // Monto que falta por pagar
                         DueDate = payment.DueDate,
                         Paid = false,
-                        Currency = payment.Reservation.Currency,
+                        Currency = payment.Reservation?.Currency ?? Currency.SOLES,
                     }
                 );
             }
@@ -126,11 +146,103 @@ public class PaymentTransactionService : IPaymentTransactionService
         };
     }
 
+    public async Task<PaymentQuotaStatusDTO> GetQuotaStatusByContractAsync(
+        Guid contractId,
+        Guid? excludeTransactionId = null
+    )
+    {
+        var contract =
+            await _context
+                .Contracts.Include(c => c.Client)
+                .Include(c => c.Quotation)
+                .FirstOrDefaultAsync(c => c.Id == contractId && c.IsActive)
+            ?? throw new InvalidOperationException("Contrato no encontrado");
+
+        var payments = await _context
+            .Payments.Where(p => p.ContractId == contractId && p.IsActive)
+            .OrderBy(p => p.Sequence)
+            .ThenBy(p => p.DueDate)
+            .ToListAsync();
+
+        var transactionsQuery = _context.PaymentTransactionPayments.Where(ptp =>
+            ptp.PaymentTransaction.ContractId == contractId
+        );
+
+        if (excludeTransactionId.HasValue)
+        {
+            transactionsQuery = transactionsQuery.Where(ptp =>
+                ptp.PaymentTransactionId != excludeTransactionId.Value
+            );
+        }
+
+        var paymentDetails = await transactionsQuery.ToListAsync();
+        var pendingQuotas = new List<PaymentQuotaSimpleDTO>();
+        decimal totalRemaining = 0;
+        int fullyUnpaidQuotas = 0;
+        var clientName =
+            contract.Client.Type == ClientType.Natural
+                ? contract.Client.Name ?? string.Empty
+                : contract.Client.CompanyName ?? contract.Client.Name ?? string.Empty;
+        var code = contract.Quotation?.Code ?? contract.Code;
+
+        foreach (var payment in payments)
+        {
+            var totalPaidForThisPayment = paymentDetails
+                .Where(ptp => ptp.PaymentId == payment.Id)
+                .Sum(ptp => ptp.AmountPaid);
+            if (payment.Paid)
+            {
+                totalPaidForThisPayment = Math.Max(totalPaidForThisPayment, payment.AmountDue);
+            }
+
+            var remainingAmount = payment.AmountDue - totalPaidForThisPayment;
+            if (remainingAmount <= 0)
+            {
+                continue;
+            }
+
+            if (totalPaidForThisPayment == 0)
+            {
+                fullyUnpaidQuotas++;
+            }
+
+            totalRemaining += remainingAmount;
+            pendingQuotas.Add(
+                new PaymentQuotaSimpleDTO
+                {
+                    Id = payment.Id,
+                    ReservationId = payment.ReservationId ?? contract.ReservationId,
+                    ContractId = contract.Id,
+                    ClientName = clientName,
+                    QuotationCode = code,
+                    AmountDue = remainingAmount,
+                    DueDate = payment.DueDate,
+                    Paid = false,
+                    Currency = contract.Currency,
+                }
+            );
+        }
+
+        return new PaymentQuotaStatusDTO
+        {
+            PendingQuotas = pendingQuotas,
+            MinQuotasToPay = fullyUnpaidQuotas,
+            MaxQuotasToPay = pendingQuotas.Count,
+            TotalAmountRemaining = totalRemaining,
+            Currency = contract.Currency,
+        };
+    }
+
     public async Task<PaymentTransactionDTO> CreateAsync(
         PaymentTransactionCreateDTO dto,
         IFormFile? comprobanteImage = null
     )
     {
+        var (contractId, reservationId) = await ResolveContractAndReservationAsync(
+            dto.ContractId,
+            dto.ReservationId
+        );
+
         List<PaymentTransactionPayment> paymentDetails;
         List<Payment> payments;
 
@@ -157,12 +269,22 @@ public class PaymentTransactionService : IPaymentTransactionService
         else
         {
             // Caso 2: No se proporcionaron PaymentIds - asignación automática
-            if (!dto.ReservationId.HasValue)
+            if (!contractId.HasValue && !reservationId.HasValue)
                 throw new InvalidOperationException(
-                    "ReservationId es requerido cuando no se proporcionan PaymentIds"
+                    "ContractId o ReservationId es requerido cuando no se proporcionan PaymentIds"
                 );
 
-            paymentDetails = await AutoAssignPaymentsAsync(dto.ReservationId.Value, dto.AmountPaid);
+            paymentDetails = contractId.HasValue
+                ? await AutoAssignPaymentsByContractAsync(
+                    contractId.Value,
+                    dto.AmountPaid,
+                    dto.StartFromLastCuota
+                )
+                : await AutoAssignPaymentsAsync(
+                    reservationId!.Value,
+                    dto.AmountPaid,
+                    dto.StartFromLastCuota
+                );
 
             if (!paymentDetails.Any())
                 throw new InvalidOperationException(
@@ -186,7 +308,8 @@ public class PaymentTransactionService : IPaymentTransactionService
                 {
                     PaymentDate = dto.PaymentDate,
                     AmountPaid = dto.AmountPaid,
-                    ReservationId = dto.ReservationId,
+                    ReservationId = reservationId,
+                    ContractId = contractId,
                     PaymentMethod = dto.PaymentMethod,
                     ReferenceNumber = dto.ReferenceNumber,
                     ComprobanteUrl = null, // Se actualizará después de subir la imagen
@@ -223,7 +346,8 @@ public class PaymentTransactionService : IPaymentTransactionService
             {
                 PaymentDate = dto.PaymentDate,
                 AmountPaid = dto.AmountPaid,
-                ReservationId = dto.ReservationId,
+                ReservationId = reservationId,
+                ContractId = contractId,
                 PaymentMethod = dto.PaymentMethod,
                 ReferenceNumber = dto.ReferenceNumber,
                 ComprobanteUrl = dto.ComprobanteUrl,
@@ -266,6 +390,11 @@ public class PaymentTransactionService : IPaymentTransactionService
         if (transaction == null)
             return null;
 
+        var (contractId, reservationId) = await ResolveContractAndReservationAsync(
+            dto.ContractId ?? transaction.ContractId,
+            dto.ReservationId ?? transaction.ReservationId
+        );
+
         List<PaymentTransactionPayment> paymentDetails;
         List<Payment> payments;
 
@@ -292,12 +421,14 @@ public class PaymentTransactionService : IPaymentTransactionService
         else
         {
             // Caso 2: No se proporcionaron PaymentIds - asignación automática
-            if (!dto.ReservationId.HasValue)
+            if (!contractId.HasValue && !reservationId.HasValue)
                 throw new InvalidOperationException(
-                    "ReservationId es requerido cuando no se proporcionan PaymentIds"
+                    "ContractId o ReservationId es requerido cuando no se proporcionan PaymentIds"
                 );
 
-            paymentDetails = await AutoAssignPaymentsAsync(dto.ReservationId.Value, dto.AmountPaid);
+            paymentDetails = contractId.HasValue
+                ? await AutoAssignPaymentsByContractAsync(contractId.Value, dto.AmountPaid)
+                : await AutoAssignPaymentsAsync(reservationId!.Value, dto.AmountPaid);
 
             if (!paymentDetails.Any())
                 throw new InvalidOperationException(
@@ -337,7 +468,8 @@ public class PaymentTransactionService : IPaymentTransactionService
         // Actualizar campos básicos
         transaction.PaymentDate = dto.PaymentDate;
         transaction.AmountPaid = dto.AmountPaid;
-        transaction.ReservationId = dto.ReservationId;
+        transaction.ReservationId = reservationId;
+        transaction.ContractId = contractId;
         transaction.PaymentMethod = dto.PaymentMethod;
         transaction.ReferenceNumber = dto.ReferenceNumber;
         transaction.ModifiedAt = DateTime.UtcNow;
@@ -353,10 +485,20 @@ public class PaymentTransactionService : IPaymentTransactionService
 
         await _context.SaveChangesAsync();
 
-        // Actualizar el estado Paid de todas las cuotas de la reserva usando la nueva lógica
-        var allPayments = await _context
-            .Payments.Where(p => p.ReservationId == transaction.ReservationId)
-            .ToListAsync();
+        // Actualizar el estado Paid de todas las cuotas del contrato/reserva
+        var allPaymentsQuery = _context.Payments.AsQueryable();
+        if (transaction.ContractId.HasValue)
+        {
+            allPaymentsQuery = allPaymentsQuery.Where(p => p.ContractId == transaction.ContractId);
+        }
+        else
+        {
+            allPaymentsQuery = allPaymentsQuery.Where(p =>
+                p.ReservationId == transaction.ReservationId
+            );
+        }
+
+        var allPayments = await allPaymentsQuery.ToListAsync();
 
         foreach (var payment in allPayments)
         {
@@ -415,22 +557,71 @@ public class PaymentTransactionService : IPaymentTransactionService
         return true;
     }
 
+    private async Task<(Guid? ContractId, Guid? ReservationId)> ResolveContractAndReservationAsync(
+        Guid? contractId,
+        Guid? reservationId
+    )
+    {
+        if (contractId.HasValue)
+        {
+            var contract = await _context.Contracts.FirstOrDefaultAsync(c =>
+                c.Id == contractId.Value && c.IsActive
+            );
+            if (contract == null)
+                throw new InvalidOperationException("Contrato no encontrado");
+
+            return (contract.Id, reservationId ?? contract.ReservationId);
+        }
+
+        if (reservationId.HasValue)
+        {
+            var contract = await _context.Contracts.FirstOrDefaultAsync(c =>
+                c.ReservationId == reservationId.Value && c.IsActive
+            );
+            return (contract?.Id, reservationId);
+        }
+
+        return (null, null);
+    }
+
+    private Task<List<PaymentTransactionPayment>> AutoAssignPaymentsByContractAsync(
+        Guid contractId,
+        decimal totalAmount,
+        bool startFromLast = true
+    )
+    {
+        return AutoAssignPaymentsAsync(
+            _context.Payments.Where(p => p.ContractId == contractId && p.IsActive),
+            totalAmount,
+            startFromLast
+        );
+    }
+
     /// <summary>
     /// Asigna automáticamente las cuotas a pagar cuando no se proporcionan PaymentIds específicos.
     /// </summary>
-    /// <param name="reservationId">ID de la reserva</param>
-    /// <param name="totalAmount">Monto total a distribuir</param>
-    /// <param name="startFromLast">Si es true, empieza desde la última cuota (max). Si es false, empieza desde la primera cuota (min)</param>
-    /// <returns>Lista de PaymentTransactionPayment con la distribución automática</returns>
-    private async Task<List<PaymentTransactionPayment>> AutoAssignPaymentsAsync(
+    private Task<List<PaymentTransactionPayment>> AutoAssignPaymentsAsync(
         Guid reservationId,
         decimal totalAmount,
-        bool startFromLast = true // Por defecto mantiene el comportamiento actual (max)
+        bool startFromLast = true
     )
     {
-        var payments = await _context
-            .Payments.Where(p => p.ReservationId == reservationId)
-            .OrderBy(p => p.DueDate) // Orden ascendente (cuota 1, 2, 3...)
+        return AutoAssignPaymentsAsync(
+            _context.Payments.Where(p => p.ReservationId == reservationId && p.IsActive),
+            totalAmount,
+            startFromLast
+        );
+    }
+
+    private async Task<List<PaymentTransactionPayment>> AutoAssignPaymentsAsync(
+        IQueryable<Payment> paymentsQuery,
+        decimal totalAmount,
+        bool startFromLast = true
+    )
+    {
+        var payments = await paymentsQuery
+            .OrderBy(p => p.Sequence)
+            .ThenBy(p => p.DueDate)
             .ToListAsync();
 
         var result = new List<PaymentTransactionPayment>();

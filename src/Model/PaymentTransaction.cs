@@ -14,11 +14,16 @@ public class PaymentTransaction : BaseModel
     [Column(TypeName = "decimal(18,2)")]
     public decimal AmountPaid { get; set; }
 
-    // Relación con la reserva (opcional)
+    // Relación con la reserva (opcional, auditoría)
     public Guid? ReservationId { get; set; }
 
     [ForeignKey("ReservationId")]
     public Reservation? Reservation { get; set; }
+
+    public Guid? ContractId { get; set; }
+
+    [ForeignKey("ContractId")]
+    public Contract? Contract { get; set; }
 
     // Relación con las cuotas (pagos programados) que cubre esta transacción
     // MANTENER para compatibilidad hacia atrás

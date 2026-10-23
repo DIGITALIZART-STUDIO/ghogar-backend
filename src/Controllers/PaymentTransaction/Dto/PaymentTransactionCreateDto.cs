@@ -14,6 +14,8 @@ public class PaymentTransactionCreateDTO
 
     public Guid? ReservationId { get; set; }
 
+    public Guid? ContractId { get; set; }
+
     [Required]
     public PaymentMethod PaymentMethod { get; set; }
 

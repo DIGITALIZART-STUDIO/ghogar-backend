@@ -36,4 +36,6 @@ public class Project : IEntity
     public DateTime ModifiedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Block> Blocks { get; set; } = new List<Block>();
+
+    public ProjectContractTemplate? ContractTemplate { get; set; }
 }

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using GestionHogar.Dtos;
 using GestionHogar.Model;
 using GestionHogar.Services;
+using GestionHogar.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -17,11 +18,17 @@ namespace GestionHogar.Controllers;
 public class ProjectsController : ControllerBase
 {
     private readonly IProjectService _projectService;
+    private readonly IProjectContractService _projectContractService;
     private readonly ILogger<ProjectsController> _logger;
 
-    public ProjectsController(IProjectService projectService, ILogger<ProjectsController> logger)
+    public ProjectsController(
+        IProjectService projectService,
+        IProjectContractService projectContractService,
+        ILogger<ProjectsController> logger
+    )
     {
         _projectService = projectService;
+        _projectContractService = projectContractService;
         _logger = logger;
     }
 
@@ -265,6 +272,121 @@ public class ProjectsController : ControllerBase
         {
             _logger.LogError(ex, "Error al desactivar proyecto");
             return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    [HttpGet("contract-variables")]
+    [AuthorizeCurrentUser("SuperAdmin", "Admin", "Manager", "CommercialManager")]
+    [EndpointSummary("Get contract template variables")]
+    [EndpointDescription(
+        "Returns the catalog of variables that can be inserted into a project contract"
+    )]
+    public ActionResult<IReadOnlyList<ContractVariableDto>> GetContractVariables()
+    {
+        return Ok(_projectContractService.GetContractVariables());
+    }
+
+    [HttpGet("{id:guid}/contract")]
+    [AuthorizeCurrentUser("SuperAdmin", "Admin", "Manager", "CommercialManager")]
+    [EndpointSummary("Get project contract template")]
+    public async Task<ActionResult<ProjectContractTemplateDto>> GetProjectContract(Guid id)
+    {
+        try
+        {
+            var template = await _projectContractService.GetByProjectIdAsync(id);
+            return Ok(template);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener el contrato del proyecto {ProjectId}", id);
+            return StatusCode(500, new { message = "Error interno del servidor" });
+        }
+    }
+
+    [HttpPut("{id:guid}/contract")]
+    [AuthorizeCurrentUser("SuperAdmin", "Admin", "Manager", "CommercialManager")]
+    [EndpointSummary("Save project contract template")]
+    public async Task<ActionResult<ProjectContractTemplateDto>> SaveProjectContract(
+        Guid id,
+        [FromBody] ProjectContractSaveDto dto
+    )
+    {
+        try
+        {
+            var userId = User.GetCurrentUserIdOrThrow();
+            var template = await _projectContractService.SaveAsync(id, dto.HtmlContent, userId);
+            return Ok(template);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al guardar el contrato del proyecto {ProjectId}", id);
+            return StatusCode(500, new { message = "Error interno del servidor" });
+        }
+    }
+
+    [HttpPost("{id:guid}/contract/from-docx")]
+    [AuthorizeCurrentUser("SuperAdmin", "Admin", "Manager", "CommercialManager")]
+    [EndpointSummary("Import project contract from Word")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<ActionResult<ProjectContractTemplateDto>> ImportProjectContractFromDocx(
+        Guid id,
+        [FromForm] IFormFile file
+    )
+    {
+        try
+        {
+            var userId = User.GetCurrentUserIdOrThrow();
+            var template = await _projectContractService.ImportFromDocxAsync(id, file, userId);
+            return Ok(template);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al importar el contrato Word del proyecto {ProjectId}", id);
+            return StatusCode(500, new { message = "Error interno del servidor" });
+        }
+    }
+
+    [HttpDelete("{id:guid}/contract")]
+    [AuthorizeCurrentUser("SuperAdmin")]
+    [EndpointSummary("Delete project contract template")]
+    public async Task<ActionResult> DeleteProjectContract(Guid id)
+    {
+        try
+        {
+            var deleted = await _projectContractService.DeleteAsync(id);
+            if (!deleted)
+                return NotFound(new { message = "Este proyecto no tiene contrato" });
+
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar el contrato del proyecto {ProjectId}", id);
+            return StatusCode(500, new { message = "Error interno del servidor" });
         }
     }
 }

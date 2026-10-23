@@ -8,6 +8,7 @@ public interface IPaymentTransactionService
     Task<IEnumerable<PaymentTransactionDTO>> GetAllAsync();
     Task<PaymentTransactionDTO?> GetByIdAsync(Guid id);
     Task<IEnumerable<PaymentTransactionDTO>> GetByReservationIdAsync(Guid reservationId);
+    Task<IEnumerable<PaymentTransactionDTO>> GetByContractIdAsync(Guid contractId);
 
     /// <summary>
     /// Obtiene el estado de cuotas con información de mínimo y máximo a pagar.
@@ -17,6 +18,11 @@ public interface IPaymentTransactionService
     /// <returns>DTO con cuotas pendientes, mínimo y máximo a pagar</returns>
     Task<PaymentQuotaStatusDTO> GetQuotaStatusByReservationAsync(
         Guid reservationId,
+        Guid? excludeTransactionId = null
+    );
+
+    Task<PaymentQuotaStatusDTO> GetQuotaStatusByContractAsync(
+        Guid contractId,
         Guid? excludeTransactionId = null
     );
 
