@@ -9,6 +9,7 @@ public class ReportsModule : IModule
     public IServiceCollection SetupModule(IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<ICommercialReportService, CommercialReportService>();
+        services.AddScoped<IAdministrativeReportService, AdministrativeReportService>();
 
         return services;
     }
